@@ -1,0 +1,4093 @@
+let isDarkMode = false;
+function createEmptyUserProfile() {
+    return {
+        name: "Guest",
+        tag: "@guest",
+        profilePic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay",
+        coverPic: "https://images.unsplash.com/photo-1557683316-973673baf926?w=1200",
+        location: "",
+        businessType: "Particulier",
+        phone: "",
+        workCategory: "",
+        joinedDate: "",
+        rating: 0,
+        reviews: 0,
+        isVip: false,
+        verified: false,
+        reviewsData: []
+    };
+}
+
+let userProfile = createEmptyUserProfile();
+
+const USER_PROFILE_STORAGE_KEY = 'winjayUserProfileV1';
+const FREE_VERIFIED_PROGRAM_STORAGE_KEY = 'winjayFreeVerifiedProgramV1';
+const VERIFIED_QUEST_STORAGE_KEY = 'winjayVerifiedQuestV1';
+const FREE_VERIFIED_TOTAL = 1000;
+const REFERRALS_REQUIRED = 10;
+
+function normalizeSupabaseProjectUrl(url) {
+    if (typeof url !== 'string') return '';
+    const trimmed = url.trim().replace(/\/+$/, '');
+    return trimmed
+        .replace(/\/rest\/v1$/i, '')
+        .replace(/\/auth\/v1$/i, '')
+        .replace(/\/storage\/v1$/i, '')
+        .replace(/\/functions\/v1$/i, '');
+}
+
+function getSupabaseProjectRef(url) {
+    try {
+        const u = new URL(url);
+        const host = u.hostname || '';
+        if (!host.endsWith('.supabase.co')) return '';
+        return host.split('.')[0] || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+const SUPABASE_PROJECT_URL = normalizeSupabaseProjectUrl('https://rxlpesdvskyytbfoufvp.supabase.co/rest/v1/');
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4bHBlc2R2c2t5eXRiZm91ZnZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4ODkwNDksImV4cCI6MjA5MjQ2NTA0OX0.esek-Q3uxOvm27NNxvvsznUtC3-hZ6hsRwhMchWyasM';
+const SUPABASE_PROJECT_REF = getSupabaseProjectRef(SUPABASE_PROJECT_URL);
+
+function getRememberMeEnabled() {
+    try {
+        return localStorage.getItem('winjayRememberMe') === 'true';
+    } catch (e) {
+        return false;
+    }
+}
+
+const supabaseAuthStorage = {
+    getItem: (key) => {
+        try {
+            const storage = getRememberMeEnabled() ? localStorage : sessionStorage;
+            return storage.getItem(key);
+        } catch (e) {
+            return null;
+        }
+    },
+    setItem: (key, value) => {
+        try {
+            const storage = getRememberMeEnabled() ? localStorage : sessionStorage;
+            storage.setItem(key, value);
+        } catch (e) {
+            null;
+        }
+    },
+    removeItem: (key) => {
+        try {
+            localStorage.removeItem(key);
+        } catch (e) {
+            null;
+        }
+        try {
+            sessionStorage.removeItem(key);
+        } catch (e) {
+            null;
+        }
+    }
+};
+
+let supabaseClient = null;
+let currentSupabaseUserId = null;
+
+function isLoggedIn() {
+    return !!currentSupabaseUserId;
+}
+
+function requireAuthOrPrompt() {
+    if (isLoggedIn()) return true;
+    showToast('Please log in to continue', 'log-in');
+    openModal('loginModal');
+    return false;
+}
+
+function initSupabase() {
+    if (supabaseClient) return supabaseClient;
+    if (!SUPABASE_PROJECT_URL || !SUPABASE_ANON_KEY) return null;
+    if (typeof supabase === 'undefined' || typeof supabase.createClient !== 'function') return null;
+    supabaseClient = supabase.createClient(SUPABASE_PROJECT_URL, SUPABASE_ANON_KEY, {
+        auth: {
+            persistSession: true,
+            storage: supabaseAuthStorage
+        }
+    });
+    supabaseClient.auth.onAuthStateChange((_event, session) => {
+        applyAuthSessionToLocalState(session);
+    });
+    return supabaseClient;
+}
+
+function applyAuthSessionToLocalState(session) {
+    const user = session?.user || null;
+    currentSupabaseUserId = user?.id || null;
+
+    if (!user) {
+        userProfile = createEmptyUserProfile();
+        try {
+            localStorage.removeItem(USER_PROFILE_STORAGE_KEY);
+        } catch (e) {
+            null;
+        }
+        updateProfileUI();
+        return;
+    }
+
+    const meta = user.user_metadata || {};
+    const fullName = meta.full_name || meta.name || meta.fullName || '';
+    const tag = meta.tag || meta.username || meta.handle || '';
+    const avatar = meta.avatar_url || meta.picture || '';
+
+    userProfile = {
+        ...createEmptyUserProfile(),
+        ...userProfile,
+        name: fullName || user.email || 'User',
+        tag: tag || `@${user.id.slice(0, 8)}`,
+        profilePic: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.id)}`,
+        joinedDate: user.created_at
+            ? new Date(user.created_at).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })
+            : userProfile.joinedDate
+    };
+
+    saveUserProfileToStorage();
+    updateProfileUI();
+}
+
+async function bootstrapSupabaseAuth() {
+    if (!supabaseClient) return;
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) return;
+    applyAuthSessionToLocalState(data?.session || null);
+}
+
+function clearSupabaseAuthTokenFromAllStorages() {
+    if (!SUPABASE_PROJECT_REF) return;
+    const key = `sb-${SUPABASE_PROJECT_REF}-auth-token`;
+    try {
+        localStorage.removeItem(key);
+    } catch (e) {
+        null;
+    }
+    try {
+        sessionStorage.removeItem(key);
+    } catch (e) {
+        null;
+    }
+}
+
+function loadUserProfileFromStorage() {
+    try {
+        const raw = localStorage.getItem(USER_PROFILE_STORAGE_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (!saved || typeof saved !== 'object') return;
+        userProfile = { ...userProfile, ...saved };
+    } catch (e) {
+        return;
+    }
+}
+
+function saveUserProfileToStorage() {
+    try {
+        localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(userProfile));
+    } catch (e) {
+        return;
+    }
+}
+
+function getFreeVerifiedProgramState() {
+    try {
+        const raw = localStorage.getItem(FREE_VERIFIED_PROGRAM_STORAGE_KEY);
+        if (!raw) return { remaining: FREE_VERIFIED_TOTAL, referrals: {} };
+        const saved = JSON.parse(raw);
+        const remaining = typeof saved?.remaining === 'number' ? saved.remaining : FREE_VERIFIED_TOTAL;
+        const referrals = saved?.referrals && typeof saved.referrals === 'object' ? saved.referrals : {};
+        return { remaining: Math.max(0, remaining), referrals };
+    } catch (e) {
+        return { remaining: FREE_VERIFIED_TOTAL, referrals: {} };
+    }
+}
+
+function saveFreeVerifiedProgramState(state) {
+    try {
+        localStorage.setItem(FREE_VERIFIED_PROGRAM_STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+        return;
+    }
+}
+
+function getVerifiedQuestState() {
+    try {
+        const raw = localStorage.getItem(VERIFIED_QUEST_STORAGE_KEY);
+        if (!raw) return { identityVerified: false, granted: false, referredBy: null };
+        const saved = JSON.parse(raw);
+        if (!saved || typeof saved !== 'object') return { identityVerified: false, granted: false, referredBy: null };
+        return {
+            identityVerified: !!saved.identityVerified,
+            granted: !!saved.granted,
+            referredBy: saved.referredBy || null
+        };
+    } catch (e) {
+        return { identityVerified: false, granted: false, referredBy: null };
+    }
+}
+
+function saveVerifiedQuestState(next) {
+    try {
+        localStorage.setItem(VERIFIED_QUEST_STORAGE_KEY, JSON.stringify(next));
+    } catch (e) {
+        return;
+    }
+}
+
+function setPendingReferralFromUrl() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const ref = params.get('ref');
+        if (!ref) return;
+        const tag = ref.startsWith('@') ? ref : '@' + ref;
+        if (!/^[a-z0-9_.@]+$/.test(tag)) return;
+        sessionStorage.setItem('winjayPendingRefTag', tag);
+    } catch (e) {
+        return;
+    }
+}
+
+function consumePendingReferralForNewAccount(newUserTag) {
+    try {
+        const pending = sessionStorage.getItem('winjayPendingRefTag');
+        if (!pending) return null;
+        sessionStorage.removeItem('winjayPendingRefTag');
+        const refTag = pending;
+        if (refTag === newUserTag) return null;
+        const program = getFreeVerifiedProgramState();
+        program.referrals[refTag] = (program.referrals[refTag] || 0) + 1;
+        saveFreeVerifiedProgramState(program);
+        return refTag;
+    } catch (e) {
+        return null;
+    }
+}
+
+function getReferralCountForTag(tag) {
+    const program = getFreeVerifiedProgramState();
+    return program.referrals[tag] || 0;
+}
+
+async function copyTextToClipboard(text) {
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (e) {
+        return false;
+    }
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const ok = document.execCommand('copy');
+        ta.remove();
+        return ok;
+    } catch (e) {
+        return false;
+    }
+}
+
+function getReferralLink() {
+    const base = `${window.location.origin}${window.location.pathname}`;
+    const tag = encodeURIComponent(userProfile.tag);
+    return `${base}?ref=${tag}`;
+}
+
+function updateFreeVerifiedCounterUI() {
+    const program = getFreeVerifiedProgramState();
+    const navEl = document.getElementById('freeVerifiedRemainingNav');
+    const modalEl = document.getElementById('freeVerifiedRemainingModal');
+    const mobileEl = document.getElementById('freeVerifiedRemainingMobile');
+    if (navEl) navEl.textContent = program.remaining;
+    if (modalEl) modalEl.textContent = program.remaining;
+    if (mobileEl) mobileEl.textContent = program.remaining;
+}
+
+function toggleMobileSearchExpand(e) {
+    e?.stopPropagation();
+    const panel = document.getElementById('mobileSearchExpand');
+    if (!panel) return;
+    const next = !panel.classList.contains('active');
+    panel.classList.toggle('active', next);
+    if (next) {
+        if (window.getComputedStyle(panel).display === 'none') {
+            panel.style.display = 'block';
+        }
+        const input = document.getElementById('mobileSearchExpandInput');
+        const main = document.getElementById('mainSearchInput');
+        if (input && main) input.value = main.value || '';
+        setTimeout(() => input?.focus(), 50);
+        lucide.createIcons();
+    }
+}
+
+function closeMobileSearchExpand() {
+    const panel = document.getElementById('mobileSearchExpand');
+    if (!panel) return;
+    panel.classList.remove('active');
+    panel.style.display = '';
+    document.getElementById('mobileSearchHistoryDropdown')?.classList.remove('active');
+}
+
+function submitMobileSearch() {
+    handleSearch('mobileSearchExpandInput');
+    closeMobileSearchExpand();
+}
+
+function handleSearchKeydown(e, inputId = 'mainSearchInput') {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    handleSearch(inputId);
+    showSection('home-section');
+    if (inputId === 'mobileSearchExpandInput') {
+        closeMobileSearchExpand();
+        return;
+    }
+    document.getElementById('searchHistoryDropdown')?.classList.remove('active');
+}
+
+function getQuestProgress() {
+    const quest = getVerifiedQuestState();
+    const hasBasics = !!userProfile.name && !!userProfile.tag;
+    const hasPhone = !!userProfile.phone;
+    const hasWork = !!userProfile.workCategory;
+    const refs = getReferralCountForTag(userProfile.tag);
+    const hasRefs = refs >= REFERRALS_REQUIRED;
+    const hasIdentity = !!quest.identityVerified;
+    const total = 5;
+    const done = [hasBasics, hasPhone, hasWork, hasRefs, hasIdentity].filter(Boolean).length;
+    const percent = Math.round((done / total) * 100);
+    return { percent, done, total, refs, hasBasics, hasPhone, hasWork, hasRefs, hasIdentity };
+}
+
+function maybeGrantVerifiedBadge() {
+    const quest = getVerifiedQuestState();
+    if (userProfile.verified) return;
+    if (quest.granted) return;
+    const p = getQuestProgress();
+    if (p.percent < 100) return;
+    const program = getFreeVerifiedProgramState();
+    if (program.remaining <= 0) {
+        showToast('No free verified badges left.', 'alert-circle');
+        return;
+    }
+    program.remaining -= 1;
+    saveFreeVerifiedProgramState(program);
+    userProfile.verified = true;
+    saveUserProfileToStorage();
+    saveVerifiedQuestState({ ...quest, granted: true });
+    updateProfileUI();
+    updateFreeVerifiedCounterUI();
+    openModal('verifiedCongratsModal');
+    lucide.createIcons();
+}
+
+function renderVerifiedQuestCard() {
+    const card = document.getElementById('verifiedQuestCard');
+    if (!card) return;
+    if (userProfile.verified) {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = 'block';
+
+    const p = getQuestProgress();
+    const referralLink = getReferralLink();
+
+    const doneMark = (done) => done
+        ? `<span class="quest-status done"><i data-lucide="check-circle"></i> Done</span>`
+        : `<span class="quest-status"><i data-lucide="circle"></i> Pending</span>`;
+
+    const actionBtn = (label, icon, onClick) => `<button class="copy-ref-btn" type="button" onclick="${onClick}"><i data-lucide="${icon}"></i><span>${label}</span></button>`;
+
+    card.innerHTML = `
+        <div class="verified-quest-header">
+            <div class="verified-quest-title">
+                <i data-lucide="badge-check"></i>
+                <span>Free Verified Quest</span>
+            </div>
+            <div class="quest-status ${p.percent === 100 ? 'done' : ''}">${p.percent}%</div>
+        </div>
+        <div class="verified-quest-progress">
+            <div class="progress-row">
+                <span>Progress</span>
+                <span>${p.done}/${p.total}</span>
+            </div>
+            <div class="progress-bar"><span style="width:${p.percent}%"></span></div>
+        </div>
+        <div class="quest-list">
+            <div class="quest-item">
+                <div class="quest-left">
+                    <i class="quest-icon" data-lucide="user"></i>
+                    <div class="quest-meta">
+                        <div>Set up profile (name + username)</div>
+                        <div class="small">Required</div>
+                    </div>
+                </div>
+                <div class="quest-actions">
+                    ${!p.hasBasics ? actionBtn('Edit', 'pencil', "openModal('editProfileModal'); lucide.createIcons();") : ''}
+                    ${doneMark(p.hasBasics)}
+                </div>
+            </div>
+            <div class="quest-item">
+                <div class="quest-left">
+                    <i class="quest-icon" data-lucide="phone"></i>
+                    <div class="quest-meta">
+                        <div>Add phone number</div>
+                        <div class="small">Required</div>
+                    </div>
+                </div>
+                <div class="quest-actions">
+                    ${!p.hasPhone ? actionBtn('Add', 'pencil', "openModal('editProfileModal'); lucide.createIcons();") : ''}
+                    ${doneMark(p.hasPhone)}
+                </div>
+            </div>
+            <div class="quest-item">
+                <div class="quest-left">
+                    <i class="quest-icon" data-lucide="briefcase"></i>
+                    <div class="quest-meta">
+                        <div>Select work category</div>
+                        <div class="small">Required</div>
+                    </div>
+                </div>
+                <div class="quest-actions">
+                    ${!p.hasWork ? actionBtn('Choose', 'pencil', "openModal('editProfileModal'); lucide.createIcons();") : ''}
+                    ${doneMark(p.hasWork)}
+                </div>
+            </div>
+            <div class="quest-item">
+                <div class="quest-left">
+                    <i class="quest-icon" data-lucide="users"></i>
+                    <div class="quest-meta">
+                        <div>Refer ${REFERRALS_REQUIRED} people</div>
+                        <div class="small">${p.refs}/${REFERRALS_REQUIRED} joined</div>
+                    </div>
+                </div>
+                <div class="quest-actions">
+                    ${actionBtn('Copy link', 'copy', "copyReferralLink()")}
+                    ${doneMark(p.hasRefs)}
+                </div>
+            </div>
+            <div class="quest-item">
+                <div class="quest-left">
+                    <i class="quest-icon" data-lucide="scan-face"></i>
+                    <div class="quest-meta">
+                        <div>Verify identity (18+)</div>
+                        <div class="small">ID / passport / driving licence</div>
+                    </div>
+                </div>
+                <div class="quest-actions">
+                    ${!p.hasIdentity ? actionBtn('Verify', 'upload', "openModal('identityVerificationModal'); lucide.createIcons();") : ''}
+                    ${doneMark(p.hasIdentity)}
+                </div>
+            </div>
+        </div>
+        <div class="ref-link-box">
+            <code id="refLinkCode">${referralLink}</code>
+            ${actionBtn('Copy', 'copy', "copyReferralLink()")}
+        </div>
+    `;
+
+    lucide.createIcons();
+    maybeGrantVerifiedBadge();
+}
+
+async function copyReferralLink() {
+    const link = getReferralLink();
+    const ok = await copyTextToClipboard(link);
+    showToast(ok ? 'Referral link copied!' : 'Copy failed', ok ? 'copy' : 'alert-circle');
+}
+
+function populateWorkCategoriesSelect() {
+    const select = document.getElementById('editWorkCategory');
+    if (!select) return;
+    select.innerHTML = '<option value="">Select...</option>';
+    const names = [
+        ...categories.filter(c => c.special !== 'other').map(c => c.name),
+        ...allExtraCategories.map(c => c.name)
+    ];
+    [...new Set(names)].forEach((name) => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        select.appendChild(opt);
+    });
+}
+
+function handleIdentityFilePreview(inputId, imgId) {
+    const input = document.getElementById(inputId);
+    const img = document.getElementById(imgId);
+    if (!input || !img) return;
+    input.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            img.src = ev.target.result;
+            img.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+function submitIdentityVerification() {
+    const front = document.getElementById('idFrontInput')?.files?.[0];
+    const back = document.getElementById('idBackInput')?.files?.[0];
+    const dobValue = document.getElementById('idDob')?.value;
+    const confirm18 = document.getElementById('idConfirm18')?.checked;
+
+    if (!front || !back) {
+        showToast('Please upload front and back.', 'alert-circle');
+        return;
+    }
+    if (!dobValue) {
+        showToast('Please add your date of birth.', 'alert-circle');
+        return;
+    }
+    if (!confirm18) {
+        showToast('Please confirm you are 18+.', 'alert-circle');
+        return;
+    }
+
+    const dob = new Date(dobValue);
+    if (Number.isNaN(dob.getTime())) {
+        showToast('Invalid date of birth.', 'alert-circle');
+        return;
+    }
+    const now = new Date();
+    let age = now.getFullYear() - dob.getFullYear();
+    const m = now.getMonth() - dob.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age -= 1;
+    if (age < 18) {
+        showToast('You must be 18+ to be verified.', 'alert-circle');
+        return;
+    }
+
+    const quest = getVerifiedQuestState();
+    saveVerifiedQuestState({ ...quest, identityVerified: true });
+    closeModal('identityVerificationModal');
+    showToast('Identity submitted!', 'check-circle');
+    renderVerifiedQuestCard();
+}
+
+const DEMO_MODE = false;
+
+const botProfiles = DEMO_MODE ? [
+    { name: "Amine Tech", tag: "@amine_dz", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Amine", cover: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?w=1200", verified: true, vip: true, location: "Alger", businessType: "Magasin d'électronique", joinedDate: "Janvier 2023", rating: 4.9, reviews: 156, reviewsData: [] },
+    { name: "Sarah Immo", tag: "@sarah_immobilier", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah", cover: "https://images.unsplash.com/photo-1449844908441-8829872d2607?w=1200", verified: true, location: "Oran", businessType: "Agence Immobilière", joinedDate: "Mars 2022", rating: 4.7, reviews: 89, reviewsData: [] },
+    { name: "Karim Auto", tag: "@karim_cars", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Karim", cover: "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=1200", verified: false, vip: true, location: "Constantine", businessType: "Vendeur de véhicules", joinedDate: "Juin 2023", rating: 4.5, reviews: 42, reviewsData: [] },
+    { name: "Lina Fashion", tag: "@lina_style", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Lina", cover: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200", verified: true, location: "Alger", businessType: "Boutique de Mode", joinedDate: "Novembre 2023", rating: 4.8, reviews: 67, reviewsData: [] },
+    { name: "Yacine Informatique", tag: "@yacine_it", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Yacine", cover: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200", verified: false, location: "Sétif", businessType: "Services Informatiques", joinedDate: "Février 2024", rating: 4.6, reviews: 28, reviewsData: [] }
+] : [];
+
+const reviewers = DEMO_MODE ? [
+    { name: "Mohamed", tag: "@mohamed_dz", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Mohamed", location: "Alger", businessType: "Particulier", joinedDate: "Janvier 2024", rating: 4.5, reviews: 5, reviewsData: [] },
+    { name: "Lydia", tag: "@lydia_b", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Lydia", location: "Oran", businessType: "Particulier", joinedDate: "Mars 2024", rating: 4.2, reviews: 3, reviewsData: [] },
+    { name: "Ryad", tag: "@ryad_k", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ryad", location: "Alger", businessType: "Passionné Tech", joinedDate: "Février 2024", rating: 4.8, reviews: 12, reviewsData: [] },
+    { name: "Sonia", tag: "@sonia_tech", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sonia", location: "Constantine", businessType: "Particulier", joinedDate: "Avril 2024", rating: 4.6, reviews: 8, reviewsData: [] },
+    { name: "Imad", tag: "@imad_ed", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Imad", location: "Sétif", businessType: "Particulier", joinedDate: "Mai 2024", rating: 4.4, reviews: 6, reviewsData: [] },
+    { name: "Ahmed", tag: "@ahmed_dz", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed", location: "Béjaïa", businessType: "Particulier", joinedDate: "Janvier 2024", rating: 4.7, reviews: 15, reviewsData: [] },
+    { name: "Fatiha", tag: "@fatiha_w", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Fatiha", location: "Alger", businessType: "Particulier", joinedDate: "Mars 2024", rating: 4.9, reviews: 20, reviewsData: [] },
+    { name: "Kamel", tag: "@kamel_s", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Kamel", location: "Tlemcen", businessType: "Particulier", joinedDate: "Février 2024", rating: 4.3, reviews: 4, reviewsData: [] },
+    { name: "Yanis", tag: "@yanis_j", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Yanis", location: "Alger", businessType: "Particulier", joinedDate: "Avril 2024", rating: 4.5, reviews: 7, reviewsData: [] },
+    { name: "Amel", tag: "@amel_z", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Amel", location: "Annaba", businessType: "Particulier", joinedDate: "Mai 2024", rating: 4.6, reviews: 9, reviewsData: [] }
+] : [];
+
+const comments = [
+    "Excellent service, je recommande vivement !", "Produit conforme à la description, très satisfait.", "Livraison un peu lente mais le vendeur est sérieux.", "Prix très compétitifs par rapport au marché.", "Super communication, transaction fluide.", "C'est ma troisième commande chez ce vendeur, toujours top.", "Un peu déçu par l'emballage mais l'article est nickel.", "Honnête et professionnel. Allez-y les yeux fermés.", "Meilleur rapport qualité-prix sur Winjay.", "Vendeur très réactif aux messages."
+];
+const replies = [
+    "Merci pour votre confiance !", "Ravi que le produit vous plaise.", "Merci pour votre retour, nous ferons mieux pour la livraison la prochaine fois.", "Toujours un plaisir de vous servir.", "Merci beaucoup pour votre recommandation !"
+];
+
+function generateReviews() {
+    [userProfile, ...botProfiles, ...reviewers].forEach(profile => {
+        const count = Math.floor(Math.random() * (15 - 3 + 1)) + 3;
+        profile.reviews = count;
+        profile.reviewsData = [];
+        for (let i = 0; i < count; i++) {
+            const hasReply = Math.random() > 0.6;
+            const otherReviewers = reviewers.filter(r => r.tag !== profile.tag);
+            const reviewer = otherReviewers[Math.floor(Math.random() * otherReviewers.length)];
+            profile.reviewsData.push({
+                user: reviewer.name, tag: reviewer.tag, pic: reviewer.pic,
+                rating: Math.floor(Math.random() * (5 - 4 + 1)) + 4,
+                date: `Il y a ${Math.floor(Math.random() * 30) + 1} jours`,
+                comment: comments[Math.floor(Math.random() * comments.length)],
+                reply: hasReply ? replies[Math.floor(Math.random() * replies.length)] : null,
+                replyAuthorTag: hasReply ? profile.tag : null,
+                thread: [],
+                likes: Math.floor(Math.random() * 20)
+            });
+        }
+        profile.reviewsData.sort((a, b) => b.likes - a.likes);
+    });
+}
+if (DEMO_MODE) generateReviews();
+
+let listings = DEMO_MODE ? [
+    { id: 1, title: "Appartement moderne au Centre-Ville", price: 15000000, category: "Immobilier", image: "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=500", location: "16 Alger", date: "Il y a 2 heures", seller: botProfiles[1] },
+    { id: 2, title: "PC Gamer RTX 4080", price: 350000, category: "Électronique", image: "https://images.unsplash.com/photo-1603302576837-37561b2e2302?w=500", location: "31 Oran", date: "Il y a 5 heures", seller: botProfiles[0] },
+    { id: 3, title: "Mercedes Benz Classe C 2022", price: 8500000, category: "Véhicules", image: "https://images.unsplash.com/photo-1617531653332-bd46c24f2068?w=500", location: "25 Constantine", date: "Hier", seller: botProfiles[2] },
+    { id: 4, title: "Villa F5 avec Piscine", price: 45000000, category: "Immobilier", image: "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=500", location: "42 Tipaza", date: "Il y a 1 heure", seller: botProfiles[1] },
+    { id: 5, title: "iPhone 15 Pro Max 256GB", price: 210000, category: "Téléphonie", image: "https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=500", location: "16 Alger", date: "Il y a 3 heures", seller: botProfiles[0] },
+    { id: 6, title: "Volkswagen Golf 8 R-Line", price: 6200000, category: "Véhicules", image: "https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=500", location: "09 Blida", date: "Il y a 6 heures", seller: botProfiles[2] },
+    { id: 7, title: "Canapé d'angle Moderne", price: 85000, category: "Maison & Jardin", image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500", location: "19 Sétif", date: "Hier", seller: botProfiles[4] },
+    { id: 8, title: "MacBook Pro M3 14\"", price: 380000, category: "Informatique", image: "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=500", location: "31 Oran", date: "Il y a 2 jours", seller: botProfiles[0] },
+    { id: 9, title: "Montre Rolex Submariner", price: 1800000, category: "Mode & Beauté", image: "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=500", location: "16 Alger", date: "Il y a 4 heures", seller: botProfiles[3] },
+    { id: 10, title: "Appareil Photo Sony A7IV", price: 320000, category: "Électronique", image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=500", location: "23 Annaba", date: "Hier", seller: botProfiles[0] },
+    { id: 11, title: "VTT Rockrider ST 540", price: 55000, category: "Sport & Santé", image: "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?w=500", location: "06 Béjaïa", date: "Il y a 8 heures", seller: botProfiles[4] },
+    { id: 12, title: "Console PS5 Slim + 2 Manettes", price: 115000, category: "Électronique", image: "https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?w=500", location: "15 Tizi Ouzou", date: "Aujourd'hui", seller: botProfiles[0] },
+    { id: 13, title: "Terrain Agricole 2 Hectares", price: 12000000, category: "Immobilier", image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=500", location: "27 Mostaganem", date: "Il y a 3 jours", seller: botProfiles[1] },
+    { id: 14, title: "Robot de Cuisine Thermomix", price: 145000, category: "Maison & Jardin", image: "https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=500", location: "16 Alger", date: "Hier", seller: botProfiles[4] },
+    { id: 15, title: "Baskets Nike Air Jordan 1", price: 28000, category: "Mode & Beauté", image: "https://images.unsplash.com/photo-1560769629-975ec94e6a86?w=500", location: "31 Oran", date: "Il y a 12 heures", seller: botProfiles[3] },
+    { id: 16, title: "Tablette iPad Air M2", price: 165000, category: "Informatique", image: "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=500", location: "25 Constantine", date: "Il y a 5 heures", seller: botProfiles[0] },
+    { id: 17, title: "Moto TMAX 560 Tech Max", price: 2600000, category: "Véhicules", image: "https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=500", location: "16 Alger", date: "Hier", seller: botProfiles[2] },
+    { id: 18, title: "Machine à Café Delonghi", price: 95000, category: "Maison & Jardin", image: "https://images.unsplash.com/photo-1520970014086-2208d157c9e2?w=500", location: "13 Tlemcen", date: "Il y a 2 jours", seller: botProfiles[4] },
+    { id: 19, title: "Drone DJI Mini 4 Pro", price: 195000, category: "Électronique", image: "https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=500", location: "16 Alger", date: "Aujourd'hui", seller: botProfiles[0] },
+    { id: 20, title: "Studio Meublé à Hydra", price: 75000, category: "Immobilier", image: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=500", location: "16 Alger", date: "Il y a 7 heures", seller: botProfiles[1] },
+    { id: 21, title: "Piano Numérique Yamaha", price: 125000, category: "Loisirs & Divertissement", image: "https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=500", location: "31 Oran", date: "Hier", seller: botProfiles[4] },
+    { id: 22, title: "Perceuse Bosch Professional", price: 18500, category: "Matériel Professionnel", image: "https://images.unsplash.com/photo-1504148455328-c376907d081c?w=500", location: "19 Sétif", date: "Il y a 1 jour", seller: botProfiles[0] },
+    { id: 23, title: "Sac à Main Louis Vuitton", price: 240000, category: "Mode & Beauté", image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=500", location: "16 Alger", date: "Hier", seller: botProfiles[3] },
+    { id: 24, title: "Écran Samsung Odyssey G7", price: 110000, category: "Informatique", image: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=500", location: "31 Oran", date: "Il y a 4 heures", seller: botProfiles[0] },
+    { id: 25, title: "Canne à Pêche Carbone", price: 12000, category: "Loisirs & Divertissement", image: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=500", location: "21 Skikda", date: "Hier", seller: botProfiles[4] },
+    { id: 26, title: "Vélo d'appartement Pro", price: 42000, category: "Sport & Santé", image: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=500", location: "16 Alger", date: "Il y a 2 jours", seller: botProfiles[4] },
+    { id: 27, title: "Casque Bose QC45", price: 58000, category: "Électronique", image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500", location: "31 Oran", date: "Hier", seller: botProfiles[0] },
+    { id: 28, title: "Offre d'emploi: Développeur Frontend (Remote)", price: 0, category: "Emploi & Services", image: "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=500", location: "16 Alger", date: "Aujourd'hui", seller: botProfiles[4] },
+    { id: 29, title: "Service: Plombier à domicile (Urgence 24/7)", price: 2500, category: "Emploi & Services", image: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=500", location: "31 Oran", date: "Il y a 3 heures", seller: botProfiles[2] },
+    { id: 30, title: "Cours particuliers: Maths & Physique (Lycée)", price: 1500, category: "Emploi & Services", image: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=500", location: "25 Constantine", date: "Il y a 1 jour", seller: botProfiles[1] },
+    { id: 31, title: "Samsung Galaxy S24 Ultra 256GB", price: 195000, category: "Téléphonie", image: "https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=500", location: "16 Alger", date: "Il y a 6 heures", seller: botProfiles[0] },
+    { id: 32, title: "Xiaomi Redmi Note 13 Pro (Neuf)", price: 52000, category: "Téléphonie", image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500", location: "19 Sétif", date: "Hier", seller: botProfiles[4] },
+    { id: 33, title: "Générateur Inverter 3.5kW (Professionnel)", price: 145000, category: "Matériel Professionnel", image: "https://images.unsplash.com/photo-1586864387967-d02ef85d93e8?w=500", location: "42 Tipaza", date: "Il y a 2 jours", seller: botProfiles[0] },
+    { id: 34, title: "Caisse enregistreuse + TPE (Pack commerce)", price: 68000, category: "Matériel Professionnel", image: "https://images.unsplash.com/photo-1556740749-887f6717d7e4?w=500", location: "31 Oran", date: "Il y a 4 jours", seller: botProfiles[3] }
+] : [];
+
+function generateListingReviews() {
+    const daysAgo = () => `Il y a ${Math.floor(Math.random() * 30) + 1} jours`;
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+    listings.forEach((listing) => {
+        const count = Math.floor(Math.random() * 6) + 2;
+        listing.reviewsData = [];
+        for (let i = 0; i < count; i++) {
+            const reviewer = pick(reviewers);
+            const hasReply = Math.random() > 0.65;
+            listing.reviewsData.push({
+                user: reviewer.name,
+                tag: reviewer.tag,
+                pic: reviewer.pic,
+                rating: Math.floor(Math.random() * 3) + 3,
+                date: daysAgo(),
+                comment: pick(comments),
+                reply: hasReply ? pick(replies) : null,
+                replyAuthorTag: hasReply ? (listing.seller?.tag || null) : null,
+                thread: [],
+                likes: Math.floor(Math.random() * 25)
+            });
+        }
+        listing.reviewsData.sort((a, b) => b.likes - a.likes);
+    });
+}
+
+if (DEMO_MODE) generateListingReviews();
+
+let myListings = [];
+let favorites = [];
+let searchHistory = [];
+let editingListingId = null;
+let confirmCallback = null;
+let currentListingDetailId = null;
+let currentSellerProfileTag = null;
+const listingReviewPanelState = {};
+
+const mockChats = DEMO_MODE ? {
+    "@amine_dz": {
+        name: "Amine Tech",
+        pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Amine",
+        verified: true,
+        vip: true,
+        messages: [
+            { type: "received", text: "Bonjour, est-ce que l'article est toujours disponible ?", time: "Il y a 10 min" },
+            { type: "sent", text: "Bonjour ! Oui, l'article est toujours disponible.", time: "Il y a 5 min" }
+        ]
+    },
+    "@sarah_immobilier": {
+        name: "Sarah Immo",
+        pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah",
+        verified: true,
+        vip: false,
+        messages: [
+            { type: "received", text: "Merci pour votre intérêt !", time: "Il y a 2 heures" }
+        ]
+    },
+    "@karim_cars": {
+        name: "Karim Auto",
+        pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Karim",
+        verified: false,
+        vip: true,
+        messages: [
+            { type: "received", text: "Le prix est négociable.", time: "Hier" }
+        ]
+    }
+} : {};
+
+let activeChatTag = Object.keys(mockChats)[0] || null;
+let voiceRecorder = null;
+let voiceChunks = [];
+let voiceStream = null;
+let cameraStream = null;
+let cameraRecorder = null;
+let cameraChunks = [];
+let recordedVideoUrl = null;
+let activeVoiceAudio = null;
+let activeVoiceContainer = null;
+let voiceShouldSend = true;
+let voiceTimerInterval = null;
+let voiceRecordingStart = 0;
+let cameraTimerInterval = null;
+let cameraRecordingStart = 0;
+
+function escapeHtml(str) {
+    return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+}
+
+function unescapeHtml(str) {
+    return String(str)
+        .replaceAll('&#039;', "'")
+        .replaceAll('&quot;', '"')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&amp;', '&');
+}
+
+const WINJAY_LOGO_FILENAME = 'new official winjay dz logo.png';
+const WINJAY_LOGO_FILENAME_ENCODED = 'new%20official%20winjay%20dz%20logo.png';
+const winjayTransparentLogoCache = new Map();
+const winjayTransparentLogoPromiseCache = new Map();
+
+function isWinjayLogoSrc(src) {
+    if (!src) return false;
+    const s = String(src).toLowerCase();
+    return s.includes(WINJAY_LOGO_FILENAME) || s.includes(WINJAY_LOGO_FILENAME_ENCODED);
+}
+
+function getWinjayLogoImgs() {
+    return Array.from(document.querySelectorAll('img')).filter((img) => {
+        const src = img.getAttribute('src') || img.src;
+        return isWinjayLogoSrc(src);
+    });
+}
+
+function averageCornerColor(imgData, width, height, corner) {
+    const size = Math.min(10, width, height);
+    const xStart = corner.includes('r') ? Math.max(0, width - size) : 0;
+    const yStart = corner.includes('b') ? Math.max(0, height - size) : 0;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let y = yStart; y < yStart + size; y++) {
+        for (let x = xStart; x < xStart + size; x++) {
+            const i = (y * width + x) * 4;
+            const a = imgData[i + 3];
+            if (a < 200) continue;
+            r += imgData[i];
+            g += imgData[i + 1];
+            b += imgData[i + 2];
+            n += 1;
+        }
+    }
+    if (!n) return { r: 0, g: 0, b: 0 };
+    return { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) };
+}
+
+function colorDistance(a, b) {
+    return Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b);
+}
+
+async function buildTransparentWinjayLogo(sourceUrl) {
+    const src = sourceUrl || WINJAY_LOGO_FILENAME;
+    if (winjayTransparentLogoCache.has(src)) return winjayTransparentLogoCache.get(src);
+    if (winjayTransparentLogoPromiseCache.has(src)) return winjayTransparentLogoPromiseCache.get(src);
+
+    const promise = new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                const w = img.naturalWidth || img.width;
+                const h = img.naturalHeight || img.height;
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                if (!ctx) return resolve(null);
+                ctx.drawImage(img, 0, 0, w, h);
+                const data = ctx.getImageData(0, 0, w, h);
+
+                const c1 = averageCornerColor(data.data, w, h, 'tl');
+                const c2 = averageCornerColor(data.data, w, h, 'tr');
+                const c3 = averageCornerColor(data.data, w, h, 'bl');
+                const c4 = averageCornerColor(data.data, w, h, 'br');
+                const bg = {
+                    r: Math.round((c1.r + c2.r + c3.r + c4.r) / 4),
+                    g: Math.round((c1.g + c2.g + c3.g + c4.g) / 4),
+                    b: Math.round((c1.b + c2.b + c3.b + c4.b) / 4)
+                };
+
+                const threshold = 85;
+                for (let i = 0; i < data.data.length; i += 4) {
+                    const a = data.data[i + 3];
+                    if (a === 0) continue;
+                    const px = { r: data.data[i], g: data.data[i + 1], b: data.data[i + 2] };
+                    if (colorDistance(px, bg) <= threshold) {
+                        data.data[i + 3] = 0;
+                    }
+                }
+
+                ctx.putImageData(data, 0, 0);
+                resolve(canvas.toDataURL('image/png'));
+            } catch (e) {
+                resolve(null);
+            }
+        };
+        img.onerror = () => resolve(null);
+        img.src = src;
+    }).then((res) => {
+        if (res) winjayTransparentLogoCache.set(src, res);
+        winjayTransparentLogoPromiseCache.delete(src);
+        return res;
+    });
+
+    winjayTransparentLogoPromiseCache.set(src, promise);
+    return promise;
+}
+
+function applyWinjayLogoTheme() {
+    const imgs = getWinjayLogoImgs();
+    if (!imgs.length) return;
+    imgs.forEach((img) => {
+        if (!img.dataset.originalSrc) img.dataset.originalSrc = img.getAttribute('src') || img.src;
+    });
+    if (!body.classList.contains('dark-mode')) {
+        imgs.forEach((img) => {
+            if (img.dataset.originalSrc) img.setAttribute('src', img.dataset.originalSrc);
+        });
+        return;
+    }
+    const sourceUrl = imgs[0].dataset.originalSrc || imgs[0].getAttribute('src') || imgs[0].src || WINJAY_LOGO_FILENAME;
+    buildTransparentWinjayLogo(sourceUrl).then((dataUrl) => {
+        if (!dataUrl) return;
+        if (!body.classList.contains('dark-mode')) return;
+        getWinjayLogoImgs().forEach((img) => img.setAttribute('src', dataUrl));
+    });
+}
+
+function togglePasswordVisibility(inputId, btnEl) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const nextType = input.type === 'password' ? 'text' : 'password';
+    input.type = nextType;
+    const icon = btnEl?.querySelector('i');
+    if (icon) icon.setAttribute('data-lucide', nextType === 'password' ? 'eye' : 'eye-off');
+    btnEl?.setAttribute('aria-label', nextType === 'password' ? 'Afficher le mot de passe' : 'Masquer le mot de passe');
+    lucide.createIcons();
+}
+
+function newMessageId() {
+    return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function formatTime(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function renderChatMessageBody(m) {
+    const kind = m.kind || (m.url ? 'file' : 'text');
+    if (kind === 'image') {
+        return `<img src="${m.url}" alt="${escapeHtml(m.name || 'Image')}" class="chat-media image" onclick="openLightbox('${m.url}')">`;
+    }
+    if (kind === 'video') {
+        return `<video src="${m.url}" controls class="chat-media"></video>`;
+    }
+    if (kind === 'audio') {
+        const id = escapeHtml(m.id || '');
+        return `
+            <div class="voice-message" data-voice-id="${id}">
+                <button class="voice-play" onclick="toggleVoicePlayback('${id}')"><i data-lucide="play"></i></button>
+                <div class="voice-wave" onclick="seekVoice(event, '${id}')"><div class="voice-wave-fill"></div></div>
+                <div class="voice-times">
+                    <span class="voice-current">0:00</span>
+                    <span class="voice-duration">0:00</span>
+                </div>
+                <audio class="voice-audio" preload="metadata" src="${m.url}"></audio>
+            </div>
+        `;
+    }
+    if (kind === 'file') {
+        const name = escapeHtml(m.name || 'Fichier');
+        return `<a class="chat-file" href="${m.url}" download="${name}"><i data-lucide="file"></i><span>${name}</span></a>`;
+    }
+    return `<p>${escapeHtml(m.text || '')}</p>`;
+}
+
+function openChatFilePicker(type = 'media') {
+    const input = document.getElementById('chatFileInput');
+    if (!input) return;
+    if (type === 'file') {
+        input.accept = '.pdf,.doc,.docx,.zip,.rar,.txt';
+    } else if (type === 'audio') {
+        input.accept = 'audio/*';
+    } else {
+        input.accept = 'image/*,video/*,audio/*';
+    }
+    input.click();
+}
+
+function toggleChatActions(e) {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    const actions = document.getElementById('chatActions');
+    if (!actions) return;
+    actions.classList.toggle('active');
+    lucide.createIcons();
+}
+
+function closeChatActions() {
+    const actions = document.getElementById('chatActions');
+    if (!actions) return;
+    actions.classList.remove('active');
+}
+
+function setVoiceRecordingBarVisible(visible) {
+    const bar = document.getElementById('voiceRecordingBar');
+    if (bar) bar.classList.toggle('active', visible);
+
+    const plusBtn = document.getElementById('chatPlusBtn');
+    if (plusBtn) plusBtn.style.display = visible ? 'none' : '';
+
+    const micBtn = document.getElementById('chatMicBtn');
+    if (micBtn) micBtn.style.display = visible ? 'none' : '';
+
+    const sendBtn = document.getElementById('chatSendBtn');
+    if (sendBtn) sendBtn.style.display = visible ? 'none' : '';
+
+    const input = document.getElementById('chatInput');
+    if (input) input.disabled = visible;
+
+    if (visible) closeChatActions();
+}
+
+function updateVoiceRecTimer() {
+    const el = document.getElementById('voiceRecTime');
+    if (!el) return;
+    const seconds = (Date.now() - voiceRecordingStart) / 1000;
+    el.textContent = formatTime(seconds);
+}
+
+async function startVoiceRecording() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+        showToast('Votre navigateur ne supporte pas les messages vocaux', 'alert-circle');
+        return;
+    }
+
+    if (voiceRecorder && voiceRecorder.state === 'recording') return;
+
+    try {
+        voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        voiceChunks = [];
+        voiceRecorder = new MediaRecorder(voiceStream);
+        voiceShouldSend = true;
+
+        voiceRecorder.ondataavailable = (ev) => {
+            if (ev.data && ev.data.size > 0) voiceChunks.push(ev.data);
+        };
+
+        voiceRecorder.onstop = () => {
+            const shouldSend = voiceShouldSend;
+            const blob = new Blob(voiceChunks, { type: voiceRecorder.mimeType || 'audio/webm' });
+            const url = URL.createObjectURL(blob);
+
+            if (shouldSend) {
+                const chat = mockChats[activeChatTag];
+                if (chat) {
+                    chat.messages.push({ id: newMessageId(), type: 'sent', kind: 'audio', url, name: 'message-vocal.webm', time: "À l'instant" });
+                    switchChat(activeChatTag);
+                }
+            } else {
+                URL.revokeObjectURL(url);
+            }
+
+            voiceStream?.getTracks()?.forEach(t => t.stop());
+            voiceStream = null;
+            setVoiceRecordingBarVisible(false);
+            if (voiceTimerInterval) clearInterval(voiceTimerInterval);
+            voiceTimerInterval = null;
+        };
+
+        voiceRecordingStart = Date.now();
+        setVoiceRecordingBarVisible(true);
+        updateVoiceRecTimer();
+        if (voiceTimerInterval) clearInterval(voiceTimerInterval);
+        voiceTimerInterval = setInterval(updateVoiceRecTimer, 250);
+
+        voiceRecorder.start();
+    } catch {
+        showToast('Permission micro refusée', 'alert-circle');
+        voiceStream?.getTracks()?.forEach(t => t.stop());
+        voiceStream = null;
+        setVoiceRecordingBarVisible(false);
+    }
+}
+
+function stopVoiceRecording(shouldSend = true) {
+    if (!voiceRecorder || voiceRecorder.state !== 'recording') return;
+    voiceShouldSend = shouldSend;
+    try { voiceRecorder.stop(); } catch {}
+}
+
+function cancelVoiceRecording() {
+    stopVoiceRecording(false);
+}
+
+async function openChatCamera() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+        showToast('Caméra non supportée', 'alert-circle');
+        return;
+    }
+
+    recordedVideoUrl = null;
+    cameraChunks = [];
+
+    const preview = document.getElementById('cameraPreview');
+    const recordBtn = document.getElementById('cameraRecordBtn');
+    const sendBtn = document.getElementById('cameraSendBtn');
+    if (!preview || !recordBtn || !sendBtn) return;
+
+    sendBtn.disabled = true;
+    recordBtn.classList.remove('recording');
+    recordBtn.querySelector('i')?.setAttribute('data-lucide', 'video');
+    preview.controls = false;
+    preview.muted = true;
+    preview.removeAttribute('src');
+    preview.srcObject = null;
+
+    try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        preview.srcObject = cameraStream;
+        preview.play();
+        openModal('cameraModal');
+        lucide.createIcons();
+    } catch {
+        showToast('Permission caméra refusée', 'alert-circle');
+        cameraStream?.getTracks()?.forEach(t => t.stop());
+        cameraStream = null;
+    }
+}
+
+function toggleCameraRecording() {
+    const preview = document.getElementById('cameraPreview');
+    const recordBtn = document.getElementById('cameraRecordBtn');
+    const sendBtn = document.getElementById('cameraSendBtn');
+    if (!preview || !recordBtn || !sendBtn) return;
+
+    if (!cameraStream) {
+        showToast('Caméra non prête', 'alert-circle');
+        return;
+    }
+
+    if (cameraRecorder && cameraRecorder.state === 'recording') {
+        cameraRecorder.stop();
+        return;
+    }
+
+    cameraChunks = [];
+    cameraRecorder = new MediaRecorder(cameraStream);
+
+    cameraRecorder.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size > 0) cameraChunks.push(ev.data);
+    };
+
+    cameraRecorder.onstop = () => {
+        const blob = new Blob(cameraChunks, { type: cameraRecorder.mimeType || 'video/webm' });
+        recordedVideoUrl = URL.createObjectURL(blob);
+
+        preview.pause();
+        preview.srcObject = null;
+        preview.src = recordedVideoUrl;
+        preview.controls = true;
+        preview.muted = false;
+        preview.play();
+
+        recordBtn.classList.remove('recording');
+        recordBtn.querySelector('i')?.setAttribute('data-lucide', 'video');
+        sendBtn.disabled = false;
+        if (cameraTimerInterval) clearInterval(cameraTimerInterval);
+        cameraTimerInterval = null;
+        lucide.createIcons();
+    };
+
+    cameraRecorder.start();
+    recordBtn.classList.add('recording');
+    recordBtn.querySelector('i')?.setAttribute('data-lucide', 'square');
+    sendBtn.disabled = true;
+    cameraRecordingStart = Date.now();
+    const timerEl = document.getElementById('cameraTimer');
+    if (timerEl) timerEl.textContent = '0:00';
+    if (cameraTimerInterval) clearInterval(cameraTimerInterval);
+    cameraTimerInterval = setInterval(() => {
+        const el = document.getElementById('cameraTimer');
+        if (!el) return;
+        const seconds = (Date.now() - cameraRecordingStart) / 1000;
+        el.textContent = formatTime(seconds);
+    }, 250);
+    lucide.createIcons();
+    showToast('Enregistrement vidéo...', 'video');
+}
+
+function sendRecordedVideo() {
+    if (!recordedVideoUrl) return;
+    const chat = mockChats[activeChatTag];
+    if (!chat) return;
+    chat.messages.push({ id: newMessageId(), type: 'sent', kind: 'video', url: recordedVideoUrl, name: 'video.webm', time: "À l'instant" });
+    switchChat(activeChatTag);
+    closeCameraModal(true);
+}
+
+function closeCameraModal(keepRecorded = false) {
+    if (cameraRecorder && cameraRecorder.state === 'recording') {
+        try { cameraRecorder.stop(); } catch {}
+    }
+
+    cameraStream?.getTracks()?.forEach(t => t.stop());
+    cameraStream = null;
+    cameraRecorder = null;
+    cameraChunks = [];
+    if (cameraTimerInterval) clearInterval(cameraTimerInterval);
+    cameraTimerInterval = null;
+    const timerEl = document.getElementById('cameraTimer');
+    if (timerEl) timerEl.textContent = '0:00';
+
+    const preview = document.getElementById('cameraPreview');
+    if (preview) {
+        preview.pause();
+        preview.srcObject = null;
+        if (!keepRecorded) preview.removeAttribute('src');
+        preview.controls = false;
+        preview.muted = true;
+    }
+
+    const sendBtn = document.getElementById('cameraSendBtn');
+    if (sendBtn) sendBtn.disabled = true;
+
+    if (!keepRecorded && recordedVideoUrl) {
+        URL.revokeObjectURL(recordedVideoUrl);
+        recordedVideoUrl = null;
+    }
+
+    closeModal('cameraModal');
+    lucide.createIcons();
+}
+
+function handleChatFiles(e) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const chat = mockChats[activeChatTag];
+    if (!chat) return;
+
+    files.forEach(file => {
+        const url = URL.createObjectURL(file);
+        let kind = 'file';
+        if (file.type.startsWith('image/')) kind = 'image';
+        else if (file.type.startsWith('video/')) kind = 'video';
+        else if (file.type.startsWith('audio/')) kind = 'audio';
+        chat.messages.push({ id: newMessageId(), type: 'sent', kind, url, name: file.name, time: "À l'instant" });
+    });
+
+    e.target.value = '';
+    switchChat(activeChatTag);
+}
+
+function toggleVoiceRecording() {
+    if (voiceRecorder && voiceRecorder.state === 'recording') {
+        stopVoiceRecording(true);
+        return;
+    }
+    startVoiceRecording();
+}
+
+function setupChatFeatures() {
+    const fileInput = document.getElementById('chatFileInput');
+    if (fileInput) fileInput.addEventListener('change', handleChatFiles);
+
+    document.addEventListener('click', (e) => {
+        const actions = document.getElementById('chatActions');
+        const inputBar = document.querySelector('.chat-input');
+        if (!actions || !inputBar) return;
+        if (!actions.classList.contains('active')) return;
+        if (actions.contains(e.target) || inputBar.contains(e.target)) return;
+        actions.classList.remove('active');
+    });
+}
+
+function stopActiveVoicePlayback() {
+    if (!activeVoiceAudio) return;
+    activeVoiceAudio.pause();
+    activeVoiceAudio.currentTime = 0;
+    if (activeVoiceContainer) {
+        const icon = activeVoiceContainer.querySelector('.voice-play i');
+        icon?.setAttribute('data-lucide', 'play');
+        const fill = activeVoiceContainer.querySelector('.voice-wave-fill');
+        if (fill) fill.style.width = '0%';
+        const currentEl = activeVoiceContainer.querySelector('.voice-current');
+        if (currentEl) currentEl.textContent = '0:00';
+    }
+    activeVoiceAudio = null;
+    activeVoiceContainer = null;
+    lucide.createIcons();
+}
+
+function getVoiceContainerById(voiceId) {
+    return document.querySelector(`.voice-message[data-voice-id="${CSS.escape(voiceId)}"]`);
+}
+
+function syncVoiceUI(container, audio) {
+    const fill = container.querySelector('.voice-wave-fill');
+    const currentEl = container.querySelector('.voice-current');
+    const durationEl = container.querySelector('.voice-duration');
+    const duration = audio.duration || 0;
+    const current = audio.currentTime || 0;
+    if (fill) fill.style.width = duration > 0 ? `${(current / duration) * 100}%` : '0%';
+    if (currentEl) currentEl.textContent = formatTime(current);
+    if (durationEl) durationEl.textContent = formatTime(duration);
+}
+
+function initVoiceMessage(container) {
+    const audio = container.querySelector('.voice-audio');
+    if (!audio) return;
+
+    audio.onloadedmetadata = () => syncVoiceUI(container, audio);
+    audio.ontimeupdate = () => syncVoiceUI(container, audio);
+    audio.onended = () => {
+        const icon = container.querySelector('.voice-play i');
+        icon?.setAttribute('data-lucide', 'play');
+        const fill = container.querySelector('.voice-wave-fill');
+        if (fill) fill.style.width = '0%';
+        const currentEl = container.querySelector('.voice-current');
+        if (currentEl) currentEl.textContent = '0:00';
+        const durationEl = container.querySelector('.voice-duration');
+        if (durationEl) durationEl.textContent = formatTime(audio.duration || 0);
+        if (activeVoiceAudio === audio) {
+            activeVoiceAudio = null;
+            activeVoiceContainer = null;
+        }
+        lucide.createIcons();
+    };
+}
+
+function initVoiceMessagesInChat(chatMessagesEl) {
+    chatMessagesEl.querySelectorAll('.voice-message').forEach(initVoiceMessage);
+}
+
+function toggleVoicePlayback(voiceId) {
+    const container = getVoiceContainerById(voiceId);
+    if (!container) return;
+    const audio = container.querySelector('.voice-audio');
+    if (!audio) return;
+
+    if (activeVoiceAudio && activeVoiceAudio !== audio) stopActiveVoicePlayback();
+
+    const icon = container.querySelector('.voice-play i');
+    if (audio.paused) {
+        audio.play().then(() => {
+            activeVoiceAudio = audio;
+            activeVoiceContainer = container;
+            icon?.setAttribute('data-lucide', 'pause');
+            lucide.createIcons();
+        }).catch(() => {
+            showToast('Impossible de lire l’audio', 'alert-circle');
+        });
+    } else {
+        audio.pause();
+        icon?.setAttribute('data-lucide', 'play');
+        lucide.createIcons();
+    }
+}
+
+function seekVoice(e, voiceId) {
+    const container = getVoiceContainerById(voiceId);
+    if (!container) return;
+    const audio = container.querySelector('.voice-audio');
+    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+
+    const wave = container.querySelector('.voice-wave');
+    if (!wave) return;
+    const rect = wave.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    audio.currentTime = ratio * audio.duration;
+    syncVoiceUI(container, audio);
+}
+
+function renderMessagesList() {
+    const listEl = document.getElementById('messagesList');
+    if (!listEl) return;
+
+    const entries = Object.entries(mockChats);
+    if (entries.length === 0) {
+        listEl.innerHTML = `
+            <div class="empty-state" style="margin: 20px;">
+                <i data-lucide="message-circle"></i>
+                <h3>No messages yet</h3>
+                <p>Start a conversation from a listing.</p>
+            </div>
+        `;
+        renderEmptyChat();
+        lucide.createIcons();
+        return;
+    }
+    listEl.innerHTML = entries.map(([tag, chat]) => {
+        const last = chat.messages && chat.messages.length ? chat.messages[chat.messages.length - 1] : null;
+        let preview = 'Start the conversation';
+        if (last) {
+            if (last.kind === 'image') preview = 'Photo';
+            else if (last.kind === 'video') preview = 'Video';
+            else if (last.kind === 'audio') preview = 'Audio';
+            else if (last.kind === 'file') preview = last.name || 'File';
+            else preview = last.text || '';
+        }
+
+        return `
+            <div class="message-item ${tag === activeChatTag ? 'active' : ''}" onclick="switchChat('${tag}')">
+                <img src="${chat.pic}" alt="">
+                <div class="message-info">
+                    <div class="message-header">
+                        <span class="message-name">${escapeHtml(chat.name)}</span>
+                        <span class="message-time">${escapeHtml(last?.time || '')}</span>
+                    </div>
+                    <p class="message-preview">${escapeHtml(preview)}</p>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    lucide.createIcons();
+}
+
+function renderEmptyChat() {
+    const chatArea = document.getElementById('chatArea');
+    if (!chatArea) return;
+    const header = chatArea.querySelector('.chat-header');
+    const messages = document.getElementById('chatMessages');
+    if (header) {
+        header.innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px; padding: 12px 14px;">
+                <i data-lucide="message-circle"></i>
+                <div style="font-weight:800;">Messages</div>
+            </div>
+        `;
+    }
+    if (messages) {
+        messages.innerHTML = `
+            <div class="empty-state" style="padding: 28px 16px;">
+                <i data-lucide="message-square"></i>
+                <h3>Select a chat</h3>
+                <p>Your conversation will appear here.</p>
+            </div>
+        `;
+    }
+    const input = document.getElementById('chatInput');
+    if (input) {
+        input.value = '';
+        input.disabled = true;
+    }
+    const sendBtn = document.getElementById('chatSendBtn');
+    if (sendBtn) sendBtn.disabled = true;
+    const plusBtn = document.getElementById('chatPlusBtn');
+    if (plusBtn) plusBtn.disabled = true;
+    const micBtn = document.getElementById('chatMicBtn');
+    if (micBtn) micBtn.disabled = true;
+}
+
+function startChatWithSeller(tag) {
+    if (!tag) return;
+
+    if (!mockChats[tag]) {
+        const seller =
+            botProfiles.find(p => p.tag === tag) ||
+            reviewers.find(p => p.tag === tag) ||
+            (userProfile.tag === tag ? userProfile : null);
+
+        mockChats[tag] = {
+            name: seller?.name || 'Seller',
+            pic: seller?.pic || seller?.profilePic || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Seller',
+            verified: !!seller?.verified,
+            vip: !!(seller?.vip || seller?.isVip),
+            messages: []
+        };
+    }
+
+    closeModal('listingDetailModal');
+    activeChatTag = tag;
+    showSection('messages-section');
+    renderMessagesList();
+    switchChat(tag);
+}
+
+function switchChat(tag, isModal = false) {
+    const chat = mockChats[tag];
+    if (!chat) {
+        activeChatTag = null;
+        renderEmptyChat();
+        lucide.createIcons();
+        return;
+    }
+
+    closeChatActions();
+    activeChatTag = tag;
+    const prefix = isModal ? "Modal" : "";
+    const chatArea = document.getElementById(`chatArea${prefix}`);
+    if (!chatArea) return;
+    const chatHeader = chatArea.querySelector('.chat-header');
+    const chatMessages = document.getElementById(`chatMessages${prefix}`);
+    const messageItems = document.querySelectorAll(`.message-item${isModal ? '-modal' : ''}`);
+
+    if (chat.messages) {
+        chat.messages.forEach(m => {
+            if (!m.id) m.id = newMessageId();
+        });
+    }
+
+    chatHeader.innerHTML = `
+        <img src="${chat.pic}" alt="" id="chatUserPic" onclick="viewChatUserProfile('${tag}')" style="cursor: pointer;">
+        <div onclick="viewChatUserProfile('${tag}')" style="cursor: pointer; flex: 1;">
+            <h4>${chat.name} ${getUserBadgesHTML(chat)}</h4>
+            <span id="chatUserTag">${tag}</span>
+        </div>
+        <button class="chat-more-btn" onclick="event.stopPropagation(); openBlockModal();">
+            <i data-lucide="more-horizontal"></i>
+        </button>
+    `;
+
+    chatMessages.innerHTML = chat.messages.map(m => `
+        <div class="chat-message ${m.type}">
+            ${renderChatMessageBody(m)}
+            <span>${escapeHtml(m.time || '')}</span>
+        </div>
+    `).join('');
+    if (!isModal) renderMessagesList();
+    initVoiceMessagesInChat(chatMessages);
+
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    const input = document.getElementById(`chatInput${prefix}`);
+    if (input) input.disabled = false;
+    const sendBtn = document.getElementById(`chatSendBtn${prefix}`);
+    if (sendBtn) sendBtn.disabled = false;
+    const plusBtn = document.getElementById(`chatPlusBtn${prefix}`);
+    if (plusBtn) plusBtn.disabled = false;
+    const micBtn = document.getElementById(`chatMicBtn${prefix}`);
+    if (micBtn) micBtn.disabled = false;
+    lucide.createIcons();
+}
+
+function viewChatUserProfile(tag) {
+    openSellerProfile(tag);
+}
+
+let currentFilters = {
+    search: '',
+    category: '',
+    wilaya: '',
+    priceMin: '',
+    priceMax: '',
+    sort: 'newest'
+};
+let currentPage = 1;
+const ITEMS_PER_PAGE = 12;
+const MAX_PAGE_BUTTONS = 9;
+
+const wilayas = [
+    "01 Adrar", "02 Chlef", "03 Laghouat", "04 Oum El Bouaghi", "05 Batna", "06 Béjaïa", "07 Biskra", "08 Béchar",
+    "09 Blida", "10 Bouira", "11 Tamanrasset", "12 Tébessa", "13 Tlemcen", "14 Tiaret", "15 Tizi Ouzou", "16 Alger",
+    "17 Djelfa", "18 Jijel", "19 Sétif", "20 Saïda", "21 Skikda", "22 Sidi Bel Abbès", "23 Annaba", "24 Guelma",
+    "25 Constantine", "26 Médéa", "27 Mostaganem", "28 M'Sila", "29 Mascara", "30 Ouargla", "31 Oran", "32 El Bayadh",
+    "33 Illizi", "34 Bordj Bou Arreridj", "35 Boumerdès", "36 El Tarf", "37 Tindouf", "38 Tissemsilt", "39 El Oued",
+    "40 Khenchela", "41 Souk Ahras", "42 Tipaza", "43 Mila", "44 Aïn Defla", "45 Naâma", "46 Aïn Témouchent", "47 Ghardaïa",
+    "48 Relizane", "49 El M'Ghair", "50 El Meniaa", "51 Ouled Djellal", "52 Bordj Baji Mokhtar", "53 Béni Abbès",
+    "54 Timimoun", "55 Touggourt", "56 Djanet", "57 In Salah", "58 In Guezzam"
+];
+
+const categories = [
+    { name: "Véhicules", icon: "car" }, { name: "Immobilier", icon: "home" }, { name: "Électronique", icon: "smartphone" },
+    { name: "Emploi & Services", icon: "briefcase" }, { name: "Maison & Jardin", icon: "armchair" }, { name: "Mode & Beauté", icon: "shopping-bag" },
+    { name: "Loisirs & Divertissement", icon: "palmtree" }, { name: "Informatique", icon: "monitor" }, { name: "Téléphonie", icon: "phone" },
+    { name: "Sport & Santé", icon: "heart-pulse" }, { name: "Matériel Professionnel", icon: "wrench" }, { name: "Autres", icon: "more-horizontal", special: "other" }
+];
+
+const allExtraCategories = [
+    { name: "Pièces de rechange", icon: "settings" }, { name: "Motos & Vélos", icon: "bike" }, { name: "Nautisme", icon: "ship" },
+    { name: "Locations de vacances", icon: "palmtree" }, { name: "Bureaux & Commerces", icon: "building" }, { name: "Colocation", icon: "users" },
+    { name: "Consoles & Jeux vidéo", icon: "gamepad-2" }, { name: "Photo & Caméras", icon: "camera" }, { name: "Audio & Son", icon: "speaker" },
+    { name: "Meubles", icon: "table" }, { name: "Électroménager", icon: "refrigerator" }, { name: "Bricolage", icon: "hammer" },
+    { name: "Jardinage", icon: "leaf" }, { name: "Décoration", icon: "palette" }, { name: "Linge de maison", icon: "shirt" },
+    { name: "Vêtements", icon: "shirt" }, { name: "Chaussures", icon: "footprints" }, { name: "Accessoires & Montres", icon: "watch" },
+    { name: "Bijoux", icon: "gem" }, { name: "Sacs & Bagages", icon: "shopping-bag" },
+    { name: "Vêtements bébé", icon: "baby" }, { name: "Équipement bébé", icon: "package" }, { name: "Jeux & Jouets", icon: "puzzle" },
+    { name: "Livres", icon: "book" }, { name: "Musique & CD", icon: "music" }, { name: "Films & DVD", icon: "film" },
+    { name: "Instruments de musique", icon: "guitar" }, { name: "Collection", icon: "stamp" }, { name: "Art & Artisanat", icon: "brush" },
+    { name: "Animaux de compagnie", icon: "dog" }, { name: "Accessoires animaux", icon: "bone" },
+    { name: "Alimentation", icon: "utensils" }, { name: "Santé & Bien-être", icon: "heart" }, { name: "Services à la personne", icon: "user-cog" },
+    { name: "Événementiel", icon: "calendar" }, { name: "Cours & Formations", icon: "graduation-cap" }, { name: "Informatique & Logiciels", icon: "code" },
+    { name: "Matériel de bureau", icon: "printer" }, { name: "Hôtellerie & Restauration", icon: "coffee" }, { name: "Agriculture", icon: "tractor" },
+    { name: "Bâtiment & Travaux", icon: "hard-hat" }, { name: "Industrie", icon: "factory" }, { name: "Outillage", icon: "drill" },
+    { name: "Énergie", icon: "zap" }, { name: "Transport & Logistique", icon: "truck" }, { name: "Beauté & Cosmétique", icon: "sparkles" },
+    { name: "Voyages", icon: "plane" }, { name: "Art antiquités", icon: "castle" }, { name: "Vins & Gastronomie", icon: "glass-water" },
+    { name: "Billetterie", icon: "ticket" }, { name: "Emploi intérim", icon: "clock" }
+];
+
+function ensureCategoryListings() {
+    const adjectives = ["Neuf", "Bon plan", "Premium", "Top qualité", "À saisir"];
+    const genericImages = [
+        "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=500",
+        "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?w=500",
+        "https://images.unsplash.com/photo-1556761175-4b46a572b786?w=500"
+    ];
+
+    const imageByCategory = {
+        "Véhicules": "https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=500",
+        "Immobilier": "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=500",
+        "Électronique": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=500",
+        "Emploi & Services": "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=500",
+        "Maison & Jardin": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
+        "Mode & Beauté": "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=500",
+        "Loisirs & Divertissement": "https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=500",
+        "Informatique": "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=500",
+        "Téléphonie": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500",
+        "Sport & Santé": "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=500",
+        "Matériel Professionnel": "https://images.unsplash.com/photo-1504148455328-c376907d081c?w=500",
+        "Autres": "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?w=500"
+    };
+
+    const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+    const allCategoryNames = [
+        ...categories.map(c => c.name),
+        ...allExtraCategories.map(c => c.name)
+    ];
+
+    let nextId = Math.max(0, ...listings.map(l => l.id)) + 1;
+
+    allCategoryNames.forEach(categoryName => {
+        const existingCount = listings.filter(l => l.category === categoryName).length;
+        const needed = Math.max(0, 2 - existingCount);
+
+        for (let i = 0; i < needed; i++) {
+            const adjective = pick(adjectives);
+            const seller = pick(botProfiles);
+            const location = pick(wilayas);
+            const image = imageByCategory[categoryName] || pick(genericImages);
+            const date = Math.random() > 0.6 ? "Aujourd'hui" : `Il y a ${rand(1, 6)} jours`;
+
+            let price = rand(5000, 250000);
+            if (categoryName === "Immobilier") price = rand(6000000, 50000000);
+            if (categoryName === "Véhicules" || categoryName === "Motos & Vélos") price = rand(150000, 12000000);
+            if (categoryName.includes("Emploi")) price = 0;
+            if (categoryName.includes("Services")) price = rand(1500, 8000);
+            if (categoryName === "Billetterie") price = rand(1000, 15000);
+
+            listings.push({
+                id: nextId++,
+                title: `${adjective} - ${categoryName}`,
+                price,
+                category: categoryName,
+                image,
+                location,
+                date,
+                seller
+            });
+        }
+    });
+}
+
+if (DEMO_MODE) ensureCategoryListings();
+
+let selectedListingImage = null;
+
+const VERIFIED_BADGE_HTML = `<span class="verified-badge" title="Vendeur Vérifié" onclick="showVerifiedPopup(event)"><img src="https://upload.wikimedia.org/wikipedia/commons/e/e4/Twitter_Verified_Badge.svg" alt="Vérifié" style="filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(1deg) brightness(102%) contrast(105%);"></span>`;
+const VIP_BADGE_HTML = `<span class="vip-badge" title="VIP" onclick="showVipPopup(event)"><span class="vip-star">★</span></span>`;
+
+function getUserBadgesHTML(user) {
+    let badges = [];
+    if (user.verified) badges.push(VERIFIED_BADGE_HTML);
+    if (user.isVip || user.vip) badges.push(VIP_BADGE_HTML);
+    return badges.join('');
+}
+
+const body = document.body;
+const sidebar = document.getElementById('sidebar');
+const sidebarToggle = document.getElementById('sidebarToggle');
+const themeToggle = document.getElementById('themeToggle');
+const themeIcon = document.getElementById('themeIcon');
+const contentArea = document.querySelector('main');
+const listingsGrid = document.getElementById('listingsGrid');
+const pagination = document.getElementById('pagination');
+const myListingsGrid = document.getElementById('myListingsGrid');
+const toastContainer = document.getElementById('toastContainer');
+
+document.addEventListener('DOMContentLoaded', () => {
+    setPendingReferralFromUrl();
+    initSupabase();
+    bootstrapSupabaseAuth();
+    if (!supabaseClient) {
+        loadUserProfileFromStorage();
+    }
+    populateWilayas();
+    populateCategories();
+    populateFilterDropdowns();
+    populateAllExtraCategories();
+    populateWorkCategoriesSelect();
+    loadUserProfileImages();
+    setupImageEditorDrag();
+    handleIdentityFilePreview('idFrontInput', 'idFrontPreview');
+    handleIdentityFilePreview('idBackInput', 'idBackPreview');
+    updateFreeVerifiedCounterUI();
+    setupMobileFooterDocking();
+    setupPasswordNoSpaceInputs();
+    applyWinjayLogoTheme();
+
+    // Restore last viewed section
+    const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
+    const blocked = ['profile-section', 'messages-section', 'favorites-section', 'settings-section'];
+    const lastSection = (blocked.includes(lastSectionRaw) && !isLoggedIn()) ? 'home-section' : lastSectionRaw;
+    const lastSellerTag = localStorage.getItem('winjayLastSellerTag');
+    if (lastSection === 'seller-profile-section' && lastSellerTag) {
+        openSellerProfile(lastSellerTag);
+    } else {
+        showSection(lastSection);
+    }
+
+    renderListings();
+    updateProfileUI();
+    renderFavorites();
+    setupChatFeatures();
+    renderMessagesList();
+    if (activeChatTag) switchChat(activeChatTag);
+});
+
+function setupPasswordNoSpaceInputs() {
+    const ids = [
+        'registerPassword',
+        'registerPasswordConfirm',
+        'changePasswordCurrent',
+        'changePasswordNew',
+        'changePasswordConfirm'
+    ];
+    ids.forEach((id) => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        enforceNoSpacesInTextInput(input);
+    });
+}
+
+function enforceNoSpacesInTextInput(input) {
+    input.addEventListener('keydown', (e) => {
+        if (e.key === ' ') {
+            e.preventDefault();
+        }
+    });
+
+    input.addEventListener('input', () => {
+        if (!/\s/.test(input.value)) return;
+        const start = input.selectionStart ?? input.value.length;
+        const end = input.selectionEnd ?? input.value.length;
+        const before = input.value.slice(0, start);
+        const after = input.value.slice(end);
+        const nextValue = input.value.replace(/\s+/g, '');
+        const removedBefore = (before.match(/\s/g) || []).length;
+        input.value = nextValue;
+        const nextPos = Math.max(0, start - removedBefore);
+        input.setSelectionRange(nextPos, nextPos);
+    });
+
+    input.addEventListener('paste', (e) => {
+        const data = e.clipboardData?.getData('text');
+        if (typeof data !== 'string') return;
+        if (!/\s/.test(data)) return;
+        e.preventDefault();
+        const clean = data.replace(/\s+/g, '');
+        const start = input.selectionStart ?? input.value.length;
+        const end = input.selectionEnd ?? input.value.length;
+        input.value = input.value.slice(0, start) + clean + input.value.slice(end);
+        const nextPos = start + clean.length;
+        input.setSelectionRange(nextPos, nextPos);
+    });
+}
+
+function setupMobileFooterDocking() {
+    const footer = document.querySelector('footer');
+    const bar = document.querySelector('.mobile-footer-bar');
+    if (!footer || !bar) return;
+
+    const update = () => {
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        if (!isMobile) {
+            document.body.classList.remove('mobile-footer-under');
+            return;
+        }
+        const barHeight = bar.offsetHeight || 0;
+        const footerTop = footer.getBoundingClientRect().top;
+        const shouldDockUnder = footerTop < (window.innerHeight - barHeight);
+        document.body.classList.toggle('mobile-footer-under', shouldDockUnder);
+    };
+
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+}
+
+function populateWilayas() {
+    const wilayaSelect = document.getElementById('listingWilaya');
+    wilayas.forEach(wilaya => {
+        const option = document.createElement('option');
+        option.value = wilaya;
+        option.textContent = wilaya;
+        wilayaSelect.appendChild(option);
+    });
+}
+
+function populateFilterDropdowns() {
+    const filterWilaya = document.getElementById('filterWilaya');
+    const filterCategory = document.getElementById('filterCategory');
+    wilayas.forEach(wilaya => {
+        const option = document.createElement('option');
+        option.value = wilaya;
+        option.textContent = wilaya;
+        filterWilaya.appendChild(option);
+    });
+    categories.filter(c => c.special !== 'other').forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.name;
+        option.textContent = cat.name;
+        filterCategory.appendChild(option);
+    });
+}
+
+function populateCategories() {
+    const categorySelect = document.getElementById('listingCategory');
+    const sidebarList = document.getElementById('categoryList');
+    categorySelect.innerHTML = '<option value="" disabled selected>Sélectionnez une catégorie</option>';
+    sidebarList.innerHTML = '';
+
+    const allLi = document.createElement('li');
+    allLi.innerHTML = `<a href="#" onclick="filterByCategory('all', this); return false;"><i data-lucide="layout-grid"></i> Tous</a>`;
+    sidebarList.appendChild(allLi);
+
+    categories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.name;
+        option.textContent = cat.name;
+        if (cat.special === 'other') {
+            option.textContent = "Autres...";
+            option.value = "OPEN_OTHER_MODAL";
+        }
+        categorySelect.appendChild(option);
+        const li = document.createElement('li');
+        if (cat.special === 'other') {
+            li.innerHTML = `<a href="#" onclick="openModal('otherCategoriesModal'); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
+        } else {
+            const safeName = cat.name.replace(/'/g, "\\'");
+            li.innerHTML = `<a href="#" onclick="filterByCategory('${safeName}', this); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
+        }
+        sidebarList.appendChild(li);
+    });
+    categorySelect.addEventListener('change', function() {
+        if (this.value === "OPEN_OTHER_MODAL") {
+            openModal('otherCategoriesModal');
+            this.value = "";
+        }
+    });
+    lucide.createIcons();
+}
+
+function populateAllExtraCategories() {
+    const grid = document.getElementById('allCategoriesGrid');
+    const combined = [...categories.filter(c => c.special !== 'other'), ...allExtraCategories];
+    grid.innerHTML = combined.map(cat => `<div class="category-item" onclick="selectCategoryFromModal('${cat.name}')"><i data-lucide="${cat.icon}"></i><span>${cat.name}</span></div>`).join('');
+    lucide.createIcons();
+}
+
+function selectCategoryFromModal(categoryName) {
+    const filterCategory = document.getElementById('filterCategory');
+    const existsInFilter = Array.from(filterCategory.options).some(opt => opt.value === categoryName);
+    if (!existsInFilter) {
+        const option = document.createElement('option');
+        option.value = categoryName;
+        option.textContent = categoryName;
+        filterCategory.appendChild(option);
+    }
+
+    closeModal('otherCategoriesModal');
+    filterByCategory(categoryName, null);
+}
+
+function filterCategories() {
+    const searchTerm = document.getElementById('categorySearch').value.toLowerCase();
+    const items = document.querySelectorAll('#allCategoriesGrid .category-item');
+    items.forEach(item => {
+        const name = item.querySelector('span').textContent.toLowerCase();
+        item.style.display = name.includes(searchTerm) ? 'flex' : 'none';
+    });
+}
+
+document.getElementById('listingImageInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            selectedListingImage = event.target.result;
+            const preview = document.getElementById('imagePreviewContainer');
+            preview.innerHTML = `<img src="${selectedListingImage}" alt="Preview">`;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+sidebarToggle.addEventListener('click', () => {
+    if (window.innerWidth <= 768) {
+        sidebar.classList.toggle('active');
+    } else {
+        sidebar.classList.toggle('collapsed');
+        contentArea.classList.toggle('expanded');
+    }
+});
+
+themeToggle.addEventListener('click', () => {
+    isDarkMode = !isDarkMode;
+    body.classList.toggle('dark-mode', isDarkMode);
+    themeIcon.setAttribute('data-lucide', isDarkMode ? 'sun' : 'moon');
+    themeToggle.querySelector('span').textContent = isDarkMode ? 'Light mode' : 'Dark mode';
+    applyWinjayLogoTheme();
+    lucide.createIcons();
+});
+
+function openModal(modalId) {
+    const protectedModals = [
+        'addListingModal',
+        'editListingModal',
+        'editProfileModal',
+        'changePasswordModal',
+        'identityVerificationModal',
+        'verifiedCongratsModal'
+    ];
+    if (protectedModals.includes(modalId) && !requireAuthOrPrompt()) return;
+    document.getElementById(modalId).classList.add('active');
+    body.classList.add('modal-open');
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+    if (!document.querySelector('.modal.active')) {
+        body.classList.remove('modal-open');
+    }
+}
+
+function closeProfileDropdown() {
+    const dropdown = document.getElementById('profileDropdown');
+    const btn = document.getElementById('profileBtn');
+    dropdown?.classList.remove('active');
+    btn?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleProfileDropdown(e) {
+    e?.stopPropagation();
+    const dropdown = document.getElementById('profileDropdown');
+    const btn = document.getElementById('profileBtn');
+    if (!dropdown || !btn) return;
+    const next = !dropdown.classList.contains('active');
+    dropdown.classList.toggle('active', next);
+    btn.setAttribute('aria-expanded', next ? 'true' : 'false');
+    if (next) lucide.createIcons();
+}
+
+function showConfirmModal(title, message, callback, isDanger = false) {
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMessage').textContent = message;
+    confirmCallback = callback;
+    const okBtn = document.getElementById('confirmOkBtn');
+    if (isDanger) {
+        okBtn.classList.add('danger');
+    } else {
+        okBtn.classList.remove('danger');
+    }
+    openModal('confirmModal');
+}
+
+function closeConfirmModal() {
+    closeModal('confirmModal');
+    confirmCallback = null;
+}
+
+function confirmAction() {
+    if (confirmCallback) {
+        confirmCallback();
+    }
+    closeConfirmModal();
+}
+
+const PROFILE_IMAGES_STORAGE_KEY = 'winjayProfileImagesV1';
+const PROFILE_IMAGES_TEMP_STORAGE_KEY = 'winjayProfileImagesTempV1';
+
+let currentImageType = null;
+let currentImageData = null;
+let currentZoom = 1;
+let currentOffsetX = 0;
+let currentOffsetY = 0;
+let isDraggingEditorImage = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let dragStartOffsetX = 0;
+let dragStartOffsetY = 0;
+let activeEditorPointerId = null;
+
+function loadUserProfileImages() {
+    try {
+        const raw = localStorage.getItem(PROFILE_IMAGES_STORAGE_KEY);
+        if (raw) {
+            const saved = JSON.parse(raw);
+            if (saved?.avatar?.cropped) userProfile.profilePic = saved.avatar.cropped;
+            if (saved?.cover?.cropped) userProfile.coverPic = saved.cover.cropped;
+        }
+
+        const tempRaw = sessionStorage.getItem(PROFILE_IMAGES_TEMP_STORAGE_KEY);
+        if (tempRaw) {
+            const tempSaved = JSON.parse(tempRaw);
+            if (tempSaved?.avatar?.cropped) userProfile.profilePic = tempSaved.avatar.cropped;
+            if (tempSaved?.cover?.cropped) userProfile.coverPic = tempSaved.cover.cropped;
+        }
+    } catch (e) {
+        return;
+    }
+}
+
+function saveUserProfileImages(payload) {
+    try {
+        localStorage.setItem(PROFILE_IMAGES_STORAGE_KEY, JSON.stringify(payload));
+    } catch (e) {
+        return;
+    }
+}
+
+function openImageEditor(type) {
+    currentImageType = type;
+    const title = type === 'cover' ? 'Choose cover photo' : 'Choose profile picture';
+    const titleEl = document.getElementById('imageChooserTitle');
+    if (titleEl) titleEl.textContent = title;
+    openModal('imageChooserModal');
+    lucide.createIcons();
+}
+
+function triggerImageUpload() {
+    const inputId = currentImageType === 'cover' ? 'coverInput' : 'profilePicInput';
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.click();
+}
+
+document.getElementById('coverInput').addEventListener('change', handleImageSelect);
+document.getElementById('profilePicInput').addEventListener('change', handleImageSelect);
+
+function handleImageSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        currentImageData = event.target.result;
+        currentZoom = 1;
+        currentOffsetX = 0;
+        currentOffsetY = 0;
+
+        document.getElementById('imageZoom').value = 1;
+
+        const preview = document.getElementById('imagePreviewWrapper');
+        preview.classList.remove('avatar');
+        if (currentImageType === 'avatar') {
+            preview.classList.add('avatar');
+            document.getElementById('imageEditorTitle').textContent = 'Choose profile picture';
+        } else {
+            document.getElementById('imageEditorTitle').textContent = 'Choose cover photo';
+        }
+
+        const img = document.getElementById('imageEditorPreview');
+        img.onload = () => {
+            fitEditorImageToFrame();
+            updateImagePreview();
+        };
+        img.src = currentImageData;
+        closeModal('imageChooserModal');
+        openModal('imageEditorModal');
+        lucide.createIcons();
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+}
+
+function fitEditorImageToFrame() {
+    const frame = document.getElementById('imagePreviewWrapper');
+    const img = document.getElementById('imageEditorPreview');
+    const frameW = frame.clientWidth || 300;
+    const frameH = frame.clientHeight || 200;
+    const nw = img.naturalWidth || frameW;
+    const nh = img.naturalHeight || frameH;
+    const imgRatio = nw / nh;
+    const frameRatio = frameW / frameH;
+
+    let baseW;
+    let baseH;
+    if (imgRatio > frameRatio) {
+        baseH = frameH;
+        baseW = frameH * imgRatio;
+    } else {
+        baseW = frameW;
+        baseH = frameW / imgRatio;
+    }
+
+    img.style.width = `${baseW}px`;
+    img.style.height = `${baseH}px`;
+}
+
+function updateImagePreview() {
+    currentZoom = parseFloat(document.getElementById('imageZoom').value);
+    const img = document.getElementById('imageEditorPreview');
+    img.style.transform = `translate(-50%, -50%) translate(${currentOffsetX}px, ${currentOffsetY}px) scale(${currentZoom})`;
+}
+
+function applyImageChanges() {
+    const exported = exportCroppedEditorImage(currentImageType);
+    if (!exported) return;
+
+    if (currentImageType === 'cover') {
+        userProfile.coverPic = exported;
+    } else {
+        userProfile.profilePic = exported;
+    }
+
+    updateProfileUI();
+    persistProfileImageState(currentImageType, exported);
+    clearTemporaryProfileImageState(currentImageType);
+    closeModal('imageEditorModal');
+    showToast('Photo updated!', 'check-circle');
+}
+
+function persistProfileImageState(type, croppedDataUrl) {
+    try {
+        const raw = localStorage.getItem(PROFILE_IMAGES_STORAGE_KEY);
+        const existing = raw ? JSON.parse(raw) : {};
+        const next = {
+            ...existing,
+            [type === 'cover' ? 'cover' : 'avatar']: {
+                original: currentImageData,
+                cropped: croppedDataUrl,
+                zoom: currentZoom,
+                offsetX: currentOffsetX,
+                offsetY: currentOffsetY
+            }
+        };
+        saveUserProfileImages(next);
+    } catch (e) {
+        return;
+    }
+}
+
+function applyImageChangesTemporary() {
+    const exported = exportCroppedEditorImage(currentImageType);
+    if (!exported) return;
+
+    if (currentImageType === 'cover') {
+        userProfile.coverPic = exported;
+    } else {
+        userProfile.profilePic = exported;
+    }
+
+    updateProfileUI();
+    persistTemporaryProfileImageState(currentImageType, exported);
+    closeModal('imageEditorModal');
+    showToast('Temporary photo applied', 'clock');
+}
+
+function persistTemporaryProfileImageState(type, croppedDataUrl) {
+    try {
+        const raw = sessionStorage.getItem(PROFILE_IMAGES_TEMP_STORAGE_KEY);
+        const existing = raw ? JSON.parse(raw) : {};
+        const next = {
+            ...existing,
+            [type === 'cover' ? 'cover' : 'avatar']: {
+                original: currentImageData,
+                cropped: croppedDataUrl,
+                zoom: currentZoom,
+                offsetX: currentOffsetX,
+                offsetY: currentOffsetY
+            }
+        };
+        sessionStorage.setItem(PROFILE_IMAGES_TEMP_STORAGE_KEY, JSON.stringify(next));
+    } catch (e) {
+        return;
+    }
+}
+
+function clearTemporaryProfileImageState(type) {
+    try {
+        const raw = sessionStorage.getItem(PROFILE_IMAGES_TEMP_STORAGE_KEY);
+        if (!raw) return;
+        const existing = JSON.parse(raw) || {};
+        const key = type === 'cover' ? 'cover' : 'avatar';
+        if (!(key in existing)) return;
+        delete existing[key];
+        if (!Object.keys(existing).length) {
+            sessionStorage.removeItem(PROFILE_IMAGES_TEMP_STORAGE_KEY);
+            return;
+        }
+        sessionStorage.setItem(PROFILE_IMAGES_TEMP_STORAGE_KEY, JSON.stringify(existing));
+    } catch (e) {
+        return;
+    }
+}
+
+function exportCroppedEditorImage(type) {
+    const frame = document.getElementById('imagePreviewWrapper');
+    const img = document.getElementById('imageEditorPreview');
+    if (!img?.naturalWidth || !img?.naturalHeight) return null;
+
+    const frameRect = frame.getBoundingClientRect();
+    const imgRect = img.getBoundingClientRect();
+
+    const scaleX = img.naturalWidth / imgRect.width;
+    const scaleY = img.naturalHeight / imgRect.height;
+
+    let sx = (frameRect.left - imgRect.left) * scaleX;
+    let sy = (frameRect.top - imgRect.top) * scaleY;
+    let sw = frameRect.width * scaleX;
+    let sh = frameRect.height * scaleY;
+
+    if (sw <= 0 || sh <= 0) return null;
+
+    if (sx < 0) {
+        sw += sx;
+        sx = 0;
+    }
+    if (sy < 0) {
+        sh += sy;
+        sy = 0;
+    }
+    sw = Math.min(sw, img.naturalWidth - sx);
+    sh = Math.min(sh, img.naturalHeight - sy);
+    if (sw <= 0 || sh <= 0) return null;
+
+    const canvas = document.createElement('canvas');
+    if (type === 'cover') {
+        canvas.width = 1200;
+        canvas.height = 400;
+    } else {
+        canvas.width = 512;
+        canvas.height = 512;
+    }
+
+    const targetAspect = canvas.width / canvas.height;
+    const cropAspect = sw / sh;
+    if (Number.isFinite(targetAspect) && Number.isFinite(cropAspect) && targetAspect > 0 && cropAspect > 0) {
+        if (cropAspect > targetAspect) {
+            const nextSw = sh * targetAspect;
+            sx += (sw - nextSw) / 2;
+            sw = nextSw;
+        } else if (cropAspect < targetAspect) {
+            const nextSh = sw / targetAspect;
+            sy += (sh - nextSh) / 2;
+            sh = nextSh;
+        }
+
+        sx = Math.max(0, Math.min(sx, img.naturalWidth));
+        sy = Math.max(0, Math.min(sy, img.naturalHeight));
+        sw = Math.min(sw, img.naturalWidth - sx);
+        sh = Math.min(sh, img.naturalHeight - sy);
+        if (sw <= 0 || sh <= 0) return null;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
+    const mime = type === 'cover' ? 'image/jpeg' : 'image/png';
+    return canvas.toDataURL(mime, type === 'cover' ? 0.92 : undefined);
+}
+
+function resetImageEditor() {
+    currentZoom = 1;
+    currentOffsetX = 0;
+    currentOffsetY = 0;
+    document.getElementById('imageZoom').value = 1;
+    fitEditorImageToFrame();
+    updateImagePreview();
+}
+
+function closeImageEditor() {
+    closeModal('imageEditorModal');
+    currentImageData = null;
+    currentImageType = null;
+    currentZoom = 1;
+    currentOffsetX = 0;
+    currentOffsetY = 0;
+}
+
+function setupImageEditorDrag() {
+    const frame = document.getElementById('imagePreviewWrapper');
+    if (!frame) return;
+
+    const onPointerDown = (e) => {
+        if (!currentImageData) return;
+        isDraggingEditorImage = true;
+        activeEditorPointerId = e.pointerId;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        dragStartOffsetX = currentOffsetX;
+        dragStartOffsetY = currentOffsetY;
+        frame.setPointerCapture(activeEditorPointerId);
+        frame.style.cursor = 'grabbing';
+    };
+
+    const onPointerMove = (e) => {
+        if (!isDraggingEditorImage || e.pointerId !== activeEditorPointerId) return;
+        currentOffsetX = dragStartOffsetX + (e.clientX - dragStartX);
+        currentOffsetY = dragStartOffsetY + (e.clientY - dragStartY);
+        updateImagePreview();
+    };
+
+    const onPointerUp = (e) => {
+        if (e.pointerId !== activeEditorPointerId) return;
+        isDraggingEditorImage = false;
+        activeEditorPointerId = null;
+        frame.style.cursor = 'grab';
+    };
+
+    frame.addEventListener('pointerdown', onPointerDown);
+    frame.addEventListener('pointermove', onPointerMove);
+    frame.addEventListener('pointerup', onPointerUp);
+    frame.addEventListener('pointercancel', onPointerUp);
+
+    const onMouseDown = (e) => {
+        if (!currentImageData) return;
+        isDraggingEditorImage = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        dragStartOffsetX = currentOffsetX;
+        dragStartOffsetY = currentOffsetY;
+        frame.style.cursor = 'grabbing';
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+    };
+
+    const onMouseMove = (e) => {
+        if (!isDraggingEditorImage) return;
+        currentOffsetX = dragStartOffsetX + (e.clientX - dragStartX);
+        currentOffsetY = dragStartOffsetY + (e.clientY - dragStartY);
+        updateImagePreview();
+    };
+
+    const onMouseUp = () => {
+        isDraggingEditorImage = false;
+        frame.style.cursor = 'grab';
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    const getTouchPoint = (e) => e.touches?.[0] || e.changedTouches?.[0] || null;
+
+    const onTouchStart = (e) => {
+        if (!currentImageData) return;
+        const t = getTouchPoint(e);
+        if (!t) return;
+        isDraggingEditorImage = true;
+        dragStartX = t.clientX;
+        dragStartY = t.clientY;
+        dragStartOffsetX = currentOffsetX;
+        dragStartOffsetY = currentOffsetY;
+        frame.style.cursor = 'grabbing';
+    };
+
+    const onTouchMove = (e) => {
+        if (!isDraggingEditorImage) return;
+        const t = getTouchPoint(e);
+        if (!t) return;
+        e.preventDefault();
+        currentOffsetX = dragStartOffsetX + (t.clientX - dragStartX);
+        currentOffsetY = dragStartOffsetY + (t.clientY - dragStartY);
+        updateImagePreview();
+    };
+
+    const onTouchEnd = () => {
+        isDraggingEditorImage = false;
+        frame.style.cursor = 'grab';
+    };
+
+    frame.addEventListener('mousedown', onMouseDown);
+    frame.addEventListener('touchstart', onTouchStart, { passive: true });
+    frame.addEventListener('touchmove', onTouchMove, { passive: false });
+    frame.addEventListener('touchend', onTouchEnd);
+    frame.addEventListener('touchcancel', onTouchEnd);
+}
+
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        if (event.target.id === 'listingDetailModal') return;
+        event.target.classList.remove('active');
+        if (event.target.id === 'confirmModal') {
+            confirmCallback = null;
+        }
+    }
+};
+
+window.addEventListener('scroll', () => {
+    const btn = document.getElementById('scrollTopBtn');
+    if (window.scrollY > 500) {
+        btn.classList.add('visible');
+    } else {
+        btn.classList.remove('visible');
+    }
+});
+
+function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+let selectedVipPlan = null;
+let selectedVerifiedPlan = null;
+
+function openVipModal() {
+    openModal('vipModal');
+    lucide.createIcons();
+}
+
+function openVerifiedUpgradeModal() {
+    openModal('verifiedUpgradeModal');
+    lucide.createIcons();
+}
+
+function selectVipPlan(plan) {
+    selectedVipPlan = plan;
+    closeModal('vipModal');
+    if (plan === 'monthly') {
+        document.getElementById('codPlanName').textContent = 'Mensuel';
+        document.getElementById('codPrice').textContent = '1,500 DZD/mois';
+    } else {
+        document.getElementById('codPlanName').textContent = 'Annuel';
+        document.getElementById('codPrice').textContent = '10,800 DZD/an';
+    }
+    populateWilayasSelect('codWilaya');
+    openModal('codModal');
+    lucide.createIcons();
+}
+
+function populateWilayasSelect(selectId) {
+    const select = document.getElementById(selectId);
+    select.innerHTML = '<option value="">Sélectionner...</option>';
+    wilayas.forEach(w => {
+        const parts = w.split(' ');
+        const code = parts.shift() || '';
+        const name = parts.join(' ');
+        select.innerHTML += `<option value="${code}">${code} - ${name}</option>`;
+    });
+}
+
+function submitVipSubscription() {
+    const phone = document.getElementById('codPhone').value.trim();
+    const wilaya = document.getElementById('codWilaya').value;
+    if (!phone || !wilaya) {
+        showToast('Veuillez remplir tous les champs', 'alert-circle');
+        return;
+    }
+    closeModal('codModal');
+    showToast('Abonnement VIP confirmé ! Un agent vous contactera.', 'check-circle');
+}
+
+function selectVerifiedPlan(plan) {
+    selectedVerifiedPlan = plan;
+    closeModal('verifiedUpgradeModal');
+    if (plan === 'monthly') {
+        document.getElementById('verifiedPlanName').textContent = 'Mensuel';
+        document.getElementById('verifiedPrice').textContent = '900 DZD/mois';
+    } else {
+        document.getElementById('verifiedPlanName').textContent = 'Annuel';
+        document.getElementById('verifiedPrice').textContent = '7,500 DZD/an';
+    }
+    populateWilayasSelect('verifiedWilaya');
+    openModal('verifiedCodModal');
+    lucide.createIcons();
+}
+
+function submitVerifiedSubscription() {
+    const phone = document.getElementById('verifiedPhone').value.trim();
+    const wilaya = document.getElementById('verifiedWilaya').value;
+    if (!phone || !wilaya) {
+        showToast('Veuillez remplir tous les champs', 'alert-circle');
+        return;
+    }
+    closeModal('verifiedCodModal');
+    showToast('Demande Vérifié envoyée ! Un agent vous contactera.', 'check-circle');
+}
+
+function openReportModal() {
+    openModal('reportModal');
+}
+
+function submitReport() {
+    const reason = document.querySelector('input[name="reportReason"]:checked');
+    if (!reason) {
+        showToast('Veuillez sélectionner une raison', 'alert-circle');
+        return;
+    }
+    closeModal('reportModal');
+    showToast('Signalement envoyé. Merci de votre aide.', 'flag');
+}
+
+function openBlockModal() {
+    openModal('blockModal');
+}
+
+function blockUser() {
+    closeModal('blockModal');
+    showToast('Utilisateur bloqué', 'ban');
+}
+
+function reportUser() {
+    closeModal('reportModal');
+    showToast('Signalement envoyé. Merci de votre aide.', 'flag');
+}
+
+function openShareModal(listingId) {
+    const listing = listings.find(l => l.id === listingId);
+    if (!listing) return;
+    const url = encodeURIComponent(window.location.href + '?listing=' + listingId);
+    const title = encodeURIComponent(listing.title);
+    const shareText = encodeURIComponent(`Découvrez cette annonce: ${listing.title} - ${listing.price} DZD`);
+    window.open(`https://t.me/share/url?url=${url}&text=${shareText}`, '_blank');
+}
+
+document.getElementById('addListingForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const newListing = {
+        id: Date.now(),
+        title: document.getElementById('listingTitle').value,
+        price: document.getElementById('listingPrice').value,
+        category: document.getElementById('listingCategory').value,
+        image: selectedListingImage || 'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?w=500',
+        location: document.getElementById('listingWilaya').value,
+        date: "À l'instant",
+        seller: { ...userProfile, verified: userProfile.verified }
+    };
+    listings.unshift(newListing);
+    myListings.unshift(newListing);
+    applyFilters();
+    closeModal('addListingModal');
+    showToast('Listing posted!', 'check-circle');
+    e.target.reset();
+    selectedListingImage = null;
+    document.getElementById('imagePreviewContainer').style.display = 'none';
+    showSection('home-section');
+});
+
+document.getElementById('editProfileForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    const name = document.getElementById('editName').value.trim();
+    let tagValue = document.getElementById('editTag').value.trim().toLowerCase().replace(/\s+/g, '');
+    const oldTag = userProfile.tag;
+
+    if (!tagValue) {
+        showToast('Username is required', 'alert-circle');
+        return;
+    }
+
+    if (/\s/.test(tagValue)) {
+        showToast('Username cannot contain spaces', 'alert-circle');
+        return;
+    }
+
+    if (!/^[a-z0-9_.]+$/.test(tagValue)) {
+        showToast('Invalid username (letters, numbers, dots, underscores only)', 'alert-circle');
+        return;
+    }
+
+    if (!tagValue.startsWith('@')) tagValue = '@' + tagValue;
+
+    // Check if username is taken (exclude current user's tag)
+    const allTags = [...botProfiles.map(p => p.tag), ...reviewers.map(r => r.tag)];
+    if (allTags.includes(tagValue) && tagValue !== userProfile.tag) {
+        showToast('Username already taken', 'user-x');
+        return;
+    }
+
+    if (tagValue !== oldTag) {
+        try {
+            const program = getFreeVerifiedProgramState();
+            const oldCount = program.referrals[oldTag] || 0;
+            if (oldCount) {
+                program.referrals[tagValue] = (program.referrals[tagValue] || 0) + oldCount;
+                delete program.referrals[oldTag];
+                saveFreeVerifiedProgramState(program);
+            }
+        } catch (e) {
+            null;
+        }
+    }
+
+    userProfile.name = name;
+    userProfile.tag = tagValue;
+    userProfile.location = document.getElementById('editLocation').value;
+    userProfile.businessType = document.getElementById('editBusinessType').value;
+    userProfile.phone = document.getElementById('editPhone')?.value?.trim() || '';
+    userProfile.workCategory = document.getElementById('editWorkCategory')?.value || '';
+    saveUserProfileToStorage();
+    updateProfileUI();
+    closeModal('editProfileModal');
+    showToast('Profile updated!', 'check-circle');
+});
+
+document.getElementById('contactForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    showToast('Message sent successfully!', 'send');
+    closeModal('contactModal');
+    e.target.reset();
+});
+
+document.getElementById('loginForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const rememberMe = document.getElementById('rememberMe').checked;
+    try {
+        if (rememberMe) localStorage.setItem('winjayRememberMe', 'true');
+        else localStorage.removeItem('winjayRememberMe');
+    } catch (e) {
+        null;
+    }
+    if (!rememberMe) clearSupabaseAuthTokenFromAllStorages();
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    client.auth.signInWithPassword({ email, password }).then(({ error }) => {
+        if (error) {
+            showToast(error.message || 'Login failed', 'alert-circle');
+            return;
+        }
+        showToast('Logged in!', 'check-circle');
+        closeModal('loginModal');
+    });
+});
+
+document.getElementById('registerForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const password = document.getElementById('registerPassword').value;
+    const confirm = document.getElementById('registerPasswordConfirm').value;
+    if (/\s/.test(password) || /\s/.test(confirm)) {
+        showToast('Les espaces ne sont pas autorisés dans le mot de passe', 'alert-circle');
+        return;
+    }
+    if (password !== confirm) {
+        showToast('Les mots de passe ne correspondent pas', 'alert-circle');
+        return;
+    }
+    const rawName = document.getElementById('registerName').value.trim();
+    const safe = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 12) || 'user';
+    const suffix = String(Math.floor(Math.random() * 900) + 100);
+    const nextTag = `@${safe}${suffix}`;
+
+    const email = document.getElementById('registerEmail').value.trim();
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    client.auth.signUp({
+        email,
+        password,
+        options: {
+            data: {
+                full_name: rawName || 'New user',
+                tag: nextTag
+            }
+        }
+    }).then(({ data, error }) => {
+        if (error) {
+            showToast(error.message || 'Sign up failed', 'alert-circle');
+            return;
+        }
+        if (!data?.session) {
+            showToast('Check your email to confirm your account', 'mail');
+            closeModal('registerModal');
+            e.target.reset();
+            return;
+        }
+        userProfile.name = rawName || 'New user';
+        userProfile.tag = nextTag;
+        userProfile.verified = false;
+        userProfile.isVip = false;
+        userProfile.phone = '';
+        userProfile.workCategory = '';
+        userProfile.businessType = 'Particulier';
+        userProfile.joinedDate = new Date().toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
+        saveUserProfileToStorage();
+
+        const refTag = consumePendingReferralForNewAccount(nextTag);
+        saveVerifiedQuestState({ identityVerified: false, granted: false, referredBy: refTag });
+
+        showToast('Account created!', 'check-circle');
+        closeModal('registerModal');
+        e.target.reset();
+        updateProfileUI();
+        showSection('profile-section');
+    });
+});
+
+document.getElementById('changePasswordForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const password = document.getElementById('changePasswordNew').value;
+    const confirm = document.getElementById('changePasswordConfirm')?.value || '';
+    if (/\s/.test(password) || /\s/.test(confirm)) {
+        showToast('Les espaces ne sont pas autorisés dans le mot de passe', 'alert-circle');
+        return;
+    }
+    if (!password) {
+        showToast('Nouveau mot de passe requis', 'alert-circle');
+        return;
+    }
+    if (confirm && password !== confirm) {
+        showToast('Les mots de passe ne correspondent pas', 'alert-circle');
+        return;
+    }
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    client.auth.updateUser({ password }).then(({ error }) => {
+        if (error) {
+            showToast(error.message || 'Erreur', 'alert-circle');
+            return;
+        }
+        showToast('Mot de passe mis à jour !', 'check-circle');
+        closeModal('changePasswordModal');
+        e.target.reset();
+    });
+});
+
+function showToast(message, icon = 'info') {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `<i data-lucide="${icon}"></i><span>${message}</span>`;
+    toastContainer.appendChild(toast);
+    lucide.createIcons();
+    setTimeout(() => toast.classList.add('active'), 10);
+    setTimeout(() => {
+        toast.classList.remove('active');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+function updateProfileUI() {
+    const nameEl = document.getElementById('profileName');
+    nameEl.innerHTML = `${userProfile.name} ${getUserBadgesHTML(userProfile)}`;
+    document.getElementById('profileTag').textContent = userProfile.tag;
+    document.getElementById('profilePic').src = userProfile.profilePic;
+    document.getElementById('navProfilePic').src = userProfile.profilePic;
+    document.getElementById('profileCover').src = userProfile.coverPic;
+    document.getElementById('profileLocation').textContent = userProfile.location;
+    document.getElementById('profileBusiness').textContent = userProfile.businessType;
+    document.getElementById('profileRatingContainer').innerHTML = getRatingHTML(userProfile.rating, userProfile.reviews);
+    document.getElementById('editName').value = userProfile.name;
+    document.getElementById('editTag').value = userProfile.tag.replace('@', '');
+    document.getElementById('editLocation').value = userProfile.location;
+    document.getElementById('editBusinessType').value = userProfile.businessType;
+    const phoneEl = document.getElementById('editPhone');
+    if (phoneEl) phoneEl.value = userProfile.phone || '';
+    const workEl = document.getElementById('editWorkCategory');
+    if (workEl) workEl.value = userProfile.workCategory || '';
+    updateFreeVerifiedCounterUI();
+    renderVerifiedQuestCard();
+    lucide.createIcons();
+}
+
+function showVerifiedPopup(event) {
+    event.stopPropagation();
+    openModal('verifiedSellerModal');
+    lucide.createIcons();
+}
+
+function showVipPopup(event) {
+    event.stopPropagation();
+    openModal('vipBadgeModal');
+    lucide.createIcons();
+}
+
+function formatUsernameInput(input) {
+    let value = input.value.toLowerCase().replace(/\s+/g, '');
+    input.value = value;
+
+    const statusEl = document.getElementById('usernameStatus');
+    const allTags = [...botProfiles.map(p => p.tag), ...reviewers.map(r => r.tag)];
+    const currentTag = '@' + value;
+
+    if (!value) {
+        statusEl.textContent = '';
+        statusEl.style.color = 'var(--text-muted)';
+        return;
+    }
+
+    if (/\s/.test(value)) {
+        statusEl.textContent = '❌ No spaces allowed';
+        statusEl.style.color = '#dc3545';
+        return;
+    }
+
+    if (!/^[a-z0-9_.]+$/.test(value)) {
+        statusEl.textContent = '❌ Invalid characters';
+        statusEl.style.color = '#dc3545';
+        return;
+    }
+
+    if (allTags.includes(currentTag) && currentTag !== userProfile.tag) {
+        statusEl.textContent = '❌ Username already taken';
+        statusEl.style.color = '#dc3545';
+    } else {
+        statusEl.textContent = '✓ Username available';
+        statusEl.style.color = '#28a745';
+    }
+}
+
+function handleSearch(inputId = 'mainSearchInput') {
+    const input = document.getElementById(inputId) || document.getElementById('mainSearchInput');
+    const searchTerm = (input?.value || '').toLowerCase().trim();
+    currentFilters.search = searchTerm;
+    applyFilters();
+    const mainInput = document.getElementById('mainSearchInput');
+    const mobileExpandInput = document.getElementById('mobileSearchExpandInput');
+    if (mainInput && inputId !== 'mainSearchInput') mainInput.value = searchTerm;
+    if (mobileExpandInput && inputId !== 'mobileSearchExpandInput') mobileExpandInput.value = searchTerm;
+    if (searchTerm && !searchHistory.includes(searchTerm)) {
+        searchHistory.unshift(searchTerm);
+        if (searchHistory.length > 5) searchHistory.pop();
+        localStorage.setItem('winjaySearchHistory', JSON.stringify(searchHistory));
+    }
+}
+
+function showSearchHistory(inputId = 'mainSearchInput', dropdownId = 'searchHistoryDropdown', listId = 'searchHistoryList') {
+    const saved = localStorage.getItem('winjaySearchHistory');
+    if (saved) searchHistory = JSON.parse(saved);
+    const dropdown = document.getElementById(dropdownId);
+    const list = document.getElementById(listId);
+    const input = document.getElementById(inputId);
+    if (!dropdown || !list || !input) return;
+    if (searchHistory.length > 0) {
+        list.innerHTML = searchHistory.map(term => `
+            <div class="search-history-item" onclick="selectSearchTerm('${term}')">
+                <i data-lucide="clock"></i>
+                <span>${term}</span>
+            </div>`).join('');
+        dropdown.classList.add('active');
+        lucide.createIcons();
+    }
+}
+
+function selectSearchTerm(term) {
+    document.getElementById('mainSearchInput').value = term;
+    const mobileExpand = document.getElementById('mobileSearchExpandInput');
+    if (mobileExpand) mobileExpand.value = term;
+    document.getElementById('searchHistoryDropdown').classList.remove('active');
+    document.getElementById('mobileSearchHistoryDropdown')?.classList.remove('active');
+    handleSearch();
+    showSection('home-section');
+    closeMobileSearchExpand();
+}
+
+function clearSearchHistory() {
+    searchHistory = [];
+    localStorage.removeItem('winjaySearchHistory');
+    document.getElementById('searchHistoryDropdown').classList.remove('active');
+    document.getElementById('mobileSearchHistoryDropdown')?.classList.remove('active');
+}
+
+document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('searchHistoryDropdown');
+    const searchContainer = document.querySelector('.nav-center');
+    if (searchContainer && !searchContainer.contains(e.target)) {
+        dropdown.classList.remove('active');
+    }
+
+    const mobilePanel = document.getElementById('mobileSearchExpand');
+    const mobileBtn = document.querySelector('.mobile-search-btn');
+    if (mobilePanel?.classList.contains('active')) {
+        const mobileContainer = document.querySelector('#mobileSearchExpand .mobile-search-container');
+        const clickedInsidePanel = mobileContainer ? mobileContainer.contains(e.target) : false;
+        const clickedBtn = mobileBtn ? mobileBtn.contains(e.target) : false;
+        if (!clickedInsidePanel && !clickedBtn) {
+            closeMobileSearchExpand();
+        }
+    }
+
+    const profileDropdown = document.getElementById('profileDropdown');
+    if (profileDropdown?.classList.contains('active')) {
+        const wrapper = document.querySelector('.profile-menu-wrapper');
+        const clickedInside = wrapper ? wrapper.contains(e.target) : false;
+        if (!clickedInside) {
+            closeProfileDropdown();
+        }
+    }
+});
+
+function checkPasswordStrength() {
+    const password = document.getElementById('registerPassword').value;
+    const bars = [
+        document.getElementById('strengthBar1'),
+        document.getElementById('strengthBar2'),
+        document.getElementById('strengthBar3'),
+        document.getElementById('strengthBar4')
+    ];
+    const text = document.getElementById('strengthText');
+    let strength = 0;
+    if (password.length >= 6) strength++;
+    if (password.length >= 8) strength++;
+    if (/[A-Z]/.test(password) && /[a-z]/.test(password)) strength++;
+    if (/[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password)) strength++;
+    const levels = ['', 'weak', 'fair', 'good', 'strong'];
+    const labels = ['', 'Faible', 'Moyen', 'Bon', 'Fort'];
+    bars.forEach((bar, i) => {
+        bar.className = 'strength-bar';
+        if (i < strength) bar.classList.add(levels[strength]);
+    });
+    text.textContent = labels[strength];
+    text.className = 'strength-text ' + levels[strength];
+}
+
+function loginWithGoogle() {
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    try {
+        localStorage.setItem('winjayRememberMe', 'true');
+    } catch (e) {
+        null;
+    }
+    showToast('Connecting with Google...', 'log-in');
+    client.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+            redirectTo: window.location.origin
+        }
+    }).then(({ error }) => {
+        if (error) showToast(error.message || 'Google login failed', 'alert-circle');
+    });
+}
+
+function openForgotPassword() {
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    const email = document.getElementById('loginEmail')?.value?.trim();
+    if (!email) {
+        showToast('Enter your email', 'alert-circle');
+        return;
+    }
+    client.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin }).then(({ error }) => {
+        if (error) {
+            showToast(error.message || 'Error', 'alert-circle');
+            return;
+        }
+        closeModal('loginModal');
+        showToast('Password reset email sent', 'mail');
+    });
+}
+
+function getSimilarListings(item) {
+    return listings.filter(l => l.id !== item.id && (l.category === item.category || l.location === item.location)).slice(0, 4);
+}
+
+function createMyListingCardHTML(item) {
+    const isFavorite = favorites.includes(item.id);
+    return `
+        <div class="card my-listing-card" onclick="openListingDetail(${item.id})">
+            <div class="listing-actions">
+                <button class="action-btn edit" onclick="openEditListingModal(event, ${item.id})">
+                    <i data-lucide="pencil"></i>
+                </button>
+                <button class="action-btn delete" onclick="deleteMyListing(event, ${item.id})">
+                    <i data-lucide="trash-2"></i>
+                </button>
+            </div>
+            <button class="favorite-btn ${isFavorite ? 'active' : ''}" onclick="toggleFavorite(event, ${item.id})">
+                <i data-lucide="heart"></i>
+            </button>
+            <img src="${item.image}" alt="${item.title}" class="card-img">
+            <div class="card-content">
+                <div class="card-price">${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD</div>
+                <div class="card-title">${item.title}</div>
+                <div class="card-footer">
+                    <span><i data-lucide="map-pin" style="width:12px"></i> ${item.location}</span>
+                    <span>${item.date}</span>
+                </div>
+            </div>
+        </div>`;
+}
+
+function openEditListingModal(event, id) {
+    event.stopPropagation();
+    editingListingId = id;
+    const item = listings.find(l => l.id === id);
+    if (!item) return;
+    const catSelect = document.getElementById('editListingCategory');
+    const wilayaSelect = document.getElementById('editListingWilaya');
+    if (catSelect.options.length <= 1) {
+        categories.forEach(cat => {
+            if (cat.special !== 'other') {
+                const option = document.createElement('option');
+                option.value = cat.name;
+                option.textContent = cat.name;
+                catSelect.appendChild(option);
+            }
+        });
+    }
+    if (wilayaSelect.options.length <= 1) {
+        wilayas.forEach(wilaya => {
+            const option = document.createElement('option');
+            option.value = wilaya;
+            option.textContent = wilaya;
+            wilayaSelect.appendChild(option);
+        });
+    }
+    document.getElementById('editListingTitle').value = item.title;
+    document.getElementById('editListingPrice').value = item.price;
+    document.getElementById('editListingCategory').value = item.category;
+    document.getElementById('editListingWilaya').value = item.location;
+    openModal('editListingModal');
+    lucide.createIcons();
+}
+
+function saveEditedListing() {
+    const item = listings.find(l => l.id === editingListingId);
+    if (!item) return;
+    item.title = document.getElementById('editListingTitle').value;
+    item.price = parseInt(document.getElementById('editListingPrice').value);
+    item.category = document.getElementById('editListingCategory').value;
+    item.location = document.getElementById('editListingWilaya').value;
+    const myIndex = myListings.findIndex(l => l.id === editingListingId);
+    if (myIndex > -1) myListings[myIndex] = item;
+    closeModal('editListingModal');
+    showToast('Annonce modifiée avec succès !', 'check-circle');
+    renderMyListings();
+    renderListings();
+}
+
+function deleteMyListing(event, id) {
+    event.stopPropagation();
+    showConfirmModal(
+        'Supprimer l\'annonce',
+        'Êtes-vous sûr de vouloir supprimer cette annonce ?',
+        () => {
+            listings = listings.filter(l => l.id !== id);
+            myListings = myListings.filter(l => l.id !== id);
+            favorites = favorites.filter(fid => fid !== id);
+            showToast('Annonce supprimée', 'trash-2');
+            renderMyListings();
+            renderListings();
+            renderFavorites();
+        },
+        true
+    );
+}
+
+function renderMyListings() {
+    myListingsGrid.innerHTML = myListings.length > 0 ?
+        myListings.map(item => createMyListingCardHTML(item)).join('') :
+        '<div class="empty-state"><i data-lucide="shopping-bag"></i><h3>Pas encore d\'annonces</h3><p>Publiez votre première annonce !</p></div>';
+    lucide.createIcons();
+}
+
+function renderMyProfileReviews() {
+    const list = document.getElementById('myProfileReviewsList');
+    if (!list) return;
+    list.innerHTML = getReviewsListHTML(userProfile.reviewsData || [], userProfile.name, false, 'profile', userProfile.tag);
+    lucide.createIcons();
+}
+
+function switchMyProfileSection(section) {
+    const listingsTab = document.getElementById('myProfileListingsTab');
+    const reviewsTab = document.getElementById('myProfileReviewsTab');
+    const listingsPanel = document.getElementById('myProfileListingsSection');
+    const reviewsPanel = document.getElementById('myProfileReviewsSection');
+    if (!listingsTab || !reviewsTab || !listingsPanel || !reviewsPanel) return;
+
+    const showListings = section !== 'reviews';
+    listingsTab.classList.toggle('active', showListings);
+    reviewsTab.classList.toggle('active', !showListings);
+    listingsPanel.classList.toggle('active', showListings);
+    reviewsPanel.classList.toggle('active', !showListings);
+
+    if (!showListings) renderMyProfileReviews();
+}
+
+function showSection(sectionId) {
+    const protectedSections = ['profile-section', 'messages-section', 'favorites-section', 'settings-section'];
+    if (protectedSections.includes(sectionId) && !requireAuthOrPrompt()) {
+        sectionId = 'home-section';
+    }
+    document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
+    document.getElementById(sectionId).classList.add('active');
+    if (window.innerWidth <= 768) {
+        sidebar.classList.remove('active');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Save current section to localStorage
+    localStorage.setItem('winjayLastSection', sectionId);
+
+    if (sectionId === 'home-section') {
+        renderListings();
+    } else if (sectionId === 'favorites-section') {
+        renderFavorites();
+    } else if (sectionId === 'profile-section') {
+        renderMyListings();
+        renderMyProfileReviews();
+    } else if (sectionId === 'messages-section') {
+        renderMessagesList();
+        if (activeChatTag) switchChat(activeChatTag);
+        else renderEmptyChat();
+    }
+}
+
+function filterByCategory(category, element) {
+    showSection('home-section');
+    currentFilters.category = category === 'all' ? '' : category;
+    document.querySelectorAll('.category-list li a, .sidebar-section li a').forEach(a => a.classList.remove('active'));
+    if (element) element.classList.add('active');
+    document.getElementById('filterCategory').value = currentFilters.category;
+    applyFilters();
+}
+
+function toggleFilterPanel() {
+    document.getElementById('filterPanel').classList.toggle('active');
+}
+
+function applyFilters() {
+    currentFilters.wilaya = document.getElementById('filterWilaya').value;
+    currentFilters.category = document.getElementById('filterCategory').value;
+    currentFilters.priceMin = document.getElementById('priceMin').value;
+    currentFilters.priceMax = document.getElementById('priceMax').value;
+    currentFilters.sort = document.getElementById('sortSelect').value;
+    updateActiveFilters();
+    currentPage = 1;
+    renderListings();
+}
+
+function clearFilters() {
+    currentFilters = { search: '', category: '', wilaya: '', priceMin: '', priceMax: '', sort: 'newest' };
+    document.getElementById('mainSearchInput').value = '';
+    document.getElementById('filterWilaya').value = '';
+    document.getElementById('filterCategory').value = '';
+    document.getElementById('priceMin').value = '';
+    document.getElementById('priceMax').value = '';
+    document.getElementById('sortSelect').value = 'newest';
+    document.getElementById('filterPanel').classList.remove('active');
+    updateActiveFilters();
+    currentPage = 1;
+    renderListings();
+}
+
+function updateActiveFilters() {
+    const container = document.getElementById('activeFilters');
+    let tags = [];
+    if (currentFilters.category) tags.push(`<span class="filter-tag">${currentFilters.category} <button onclick="removeFilter('category')">&times;</button></span>`);
+    if (currentFilters.wilaya) tags.push(`<span class="filter-tag">${currentFilters.wilaya} <button onclick="removeFilter('wilaya')">&times;</button></span>`);
+    if (currentFilters.priceMin || currentFilters.priceMax) {
+        const priceText = `${currentFilters.priceMin || '0'} - ${currentFilters.priceMax || '∞'} DA`;
+        tags.push(`<span class="filter-tag">${priceText} <button onclick="removeFilter('price')">&times;</button></span>`);
+    }
+    if (tags.length > 1) {
+        tags.push(`<button class="clear-all-filters-btn" onclick="clearAllFilters()">Tout effacer</button>`);
+    }
+    container.innerHTML = tags.join('');
+}
+
+function removeFilter(type) {
+    if (type === 'category') {
+        currentFilters.category = '';
+        document.getElementById('filterCategory').value = '';
+    } else if (type === 'wilaya') {
+        currentFilters.wilaya = '';
+        document.getElementById('filterWilaya').value = '';
+    } else if (type === 'price') {
+        currentFilters.priceMin = '';
+        currentFilters.priceMax = '';
+        document.getElementById('priceMin').value = '';
+        document.getElementById('priceMax').value = '';
+    }
+    updateActiveFilters();
+    currentPage = 1;
+    renderListings();
+}
+
+function clearAllFilters() {
+    currentFilters = { search: '', category: '', wilaya: '', priceMin: '', priceMax: '', sort: 'newest' };
+    document.getElementById('filterCategory').value = '';
+    document.getElementById('filterWilaya').value = '';
+    document.getElementById('priceMin').value = '';
+    document.getElementById('priceMax').value = '';
+    document.getElementById('sortSelect').value = 'newest';
+    document.getElementById('mainSearchInput').value = '';
+    updateActiveFilters();
+    currentPage = 1;
+    renderListings();
+    showToast('Filtres effacés', 'filter');
+}
+
+function handleSort() {
+    currentFilters.sort = document.getElementById('sortSelect').value;
+    currentPage = 1;
+    renderListings();
+}
+
+function getFilteredListings() {
+    let filtered = [...listings];
+    if (currentFilters.search) {
+        filtered = filtered.filter(l => l.title.toLowerCase().includes(currentFilters.search) || l.category.toLowerCase().includes(currentFilters.search));
+    }
+    if (currentFilters.category) {
+        filtered = filtered.filter(l => l.category === currentFilters.category);
+    }
+    if (currentFilters.wilaya) {
+        filtered = filtered.filter(l => l.location === currentFilters.wilaya);
+    }
+    if (currentFilters.priceMin) {
+        filtered = filtered.filter(l => l.price >= parseInt(currentFilters.priceMin));
+    }
+    if (currentFilters.priceMax) {
+        filtered = filtered.filter(l => l.price <= parseInt(currentFilters.priceMax));
+    }
+    if (currentFilters.sort === 'price-asc') {
+        filtered.sort((a, b) => a.price - b.price);
+    } else if (currentFilters.sort === 'price-desc') {
+        filtered.sort((a, b) => b.price - a.price);
+    }
+    return filtered;
+}
+
+function goToPage(page) {
+    currentPage = page;
+    renderListings();
+    const grid = document.getElementById('listingsGrid');
+    if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderPagination(totalPages) {
+    if (!pagination) return;
+    if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+
+    const clamped = Math.max(1, Math.min(currentPage, totalPages));
+    currentPage = clamped;
+
+    const windowSize = Math.min(MAX_PAGE_BUTTONS, totalPages);
+    let start = Math.max(1, currentPage - Math.floor(windowSize / 2));
+    let end = start + windowSize - 1;
+    if (end > totalPages) {
+        end = totalPages;
+        start = Math.max(1, end - windowSize + 1);
+    }
+
+    let html = '';
+    html += `<button class="page-btn nav" ${currentPage === 1 ? 'disabled' : ''} onclick="goToPage(${currentPage - 1})"><i data-lucide="chevron-left"></i></button>`;
+    for (let p = start; p <= end; p++) {
+        html += `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goToPage(${p})">${p}</button>`;
+    }
+    html += `<button class="page-btn nav" ${currentPage === totalPages ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})"><i data-lucide="chevron-right"></i></button>`;
+
+    pagination.innerHTML = html;
+}
+
+function renderListings() {
+    const filtered = getFilteredListings();
+    const totalItems = filtered.length;
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+    if (totalPages > 0 && currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    const pageItems = filtered.slice(start, start + ITEMS_PER_PAGE);
+
+    listingsGrid.innerHTML = totalItems > 0 ?
+        pageItems.map(item => createCardHTML(item)).join('') :
+        '';
+    document.getElementById('emptyState').style.display = totalItems === 0 ? 'block' : 'none';
+    document.getElementById('listingsGrid').style.display = totalItems === 0 ? 'none' : 'grid';
+    renderPagination(totalPages);
+    lucide.createIcons();
+}
+
+function renderFavorites() {
+    const favoriteListings = listings.filter(l => favorites.includes(l.id));
+    const grid = document.getElementById('favoritesGrid');
+    grid.innerHTML = favoriteListings.length > 0 ?
+        favoriteListings.map(item => createCardHTML(item)).join('') :
+        '';
+    document.getElementById('favoritesEmpty').style.display = favoriteListings.length === 0 ? 'block' : 'none';
+    lucide.createIcons();
+}
+
+function createCardHTML(item) {
+    const isFavorite = favorites.includes(item.id);
+    return `
+        <div class="card" onclick="openListingDetail(${item.id})">
+            <button class="favorite-btn ${isFavorite ? 'active' : ''}" onclick="toggleFavorite(event, ${item.id})">
+                <i data-lucide="heart"></i>
+            </button>
+            <img src="${item.image}" alt="${item.title}" class="card-img">
+            <div class="card-content">
+                <div class="card-price">${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD</div>
+                <div class="card-title">${item.title}</div>
+                <div class="card-footer">
+                    <span><i data-lucide="map-pin" style="width:12px"></i> ${item.location}</span>
+                    <span>${item.date}</span>
+                </div>
+            </div>
+        </div>`;
+}
+
+function getRatingHTML(rating, reviews) {
+    const fullStars = Math.floor(rating);
+    let starsHTML = '';
+    for (let i = 0; i < 5; i++) {
+        starsHTML += `<i data-lucide="star" style="${i < fullStars ? 'fill: #ffb400;' : ''} width: 14px; height: 14px;"></i>`;
+    }
+    return `<div class="rating-container"><div class="stars">${starsHTML}</div><span class="rating-value">${rating}</span><span class="reviews-count">(${reviews} avis)</span></div>`;
+}
+
+function makeSafeId(value) {
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function getReplyElementIds(contextType, targetId, index) {
+    const safe = makeSafeId(targetId);
+    return {
+        boxId: `replyBox_${contextType}_${safe}_${index}`,
+        inputId: `replyInput_${contextType}_${safe}_${index}`
+    };
+}
+
+function getThreadElementIds(contextType, targetId, index) {
+    const safe = makeSafeId(targetId);
+    return {
+        boxId: `threadBox_${contextType}_${safe}_${index}`,
+        inputId: `threadInput_${contextType}_${safe}_${index}`
+    };
+}
+
+function getReviewEditElementIds(contextType, targetId, index) {
+    const safe = makeSafeId(targetId);
+    return {
+        boxId: `reviewEditBox_${contextType}_${safe}_${index}`,
+        inputId: `reviewEditInput_${contextType}_${safe}_${index}`
+    };
+}
+
+function getThreadEditElementIds(contextType, targetId, index, threadIndex) {
+    const safe = makeSafeId(targetId);
+    return {
+        boxId: `threadEditBox_${contextType}_${safe}_${index}_${threadIndex}`,
+        inputId: `threadEditInput_${contextType}_${safe}_${index}_${threadIndex}`
+    };
+}
+
+function findProfileByTag(tag) {
+    if (tag === userProfile.tag) return userProfile;
+    return botProfiles.find(p => p.tag === tag) || reviewers.find(p => p.tag === tag) || null;
+}
+
+function recalculateProfileRating(profile) {
+    const reviews = profile.reviewsData || [];
+    profile.reviews = reviews.length;
+    if (reviews.length === 0) {
+        profile.rating = 0;
+        return;
+    }
+    const avg = reviews.reduce((sum, r) => sum + (Number(r.rating) || 0), 0) / reviews.length;
+    profile.rating = Math.round(avg * 10) / 10;
+}
+
+function getCurrentReviewerIdentity() {
+    return {
+        user: userProfile.name,
+        tag: userProfile.tag,
+        pic: userProfile.profilePic
+    };
+}
+
+function toggleReplyBox(contextType, targetId, index) {
+    const { boxId, inputId } = getReplyElementIds(contextType, targetId, index);
+    const box = document.getElementById(boxId);
+    const input = document.getElementById(inputId);
+    if (!box || !input) return;
+    const record = getReviewRecord(contextType, targetId, index);
+    if (!record) return;
+    if (record.reply && record.replyAuthorTag !== userProfile.tag) return;
+    const show = box.style.display !== 'block';
+    box.style.display = show ? 'block' : 'none';
+    if (show) input.focus();
+}
+
+function saveReplyToReview(contextType, targetId, index) {
+    const { inputId } = getReplyElementIds(contextType, targetId, index);
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const reply = input.value.trim();
+    if (!reply) {
+        showToast('Ajoutez une réponse.', 'alert-circle');
+        return;
+    }
+
+    const record = getReviewRecord(contextType, targetId, index);
+    if (!record) return;
+    if (record.reply && record.replyAuthorTag !== userProfile.tag) {
+        showToast('Vous ne pouvez modifier que votre propre réponse.', 'alert-circle');
+        return;
+    }
+
+    if (contextType === 'profile') {
+        record.reply = escapeHtml(reply);
+        record.replyAuthorTag = userProfile.tag;
+        const profile = findProfileByTag(targetId);
+        if (profile) recalculateProfileRating(profile);
+        if (targetId === userProfile.tag) {
+            updateProfileUI();
+            renderMyProfileReviews();
+            switchMyProfileSection('reviews');
+        } else {
+            openSellerProfile(targetId, 'reviews');
+        }
+        showToast('Réponse enregistrée.', 'check-circle');
+        return;
+    }
+
+    if (contextType === 'listing') {
+        const listingId = Number(targetId);
+        record.reply = escapeHtml(reply);
+        record.replyAuthorTag = userProfile.tag;
+        listingReviewPanelState[listingId] = true;
+        openListingDetail(listingId);
+        showToast('Réponse enregistrée.', 'check-circle');
+    }
+}
+
+function toggleThreadBox(contextType, targetId, index) {
+    const { boxId, inputId } = getThreadElementIds(contextType, targetId, index);
+    const box = document.getElementById(boxId);
+    const input = document.getElementById(inputId);
+    if (!box || !input) return;
+    const show = box.style.display !== 'block';
+    box.style.display = show ? 'block' : 'none';
+    if (show) input.focus();
+}
+
+function addThreadComment(contextType, targetId, index) {
+    const record = getReviewRecord(contextType, targetId, index);
+    if (!record) return;
+    const { inputId } = getThreadElementIds(contextType, targetId, index);
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) {
+        showToast('Ajoutez un commentaire.', 'alert-circle');
+        return;
+    }
+
+    record.thread = Array.isArray(record.thread) ? record.thread : [];
+    const reviewer = getCurrentReviewerIdentity();
+    record.thread.push({
+        user: reviewer.user,
+        tag: reviewer.tag,
+        pic: reviewer.pic,
+        date: "À l'instant",
+        text: escapeHtml(text)
+    });
+    input.value = '';
+
+    if (contextType === 'profile') {
+        if (targetId === userProfile.tag) {
+            renderMyProfileReviews();
+            switchMyProfileSection('reviews');
+        } else {
+            openSellerProfile(targetId, 'reviews');
+        }
+        showToast('Commentaire ajouté.', 'check-circle');
+        return;
+    }
+
+    if (contextType === 'listing') {
+        const listingId = Number(targetId);
+        listingReviewPanelState[listingId] = true;
+        openListingDetail(listingId);
+        showToast('Commentaire ajouté.', 'check-circle');
+    }
+}
+
+function toggleReviewEditBox(contextType, targetId, index) {
+    const { boxId, inputId } = getReviewEditElementIds(contextType, targetId, index);
+    const box = document.getElementById(boxId);
+    const input = document.getElementById(inputId);
+    if (!box || !input) return;
+    const record = getReviewRecord(contextType, targetId, index);
+    if (!record) return;
+    if (record.tag !== userProfile.tag) return;
+    const show = box.style.display !== 'block';
+    box.style.display = show ? 'block' : 'none';
+    if (show) input.focus();
+}
+
+function saveReviewEdit(contextType, targetId, index) {
+    const { inputId } = getReviewEditElementIds(contextType, targetId, index);
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) {
+        showToast('Ajoutez un commentaire.', 'alert-circle');
+        return;
+    }
+    const record = getReviewRecord(contextType, targetId, index);
+    if (!record) return;
+    if (record.tag !== userProfile.tag) {
+        showToast('Vous ne pouvez modifier que votre propre avis.', 'alert-circle');
+        return;
+    }
+    record.comment = escapeHtml(text);
+
+    if (contextType === 'profile') {
+        if (targetId === userProfile.tag) {
+            renderMyProfileReviews();
+            switchMyProfileSection('reviews');
+        } else {
+            openSellerProfile(targetId, 'reviews');
+        }
+        showToast('Avis modifié.', 'check-circle');
+        return;
+    }
+
+    if (contextType === 'listing') {
+        const listingId = Number(targetId);
+        listingReviewPanelState[listingId] = true;
+        openListingDetail(listingId);
+        showToast('Avis modifié.', 'check-circle');
+    }
+}
+
+function toggleThreadEditBox(contextType, targetId, index, threadIndex) {
+    const { boxId, inputId } = getThreadEditElementIds(contextType, targetId, index, threadIndex);
+    const box = document.getElementById(boxId);
+    const input = document.getElementById(inputId);
+    if (!box || !input) return;
+    const record = getReviewRecord(contextType, targetId, index);
+    const entry = record?.thread?.[threadIndex];
+    if (!entry) return;
+    if (entry.tag !== userProfile.tag) return;
+    const show = box.style.display !== 'block';
+    box.style.display = show ? 'block' : 'none';
+    if (show) input.focus();
+}
+
+function saveThreadEdit(contextType, targetId, index, threadIndex) {
+    const { inputId } = getThreadEditElementIds(contextType, targetId, index, threadIndex);
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) {
+        showToast('Ajoutez un commentaire.', 'alert-circle');
+        return;
+    }
+    const record = getReviewRecord(contextType, targetId, index);
+    const entry = record?.thread?.[threadIndex];
+    if (!entry) return;
+    if (entry.tag !== userProfile.tag) {
+        showToast('Vous ne pouvez modifier que votre propre commentaire.', 'alert-circle');
+        return;
+    }
+    entry.text = escapeHtml(text);
+
+    if (contextType === 'profile') {
+        if (targetId === userProfile.tag) {
+            renderMyProfileReviews();
+            switchMyProfileSection('reviews');
+        } else {
+            openSellerProfile(targetId, 'reviews');
+        }
+        showToast('Commentaire modifié.', 'check-circle');
+        return;
+    }
+
+    if (contextType === 'listing') {
+        const listingId = Number(targetId);
+        listingReviewPanelState[listingId] = true;
+        openListingDetail(listingId);
+        showToast('Commentaire modifié.', 'check-circle');
+    }
+}
+
+function addProfileReview(targetTag, source = 'seller-profile') {
+    const profile = findProfileByTag(targetTag);
+    if (!profile) return;
+
+    const ratingInput = document.getElementById(source === 'my-profile' ? 'myProfileReviewRating' : 'sellerProfileReviewRating');
+    const commentInput = document.getElementById(source === 'my-profile' ? 'myProfileReviewComment' : 'sellerProfileReviewComment');
+    const rating = Number(ratingInput?.value || 0);
+    const comment = commentInput?.value.trim() || '';
+
+    if (!rating || rating < 1 || rating > 5) {
+        showToast('Sélectionnez une note entre 1 et 5.', 'alert-circle');
+        return;
+    }
+    if (!comment) {
+        showToast('Ajoutez un commentaire.', 'alert-circle');
+        return;
+    }
+
+    const reviewer = getCurrentReviewerIdentity();
+    profile.reviewsData = profile.reviewsData || [];
+    profile.reviewsData.unshift({
+        user: reviewer.user,
+        tag: reviewer.tag,
+        pic: reviewer.pic,
+        rating,
+        date: "À l'instant",
+        comment: escapeHtml(comment),
+        reply: null,
+        replyAuthorTag: null,
+        thread: [],
+        likes: 0
+    });
+    recalculateProfileRating(profile);
+    ratingInput.value = '5';
+    commentInput.value = '';
+
+    if (targetTag === userProfile.tag) {
+        updateProfileUI();
+        renderMyProfileReviews();
+        switchMyProfileSection('reviews');
+    } else {
+        openSellerProfile(targetTag, 'reviews');
+    }
+    showToast('Avis ajouté avec succès !', 'check-circle');
+}
+
+function addListingReview(listingId) {
+    const listing = listings.find(l => l.id === listingId);
+    if (!listing) return;
+    const ratingInput = document.getElementById('listingReviewRating');
+    const commentInput = document.getElementById('listingReviewComment');
+    const rating = Number(ratingInput?.value || 0);
+    const comment = commentInput?.value.trim() || '';
+
+    if (!rating || rating < 1 || rating > 5) {
+        showToast('Sélectionnez une note entre 1 et 5.', 'alert-circle');
+        return;
+    }
+    if (!comment) {
+        showToast('Ajoutez un commentaire.', 'alert-circle');
+        return;
+    }
+
+    const reviewer = getCurrentReviewerIdentity();
+    listing.reviewsData = listing.reviewsData || [];
+    listing.reviewsData.unshift({
+        user: reviewer.user,
+        tag: reviewer.tag,
+        pic: reviewer.pic,
+        rating,
+        date: "À l'instant",
+        comment: escapeHtml(comment),
+        reply: null,
+        replyAuthorTag: null,
+        thread: [],
+        likes: 0
+    });
+    listingReviewPanelState[listingId] = true;
+    openListingDetail(listingId);
+    showToast('Avis ajouté à cette annonce.', 'check-circle');
+}
+
+function getReviewRecord(contextType, targetId, index) {
+    if (contextType === 'profile') {
+        const profile = findProfileByTag(targetId);
+        return profile?.reviewsData?.[index] || null;
+    }
+    if (contextType === 'listing') {
+        const listingId = Number(targetId);
+        const listing = listings.find(l => l.id === listingId);
+        return listing?.reviewsData?.[index] || null;
+    }
+    return null;
+}
+
+function getReviewsListHTML(reviewsData, sellerName, isSentReviews = false, contextType = 'profile', targetId = '') {
+    if (!reviewsData || reviewsData.length === 0) return '<p style="color: var(--text-muted);">Aucun avis pour le moment.</p>';
+    return reviewsData.map((r, index) => {
+        const { boxId: threadBoxId, inputId: threadInputId } = getThreadElementIds(contextType, targetId, index);
+
+        const threadItems = Array.isArray(r.thread) ? r.thread : [];
+        const { boxId: reviewEditBoxId, inputId: reviewEditInputId } = getReviewEditElementIds(contextType, targetId, index);
+        const canEditReview = r.tag === userProfile.tag;
+        const threadHtml = threadItems.length
+            ? `<div class="review-thread">${threadItems.map((t, tIndex) => {
+                const editIds = getThreadEditElementIds(contextType, targetId, index, tIndex);
+                return `
+                <div class="thread-item">
+                    <img src="${t.pic}" class="thread-avatar clickable" alt="${t.user}" onclick="openSellerProfile('${t.tag}')">
+                    <div class="thread-body">
+                        <div class="thread-head">
+                            <span class="thread-user clickable" onclick="openSellerProfile('${t.tag}')">${t.user}</span>
+                            <span class="thread-date">${t.date || ''}</span>
+                        </div>
+                        <div class="thread-text">${t.text}</div>
+                        ${t.tag === userProfile.tag ? `
+                            <button class="review-action-btn" type="button" onclick="toggleThreadEditBox('${contextType}','${targetId}',${index},${tIndex})">Modifier</button>
+                            <div class="reply-compose" id="${editIds.boxId}" style="display:none;">
+                                <textarea id="${editIds.inputId}" rows="2" placeholder="Modifier votre commentaire...">${unescapeHtml(t.text)}</textarea>
+                                <button class="submit-btn small" type="button" onclick="saveThreadEdit('${contextType}','${targetId}',${index},${tIndex})">Enregistrer</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>`;
+            }).join('')}</div>`
+            : '';
+
+        const threadComposer = `
+            <button class="review-action-btn" type="button" onclick="toggleThreadBox('${contextType}','${targetId}',${index})">Commenter</button>
+            <div class="reply-compose" id="${threadBoxId}" style="display:none;">
+                <textarea id="${threadInputId}" rows="2" placeholder="Ajouter un commentaire..."></textarea>
+                <button class="submit-btn small" type="button" onclick="addThreadComment('${contextType}','${targetId}',${index})">Publier</button>
+            </div>
+        `;
+
+        const reviewEditUi = canEditReview
+            ? `
+                <button class="review-action-btn" type="button" onclick="toggleReviewEditBox('${contextType}','${targetId}',${index})">Modifier</button>
+                <div class="reply-compose" id="${reviewEditBoxId}" style="display:none;">
+                    <textarea id="${reviewEditInputId}" rows="2" placeholder="Modifier votre avis...">${unescapeHtml(r.comment)}</textarea>
+                    <button class="submit-btn small" type="button" onclick="saveReviewEdit('${contextType}','${targetId}',${index})">Enregistrer</button>
+                </div>
+            `
+            : '';
+        return `
+        <div class="review-item">
+            <img src="${r.pic}" class="review-avatar clickable" alt="${r.user}" onclick="openSellerProfile('${r.tag}')">
+            <div class="review-content-wrapper">
+                <div class="review-header">
+                    <span class="review-user clickable" onclick="openSellerProfile('${r.tag}')">${r.user}</span>
+                    <span class="review-date">${r.date}</span>
+                </div>
+                <div class="stars" style="margin-bottom: 8px;">${Array(5).fill(0).map((_, i) => `<i data-lucide="star" style="${i < r.rating ? 'fill: #ffb400;' : ''} width: 12px; height: 12px;"></i>`).join('')}</div>
+                <div class="review-comment">${r.comment}</div>
+                ${reviewEditUi}
+                ${threadComposer}
+                ${r.reply ? `<div class="review-reply"><div class="reply-header">Réponse de ${sellerName}</div><div class="reply-text">${r.reply}</div></div>` : ''}
+                ${threadHtml}
+                ${isSentReviews ? `<div style="font-size: 0.8rem; color: var(--primary-color); margin-top: 5px; font-weight: 600;">Posté sur le profil de ${sellerName}</div>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function toggleListingReviews(listingId) {
+    listingReviewPanelState[listingId] = !listingReviewPanelState[listingId];
+    openListingDetail(listingId);
+    setTimeout(() => {
+        document.getElementById('listingReviewsPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+}
+
+function expandListingReviews(listingId) {
+    listingReviewPanelState[listingId] = true;
+    openListingDetail(listingId);
+    setTimeout(() => {
+        document.getElementById('listingReviewsPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+}
+
+function toggleFavorite(event, id) {
+    event.stopPropagation();
+    const index = favorites.indexOf(id);
+    if (index > -1) {
+        favorites.splice(index, 1);
+        showToast('Retiré des favoris', 'heart');
+    } else {
+        favorites.push(id);
+        showToast('Ajouté aux favoris', 'heart');
+    }
+    renderListings();
+    renderFavorites();
+    lucide.createIcons();
+}
+
+function openListingDetail(listingId) {
+    const item = listings.find(l => l.id === listingId);
+    if (!item) return;
+    currentListingDetailId = listingId;
+    if (!Array.isArray(item.reviewsData)) item.reviewsData = [];
+    const content = document.getElementById('listingDetailContent');
+    const seller = item.seller || { name: "Utilisateur Winjay", tag: "@user", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay", verified: false, rating: 4.5, reviews: 10, reviewsData: [] };
+    const bestListingReview = item.reviewsData.length > 0 ? item.reviewsData[0] : null;
+    const similarListings = getSimilarListings(item);
+    const reviewsCount = item.reviewsData.length;
+    const reviewsExpanded = !!listingReviewPanelState[listingId];
+    const similarHTML = similarListings.length > 0 ? `
+        <div class="similar-listings">
+            <h3>Annonces similaires</h3>
+            <div class="similar-grid">
+                ${similarListings.map(s => `
+                    <div class="card" onclick="openListingDetail(${s.id})" style="cursor: pointer;">
+                        <img src="${s.image}" alt="${s.title}" class="card-img" style="height: 120px;">
+                        <div class="card-content" style="padding: 10px;">
+                            <div class="card-price" style="font-size: 1rem;">${new Intl.NumberFormat('fr-DZ').format(s.price)} DA</div>
+                            <div class="card-title" style="font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${s.title}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>` : '';
+    content.innerHTML = `
+        <div class="detail-container">
+            <img src="${item.image}" class="detail-image" alt="${item.title}" onclick="openLightbox('${item.image}')">
+            <div class="detail-info">
+                <h2>${item.title}</h2>
+                <div class="detail-price">${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD</div>
+                <div class="detail-meta">
+                    <span><i data-lucide="map-pin"></i> ${item.location}</span>
+                    <span><i data-lucide="tag"></i> ${item.category}</span>
+                    <span><i data-lucide="calendar"></i> ${item.date}</span>
+                </div>
+                <h3>Vendeur</h3>
+                <div class="seller-card" onclick="openSellerProfile('${seller.tag}')">
+                    <div class="seller-info">
+                        <img src="${seller.pic || seller.profilePic}" class="seller-avatar">
+                        <div>
+                            <div class="seller-name">${seller.name} ${getUserBadgesHTML(seller)}</div>
+                            <div class="seller-tag">${seller.tag}</div>
+                            ${getRatingHTML(seller.rating || 4.5, seller.reviews || 10)}
+                            <button class="see-reviews-btn" type="button" onclick="event.stopPropagation(); openSellerProfile('${seller.tag}', 'reviews')">
+                                <i data-lucide="star"></i>
+                                Avis du vendeur
+                            </button>
+                        </div>
+                    </div>
+                    <i data-lucide="chevron-right"></i>
+                </div>
+                <div style="margin-top: 15px;">
+                    <button class="message-contact-btn" onclick="startChatWithSeller('${seller.tag}')">
+                        <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
+                        Message
+                    </button>
+                </div>
+                ${bestListingReview ? `
+                <div class="review-highlight clickable" onclick="expandListingReviews(${item.id})">
+                    <div class="highlight-label"><i data-lucide="message-circle" style="width: 14px; height: 14px;"></i> Avis sur l'annonce</div>
+                    <div class="highlight-content">"${bestListingReview.comment}"</div>
+                    <div class="highlight-author">— ${bestListingReview.user}</div>
+                </div>` : ''}
+                <div class="share-section">
+                    <h3>Partager cette annonce</h3>
+                    <div class="share-buttons">
+                        <button class="share-btn share-whatsapp" onclick="shareListing('whatsapp', ${item.id})" title="Partager sur WhatsApp">
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                        </button>
+                        <button class="share-btn share-facebook" onclick="shareListing('facebook', ${item.id})" title="Partager sur Facebook">
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                        </button>
+                        <button class="share-btn share-copy" onclick="shareListing('copy', ${item.id})" title="Copier le lien"><i data-lucide="copy"></i></button>
+                    </div>
+                </div>
+                <div class="listing-reviews-accordion">
+                    <button class="listing-reviews-toggle" type="button" onclick="toggleListingReviews(${item.id})">
+                        <i data-lucide="message-circle"></i>
+                        <span>Avis sur l'annonce</span>
+                        <span class="listing-reviews-count">${reviewsCount}</span>
+                        <i class="chev" data-lucide="${reviewsExpanded ? 'chevron-up' : 'chevron-down'}"></i>
+                    </button>
+                    <div id="listingReviewsPanel" class="listing-reviews-panel ${reviewsExpanded ? 'active' : ''}">
+                        <div class="reviews-section" style="margin-top: 0;">
+                            <h3>Laisser un avis sur cette annonce</h3>
+                            <div class="review-form">
+                                <select id="listingReviewRating">
+                                    <option value="5">5 - Excellent</option>
+                                    <option value="4">4 - Très bien</option>
+                                    <option value="3">3 - Correct</option>
+                                    <option value="2">2 - Moyen</option>
+                                    <option value="1">1 - Mauvais</option>
+                                </select>
+                                <textarea id="listingReviewComment" rows="3" placeholder="Votre commentaire sur cette annonce..."></textarea>
+                                <button class="submit-btn" type="button" onclick="addListingReview(${item.id})">Publier l'avis</button>
+                            </div>
+                            <h3 style="margin-top:18px;">Avis sur l'annonce</h3>
+                            <div class="reviews-list">${getReviewsListHTML(item.reviewsData || [], seller.name, false, 'listing', item.id)}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>${similarHTML}`;
+    openModal('listingDetailModal');
+    lucide.createIcons();
+}
+
+function shareListing(platform, id) {
+    const item = listings.find(l => l.id === id);
+    const url = window.location.href;
+    const text = `Regardez cette annonce sur Winjay.dz : ${item.title}`;
+    if (platform === 'whatsapp') {
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + url)}`);
+    } else if (platform === 'facebook') {
+        window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`);
+    } else if (platform === 'copy') {
+        navigator.clipboard.writeText(url).then(() => showToast('Lien copié dans le presse-papier !', 'copy'));
+    }
+}
+
+function switchSellerProfileSection(section = 'listings') {
+    const listingsTab = document.getElementById('sellerListingsTab');
+    const reviewsTab = document.getElementById('sellerReviewsTab');
+    const listingsPanel = document.getElementById('sellerListingsSection');
+    const reviewsPanel = document.getElementById('sellerReviewsSection');
+    if (!listingsTab || !reviewsTab || !listingsPanel || !reviewsPanel) return;
+
+    const showListings = section !== 'reviews';
+    listingsTab.classList.toggle('active', showListings);
+    reviewsTab.classList.toggle('active', !showListings);
+    listingsPanel.classList.toggle('active', showListings);
+    reviewsPanel.classList.toggle('active', !showListings);
+}
+
+function openSellerProfile(tag, section = 'listings') {
+    currentSellerProfileTag = tag;
+    if (tag === userProfile.tag) {
+        localStorage.removeItem('winjayLastSellerTag');
+        closeModal('listingDetailModal');
+        showSection('profile-section');
+        switchMyProfileSection(section);
+        return;
+    }
+    localStorage.setItem('winjayLastSellerTag', tag);
+    let seller = botProfiles.find(p => p.tag === tag);
+    if (!seller) seller = reviewers.find(p => p.tag === tag);
+    if (!seller) return;
+    closeModal('listingDetailModal');
+    const content = document.getElementById('externalProfileContent');
+    const sellerListings = listings.filter(l => l.seller && l.seller.tag === tag);
+    content.innerHTML = `
+        <div class="profile-header">
+            <div class="cover-photo-container">
+                <img src="${seller.cover || 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1200'}" alt="Couverture">
+            </div>
+            <div class="profile-info-container">
+                <div class="profile-pic-wrapper">
+                    <img src="${seller.pic || seller.profilePic}" alt="Profil">
+                </div>
+                <div class="profile-details">
+                    <div class="profile-text">
+                        <div class="name-badge"><h2>${seller.name}</h2> ${getUserBadgesHTML(seller)}</div>
+                        <p>${seller.tag}</p>
+                        ${getRatingHTML(seller.rating, seller.reviews)}
+                        <div class="profile-bio-box">
+                            <div class="bio-item"><i data-lucide="map-pin"></i><span>${seller.location}</span></div>
+                            <div class="bio-item"><i data-lucide="briefcase"></i><span>${seller.businessType}</span></div>
+                            <div class="bio-item"><i data-lucide="calendar"></i><span>Inscrit en ${seller.joinedDate}</span></div>
+                        </div>
+                    </div>
+                    <button class="message-contact-btn" onclick="startChatWithSeller('${seller.tag}')">
+                        <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
+                        Message
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="profile-content">
+            <div class="profile-sections-switcher">
+                <button class="profile-switch-btn active" id="sellerListingsTab" type="button" onclick="switchSellerProfileSection('listings')">
+                    <i data-lucide="layout-grid"></i>
+                    <span>Annonces</span>
+                </button>
+                <button class="profile-switch-btn" id="sellerReviewsTab" type="button" onclick="switchSellerProfileSection('reviews')">
+                    <i data-lucide="star"></i>
+                    <span>Avis</span>
+                </button>
+            </div>
+            <div id="sellerListingsSection" class="profile-section-panel active">
+                ${sellerListings.length > 0 ? `<h3>Annonces de ${seller.name}</h3><div class="listings-grid">${sellerListings.map(l => createCardHTML(l)).join('')}</div>` : '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="shopping-bag" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>Cet utilisateur n\'a pas encore d\'annonces publiées.</p></div>'}
+            </div>
+            <div id="sellerReviewsSection" class="profile-section-panel">
+                <div class="reviews-section">
+                    <h3>Laisser un avis sur ${seller.name}</h3>
+                    <div class="review-form">
+                        <select id="sellerProfileReviewRating">
+                            <option value="5">5 - Excellent</option>
+                            <option value="4">4 - Très bien</option>
+                            <option value="3">3 - Correct</option>
+                            <option value="2">2 - Moyen</option>
+                            <option value="1">1 - Mauvais</option>
+                        </select>
+                        <textarea id="sellerProfileReviewComment" rows="3" placeholder="Votre commentaire sur ce profil..."></textarea>
+                        <button class="submit-btn" type="button" onclick="addProfileReview('${seller.tag}','seller-profile')">Publier l'avis</button>
+                    </div>
+                    <h3 style="margin-top:18px;">Avis sur ${seller.name}</h3>
+                    <div class="reviews-list">${getReviewsListHTML(seller.reviewsData, seller.name, false, 'profile', seller.tag)}</div>
+                </div>
+            </div>
+        </div>`;
+    showSection('seller-profile-section');
+    switchSellerProfileSection(section);
+    lucide.createIcons();
+}
+
+function openLightbox(imageSrc) {
+    document.getElementById('lightboxImage').src = imageSrc;
+    document.getElementById('imageLightbox').classList.add('active');
+}
+
+function closeLightbox() {
+    document.getElementById('imageLightbox').classList.remove('active');
+}
+
+function switchToRegister() {
+    closeModal('loginModal');
+    openModal('registerModal');
+}
+
+function switchToLogin() {
+    closeModal('registerModal');
+    openModal('loginModal');
+}
+
+function sendMessage() {
+    const input = document.getElementById('chatInput');
+    if (!activeChatTag) {
+        showToast('Select a chat first', 'alert-circle');
+        return;
+    }
+    const message = input.value.trim();
+    if (!message) return;
+    const chat = mockChats[activeChatTag];
+    if (!chat) return;
+    chat.messages.push({ id: newMessageId(), type: 'sent', kind: 'text', text: message, time: "À l'instant" });
+    input.value = '';
+    switchChat(activeChatTag);
+}
+
+function sendMessageModal() {
+    const input = document.getElementById('chatInputModal');
+    if (!input) return;
+    if (!activeChatTag) {
+        showToast('Select a chat first', 'alert-circle');
+        return;
+    }
+    const message = input.value.trim();
+    if (!message) return;
+    const chat = mockChats[activeChatTag];
+    if (!chat) return;
+    chat.messages.push({ id: newMessageId(), type: 'sent', kind: 'text', text: message, time: "À l'instant" });
+    input.value = '';
+    switchChat(activeChatTag, true);
+}
+
+function wipeWinjayStorage() {
+    try {
+        const toRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('winjay')) toRemove.push(key);
+        }
+        toRemove.forEach((key) => localStorage.removeItem(key));
+    } catch (e) {
+        null;
+    }
+    try {
+        const toRemove = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            if (key && key.startsWith('winjay')) toRemove.push(key);
+        }
+        toRemove.forEach((key) => sessionStorage.removeItem(key));
+    } catch (e) {
+        null;
+    }
+}
+
+function resetLocalAppStateToFresh() {
+    userProfile = createEmptyUserProfile();
+    myListings = [];
+    favorites = [];
+    searchHistory = [];
+    editingListingId = null;
+    currentListingDetailId = null;
+    currentSellerProfileTag = null;
+    try {
+        Object.keys(listingReviewPanelState).forEach((k) => delete listingReviewPanelState[k]);
+    } catch (e) {
+        null;
+    }
+    updateProfileUI();
+    renderListings();
+    renderFavorites();
+    try {
+        renderMessagesList();
+    } catch (e) {
+        null;
+    }
+}
+
+function handleLogout() {
+    showConfirmModal(
+        'Déconnexion',
+        'Êtes-vous sûr de vouloir vous déconnecter ?',
+        async () => {
+            try {
+                const client = initSupabase();
+                if (client) await client.auth.signOut();
+            } catch (e) {
+                null;
+            }
+            clearSupabaseAuthTokenFromAllStorages();
+            wipeWinjayStorage();
+            resetLocalAppStateToFresh();
+            showToast('Logged out', 'log-out');
+            showSection('home-section');
+        }
+    );
+}
