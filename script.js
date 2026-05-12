@@ -2624,6 +2624,14 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         return;
     }
 
+    const { data: userData, error: userErr } = await client.auth.getUser();
+    const userId = userData?.user?.id || null;
+    if (userErr || !userId) {
+        showToast('Please log in again', 'log-in');
+        openModal('loginModal');
+        return;
+    }
+
     const title = document.getElementById('listingTitle').value.trim();
     const price = Number(document.getElementById('listingPrice').value) || 0;
     const category = document.getElementById('listingCategory').value;
@@ -2646,7 +2654,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
     const { data: inserted, error: insertErr } = await client
         .from('listings')
         .insert({
-            owner_id: currentSupabaseUserId,
+            owner_id: userId,
             title,
             description: null,
             price,
@@ -2658,21 +2666,23 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         .single();
 
     if (insertErr || !inserted?.id) {
-        showToast(insertErr?.message || 'Failed to create listing', 'alert-circle');
+        const msg = insertErr?.message || 'Failed to create listing';
+        showToast(msg.includes('row-level security') ? 'Listings: permission denied (RLS)' : msg, 'alert-circle');
         return;
     }
 
     const listingId = Number(inserted.id);
     const safeName = String(file.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_');
-    const objectPath = `${currentSupabaseUserId}/${listingId}/${Date.now()}_${safeName}`;
+    const objectPath = `${userId}/${listingId}/${Date.now()}_${safeName}`;
 
     const { error: uploadErr } = await client.storage
         .from(LISTING_IMAGES_BUCKET)
         .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || undefined });
 
     if (uploadErr) {
-        await client.from('listings').delete().eq('id', listingId).eq('owner_id', currentSupabaseUserId);
-        showToast(uploadErr.message || 'Image upload failed', 'alert-circle');
+        await client.from('listings').delete().eq('id', listingId).eq('owner_id', userId);
+        const msg = uploadErr?.message || 'Image upload failed';
+        showToast(msg.includes('row-level security') ? 'Storage: permission denied (RLS)' : msg, 'alert-circle');
         return;
     }
 
@@ -2689,7 +2699,8 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         sort_order: 1
     });
     if (imgErr) {
-        showToast(imgErr.message || 'Failed to save listing image', 'alert-circle');
+        const msg = imgErr?.message || 'Failed to save listing image';
+        showToast(msg.includes('row-level security') ? 'Listing images: permission denied (RLS)' : msg, 'alert-circle');
         return;
     }
 
