@@ -25,6 +25,8 @@ const FREE_VERIFIED_PROGRAM_STORAGE_KEY = 'winjayFreeVerifiedProgramV1';
 const VERIFIED_QUEST_STORAGE_KEY = 'winjayVerifiedQuestV1';
 const FREE_VERIFIED_TOTAL = 1000;
 const REFERRALS_REQUIRED = 10;
+const MARKETPLACE_LISTINGS_STORAGE_KEY = 'marketplaceListingsV1';
+const LISTING_IMAGES_BUCKET = 'listing-images';
 
 function normalizeSupabaseProjectUrl(url) {
     if (typeof url !== 'string') return '';
@@ -104,6 +106,118 @@ function requireAuthOrPrompt() {
     return false;
 }
 
+function formatRelativeDate(value) {
+    try {
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return '';
+        const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
+        if (seconds < 60) return 'Just now';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        if (days < 7) return `${days}d ago`;
+        return d.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: '2-digit' });
+    } catch (e) {
+        return '';
+    }
+}
+
+function buildSellerPlaceholder(ownerId) {
+    const id = String(ownerId || '');
+    const short = id ? id.slice(0, 8) : 'user';
+    return {
+        name: 'Seller',
+        tag: `@${short}`,
+        pic: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(short)}`,
+        verified: false,
+        rating: 0,
+        reviews: 0,
+        reviewsData: []
+    };
+}
+
+function mapSupabaseListingRow(row) {
+    const images = Array.isArray(row?.listing_images) ? row.listing_images.slice() : [];
+    images.sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
+    const firstUrl = images[0]?.url || '';
+    const ownerId = row?.owner_id || null;
+
+    return {
+        id: Number(row.id),
+        owner_id: ownerId,
+        title: row.title,
+        description: row.description || '',
+        price: Number(row.price) || 0,
+        category: row.category || '',
+        image: firstUrl || 'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?w=500',
+        images: images.map((x) => x.url).filter(Boolean),
+        location: row.wilaya || '',
+        wilaya: row.wilaya || '',
+        status: row.status || 'active',
+        created_at: row.created_at,
+        date: formatRelativeDate(row.created_at),
+        seller: buildSellerPlaceholder(ownerId),
+        reviewsData: []
+    };
+}
+
+async function fetchListingsFromSupabase({ silent = false } = {}) {
+    const client = initSupabase();
+    if (!client) return;
+    const { data, error } = await client
+        .from('listings')
+        .select('id, created_at, owner_id, title, description, price, category, wilaya, status, listing_images(url, sort_order)')
+        .order('created_at', { ascending: false });
+    if (error) {
+        if (!silent) showToast(error.message || 'Failed to load listings', 'alert-circle');
+        return;
+    }
+    listings = (data || []).map(mapSupabaseListingRow);
+    syncMyListingsFromListings();
+    renderListings();
+    renderMyListings();
+}
+
+function loadMarketplaceListingsFromStorage() {
+    try {
+        const raw = localStorage.getItem(MARKETPLACE_LISTINGS_STORAGE_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (!Array.isArray(saved)) return;
+        const cleaned = saved
+            .filter((x) => x && typeof x === 'object')
+            .map((x) => ({
+                id: x.id,
+                title: String(x.title || ''),
+                price: Number.isFinite(Number(x.price)) ? Number(x.price) : 0,
+                category: String(x.category || ''),
+                image: String(x.image || ''),
+                location: String(x.location || ''),
+                date: String(x.date || ''),
+                seller: x.seller && typeof x.seller === 'object' ? x.seller : null,
+                reviewsData: Array.isArray(x.reviewsData) ? x.reviewsData : []
+            }))
+            .filter((x) => x.title && x.category && x.location);
+        listings = cleaned;
+    } catch (e) {
+        return;
+    }
+}
+
+function saveMarketplaceListingsToStorage() {
+    try {
+        localStorage.setItem(MARKETPLACE_LISTINGS_STORAGE_KEY, JSON.stringify(listings));
+    } catch (e) {
+        null;
+    }
+}
+
+function syncMyListingsFromListings() {
+    myListings = listings.filter((l) => l?.seller?.tag && userProfile?.tag && l.seller.tag === userProfile.tag);
+}
+
 function initSupabase() {
     if (supabaseClient) return supabaseClient;
     if (!SUPABASE_PROJECT_URL || !SUPABASE_ANON_KEY) return null;
@@ -131,6 +245,7 @@ function applyAuthSessionToLocalState(session) {
         } catch (e) {
             null;
         }
+        syncMyListingsFromListings();
         updateProfileUI();
         return;
     }
@@ -152,6 +267,7 @@ function applyAuthSessionToLocalState(session) {
     };
 
     saveUserProfileToStorage();
+    syncMyListingsFromListings();
     updateProfileUI();
 }
 
@@ -1652,13 +1768,20 @@ const pagination = document.getElementById('pagination');
 const myListingsGrid = document.getElementById('myListingsGrid');
 const toastContainer = document.getElementById('toastContainer');
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     setPendingReferralFromUrl();
     initSupabase();
-    bootstrapSupabaseAuth();
+    await bootstrapSupabaseAuth();
     if (!supabaseClient) {
         loadUserProfileFromStorage();
     }
+    fetchListingsFromSupabase({ silent: false }).then(() => {
+        if (listings.length === 0) {
+            loadMarketplaceListingsFromStorage();
+            syncMyListingsFromListings();
+            renderListings();
+        }
+    });
     populateWilayas();
     populateCategories();
     populateFilterDropdowns();
@@ -2492,27 +2615,91 @@ function openShareModal(listingId) {
     window.open(`https://t.me/share/url?url=${url}&text=${shareText}`, '_blank');
 }
 
-document.getElementById('addListingForm').addEventListener('submit', (e) => {
+document.getElementById('addListingForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const newListing = {
-        id: Date.now(),
-        title: document.getElementById('listingTitle').value,
-        price: document.getElementById('listingPrice').value,
-        category: document.getElementById('listingCategory').value,
-        image: selectedListingImage || 'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?w=500',
-        location: document.getElementById('listingWilaya').value,
-        date: "À l'instant",
-        seller: { ...userProfile, verified: userProfile.verified }
-    };
-    listings.unshift(newListing);
-    myListings.unshift(newListing);
-    applyFilters();
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+
+    const title = document.getElementById('listingTitle').value.trim();
+    const price = Number(document.getElementById('listingPrice').value) || 0;
+    const category = document.getElementById('listingCategory').value;
+    const wilaya = document.getElementById('listingWilaya').value;
+    const file = document.getElementById('listingImageInput')?.files?.[0];
+
+    if (!title) {
+        showToast('Title is required', 'alert-circle');
+        return;
+    }
+    if (!wilaya) {
+        showToast('Wilaya is required', 'alert-circle');
+        return;
+    }
+    if (!file) {
+        showToast('Please choose a photo', 'alert-circle');
+        return;
+    }
+
+    const { data: inserted, error: insertErr } = await client
+        .from('listings')
+        .insert({
+            owner_id: currentSupabaseUserId,
+            title,
+            description: null,
+            price,
+            category: category || null,
+            wilaya: wilaya || null,
+            status: 'active'
+        })
+        .select('id')
+        .single();
+
+    if (insertErr || !inserted?.id) {
+        showToast(insertErr?.message || 'Failed to create listing', 'alert-circle');
+        return;
+    }
+
+    const listingId = Number(inserted.id);
+    const safeName = String(file.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const objectPath = `${currentSupabaseUserId}/${listingId}/${Date.now()}_${safeName}`;
+
+    const { error: uploadErr } = await client.storage
+        .from(LISTING_IMAGES_BUCKET)
+        .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || undefined });
+
+    if (uploadErr) {
+        await client.from('listings').delete().eq('id', listingId).eq('owner_id', currentSupabaseUserId);
+        showToast(uploadErr.message || 'Image upload failed', 'alert-circle');
+        return;
+    }
+
+    const { data: publicData } = client.storage.from(LISTING_IMAGES_BUCKET).getPublicUrl(objectPath);
+    const publicUrl = publicData?.publicUrl || '';
+    if (!publicUrl) {
+        showToast('Failed to generate image URL', 'alert-circle');
+        return;
+    }
+
+    const { error: imgErr } = await client.from('listing_images').insert({
+        listing_id: listingId,
+        url: publicUrl,
+        sort_order: 1
+    });
+    if (imgErr) {
+        showToast(imgErr.message || 'Failed to save listing image', 'alert-circle');
+        return;
+    }
+
     closeModal('addListingModal');
     showToast('Listing posted!', 'check-circle');
     e.target.reset();
     selectedListingImage = null;
     document.getElementById('imagePreviewContainer').style.display = 'none';
     showSection('home-section');
+    await fetchListingsFromSupabase({ silent: true });
 });
 
 document.getElementById('editProfileForm').addEventListener('submit', (e) => {
@@ -2996,19 +3183,36 @@ function openEditListingModal(event, id) {
     lucide.createIcons();
 }
 
-function saveEditedListing() {
+async function saveEditedListing() {
     const item = listings.find(l => l.id === editingListingId);
     if (!item) return;
-    item.title = document.getElementById('editListingTitle').value;
-    item.price = parseInt(document.getElementById('editListingPrice').value);
-    item.category = document.getElementById('editListingCategory').value;
-    item.location = document.getElementById('editListingWilaya').value;
-    const myIndex = myListings.findIndex(l => l.id === editingListingId);
-    if (myIndex > -1) myListings[myIndex] = item;
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    const nextTitle = document.getElementById('editListingTitle').value.trim();
+    const nextPrice = Number(document.getElementById('editListingPrice').value) || 0;
+    const nextCategory = document.getElementById('editListingCategory').value || null;
+    const nextWilaya = document.getElementById('editListingWilaya').value || null;
+    const { error } = await client
+        .from('listings')
+        .update({
+            title: nextTitle,
+            price: nextPrice,
+            category: nextCategory,
+            wilaya: nextWilaya
+        })
+        .eq('id', editingListingId)
+        .eq('owner_id', currentSupabaseUserId);
+    if (error) {
+        showToast(error.message || 'Failed to update listing', 'alert-circle');
+        return;
+    }
     closeModal('editListingModal');
-    showToast('Annonce modifiée avec succès !', 'check-circle');
-    renderMyListings();
-    renderListings();
+    showToast('Listing updated!', 'check-circle');
+    await fetchListingsFromSupabase({ silent: true });
 }
 
 function deleteMyListing(event, id) {
@@ -3016,13 +3220,26 @@ function deleteMyListing(event, id) {
     showConfirmModal(
         'Supprimer l\'annonce',
         'Êtes-vous sûr de vouloir supprimer cette annonce ?',
-        () => {
-            listings = listings.filter(l => l.id !== id);
-            myListings = myListings.filter(l => l.id !== id);
+        async () => {
+            if (!requireAuthOrPrompt()) return;
+            const client = initSupabase();
+            if (!client) {
+                showToast('Supabase is not configured', 'alert-circle');
+                return;
+            }
+            await client.from('listing_images').delete().eq('listing_id', id);
+            const { error } = await client
+                .from('listings')
+                .delete()
+                .eq('id', id)
+                .eq('owner_id', currentSupabaseUserId);
+            if (error) {
+                showToast(error.message || 'Failed to delete listing', 'alert-circle');
+                return;
+            }
             favorites = favorites.filter(fid => fid !== id);
-            showToast('Annonce supprimée', 'trash-2');
-            renderMyListings();
-            renderListings();
+            showToast('Listing deleted', 'trash-2');
+            await fetchListingsFromSupabase({ silent: true });
             renderFavorites();
         },
         true
