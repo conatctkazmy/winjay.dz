@@ -138,11 +138,35 @@ function buildSellerPlaceholder(ownerId) {
     };
 }
 
+function pickFirstValue(obj, keys) {
+    if (!obj || typeof obj !== 'object') return '';
+    for (const k of keys) {
+        const v = obj[k];
+        if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return '';
+}
+
 function mapSupabaseListingRow(row) {
     const images = Array.isArray(row?.listing_images) ? row.listing_images.slice() : [];
     images.sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
     const firstUrl = images[0]?.url || '';
     const ownerId = row?.owner_id || null;
+    const profile = row?.profiles && typeof row.profiles === 'object' ? row.profiles : null;
+    const sellerFromProfile = profile
+        ? {
+              name: profile.name || profile.full_name || 'Seller',
+              tag: profile.tag || (profile.username ? `@${profile.username}` : `@${String(ownerId || '').slice(0, 8)}`),
+              pic:
+                  pickFirstValue(profile, ['profile_pic', 'avatar_url', 'profilePic', 'picture', 'photo_url']) ||
+                  `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(ownerId || 'user'))}`,
+              verified: !!(profile.verified ?? profile.is_verified),
+              vip: !!(profile.vip ?? profile.is_vip),
+              rating: Number(profile.rating) || 0,
+              reviews: Number(profile.reviews) || 0,
+              reviewsData: []
+          }
+        : buildSellerPlaceholder(ownerId);
 
     return {
         id: Number(row.id),
@@ -158,7 +182,7 @@ function mapSupabaseListingRow(row) {
         status: row.status || 'active',
         created_at: row.created_at,
         date: formatRelativeDate(row.created_at),
-        seller: buildSellerPlaceholder(ownerId),
+        seller: sellerFromProfile,
         reviewsData: []
     };
 }
@@ -168,7 +192,9 @@ async function fetchListingsFromSupabase({ silent = false } = {}) {
     if (!client) return;
     const { data, error } = await client
         .from('listings')
-        .select('id, created_at, owner_id, title, description, price, category, wilaya, status, listing_images(url, sort_order)')
+        .select(
+            'id, created_at, owner_id, title, description, price, category, wilaya, status, listing_images(url, sort_order), profiles:profiles!listings_owner_id_fkey(*)'
+        )
         .order('created_at', { ascending: false });
     if (error) {
         if (!silent) showToast(error.message || 'Failed to load listings', 'alert-circle');
@@ -215,7 +241,7 @@ function saveMarketplaceListingsToStorage() {
 }
 
 function syncMyListingsFromListings() {
-    myListings = listings.filter((l) => l?.seller?.tag && userProfile?.tag && l.seller.tag === userProfile.tag);
+    myListings = listings.filter((l) => l?.owner_id && currentSupabaseUserId && l.owner_id === currentSupabaseUserId);
 }
 
 function initSupabase() {
@@ -229,7 +255,7 @@ function initSupabase() {
         }
     });
     supabaseClient.auth.onAuthStateChange((_event, session) => {
-        applyAuthSessionToLocalState(session);
+        handleAuthSessionChange(session);
     });
     return supabaseClient;
 }
@@ -271,11 +297,71 @@ function applyAuthSessionToLocalState(session) {
     updateProfileUI();
 }
 
+async function ensureSupabaseProfileRow(client, user) {
+    if (!client || !user?.id) return null;
+    const meta = user.user_metadata || {};
+    const email = user.email || '';
+    const baseName = meta.full_name || meta.name || meta.fullName || (email ? email.split('@')[0] : '');
+    const baseTagRaw = meta.tag || meta.username || meta.handle || '';
+    const safeTag = (baseTagRaw || `@${user.id.slice(0, 8)}`).toLowerCase().replace(/\s+/g, '');
+    const avatar = meta.avatar_url || meta.picture || '';
+
+    const payload = {
+        id: user.id,
+        name: baseName || 'User',
+        tag: safeTag.startsWith('@') ? safeTag : '@' + safeTag,
+        profile_pic: avatar || null,
+        cover_pic: null,
+        location: 'Algeria',
+        business_type: 'Particulier'
+    };
+
+    const { error } = await client.from('profiles').upsert(payload, { onConflict: 'id' });
+    if (error) return null;
+    const { data } = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
+    return data || null;
+}
+
+function applySupabaseProfileRowToLocalState(row, user) {
+    if (!row || typeof row !== 'object') return;
+    userProfile = {
+        ...createEmptyUserProfile(),
+        ...userProfile,
+        name: row.name || userProfile.name,
+        tag: row.tag || userProfile.tag,
+        profilePic:
+            pickFirstValue(row, ['profile_pic', 'avatar_url', 'profilePic', 'picture', 'photo_url']) || userProfile.profilePic,
+        coverPic: pickFirstValue(row, ['cover_pic', 'coverPic', 'cover_url']) || userProfile.coverPic,
+        location: row.location || userProfile.location,
+        businessType: row.business_type || row.businessType || userProfile.businessType,
+        joinedDate: user?.created_at
+            ? new Date(user.created_at).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })
+            : userProfile.joinedDate
+    };
+    saveUserProfileToStorage();
+    syncMyListingsFromListings();
+    updateProfileUI();
+}
+
+async function handleAuthSessionChange(session) {
+    applyAuthSessionToLocalState(session);
+    const user = session?.user || null;
+    if (!user) return;
+    const client = initSupabase();
+    if (!client) return;
+    const row = await ensureSupabaseProfileRow(client, user);
+    if (row) applySupabaseProfileRowToLocalState(row, user);
+}
+
 async function bootstrapSupabaseAuth() {
     if (!supabaseClient) return;
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) return;
     applyAuthSessionToLocalState(data?.session || null);
+    if (data?.session?.user) {
+        const row = await ensureSupabaseProfileRow(supabaseClient, data.session.user);
+        if (row) applySupabaseProfileRowToLocalState(row, data.session.user);
+    }
 }
 
 function clearSupabaseAuthTokenFromAllStorages() {
@@ -2658,6 +2744,12 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         if (userErr || !userId) {
             showToast('Please log in again', 'log-in');
             openModal('loginModal');
+            return;
+        }
+
+        const ensuredProfile = await ensureSupabaseProfileRow(client, userData.user);
+        if (!ensuredProfile) {
+            showToast('Your account profile is missing. Please log out and log in again.', 'alert-circle');
             return;
         }
 
