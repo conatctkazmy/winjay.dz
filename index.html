@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>winjay.dz - Marché Moderne</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="light-mode">
+    <nav class="navbar">
+        <div class="nav-left">
+            <button id="sidebarToggle" class="icon-btn">
+                <i data-lucide="menu"></i>
+            </button>
+            <div class="logo" onclick="showSection('home-section')" style="cursor: pointer; display: flex; align-items: center; gap: 10px;">
+                <img src="new official winjay dz logo.png" alt="Winjay Logo" style="height: 40px; width: auto;">
+                <span class="text-xl font-bold tracking-tight">winjay<span class="winjay-orange">.dz</span></span>
+            </div>
+        </div>
+        <div class="nav-center">
+            <div class="search-container" style="position: relative;">
+                <i data-lucide="search"></i>
+                <input type="text" id="mainSearchInput" placeholder="Rechercher des articles..." onkeyup="handleSearch()" onfocus="showSearchHistory()" onkeydown="handleSearchKeydown(event,'mainSearchInput')">
+                <div class="search-history-dropdown" id="searchHistoryDropdown">
+                    <div class="search-history-header">Recherches récentes</div>
+                    <div id="searchHistoryList"></div>
+                    <button class="clear-history-btn" onclick="clearSearchHistory()">Effacer l'historique</button>
+                </div>
+            </div>
+        </div>
+        <div class="nav-right">
+            <button class="icon-btn notification-btn" onclick="openModal('notificationsModal')" title="Notifications">
+                <i data-lucide="bell"></i>
+                <span class="notification-badge" id="notificationBadge">3</span>
+            </button>
+            <button class="icon-btn mobile-search-btn" onclick="toggleMobileSearchExpand(event)" title="Search">
+                <i data-lucide="search"></i>
+            </button>
+            <button class="icon-btn messages-btn" onclick="showSection('messages-section')" title="Messages">
+                <i data-lucide="message-circle"></i>
+                <span class="message-badge" id="messageBadge">2</span>
+            </button>
+            <button class="free-verified-pill" onclick="openModal('freeVerifiedInfoModal')" title="Free verified badge program">
+                <i data-lucide="badge-check"></i>
+                <span><span id="freeVerifiedRemainingNav">1000</span> free verified left</span>
+            </button>
+            <button class="add-listing-btn" onclick="openModal('addListingModal')" title="Ajouter une annonce">
+                <i data-lucide="plus-circle"></i>
+            </button>
+            <div class="profile-menu-wrapper">
+                <button id="profileBtn" class="profile-btn" onclick="toggleProfileDropdown(event)" aria-haspopup="true" aria-expanded="false">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="Profil" id="navProfilePic">
+                </button>
+                <div class="profile-dropdown" id="profileDropdown">
+                    <button class="profile-dropdown-item" type="button" onclick="showSection('profile-section'); closeProfileDropdown()">
+                        <i data-lucide="user"></i>
+                        <span>Mon profil</span>
+                    </button>
+                    <button class="profile-dropdown-item" type="button" onclick="showSection('messages-section'); closeProfileDropdown()">
+                        <i data-lucide="message-circle"></i>
+                        <span>Messages</span>
+                    </button>
+                    <button class="profile-dropdown-item" type="button" onclick="showSection('favorites-section'); closeProfileDropdown()">
+                        <i data-lucide="heart"></i>
+                        <span>Favoris</span>
+                    </button>
+                    <button class="profile-dropdown-item" type="button" onclick="showSection('settings-section'); closeProfileDropdown()">
+                        <i data-lucide="settings"></i>
+                        <span>Paramètres</span>
+                    </button>
+                    <div class="profile-dropdown-divider"></div>
+                    <button class="profile-dropdown-item danger" type="button" onclick="handleLogout(); closeProfileDropdown()">
+                        <i data-lucide="log-out"></i>
+                        <span>Se déconnecter</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div id="mobileSearchExpand" class="mobile-search-expand">
+        <div class="search-container mobile-search-container" style="position: relative;">
+            <button class="icon-btn mobile-search-submit" type="button" onclick="submitMobileSearch()" title="Search">
+                <i data-lucide="search"></i>
+            </button>
+            <input type="text" id="mobileSearchExpandInput" placeholder="Rechercher des articles..." onkeyup="handleSearch('mobileSearchExpandInput')" onfocus="showSearchHistory('mobileSearchExpandInput','mobileSearchHistoryDropdown','mobileSearchHistoryList')" onkeydown="handleSearchKeydown(event,'mobileSearchExpandInput')">
+            <button class="icon-btn mobile-search-close" onclick="closeMobileSearchExpand()" title="Close search" type="button">
+                <i data-lucide="x"></i>
+            </button>
+            <div class="search-history-dropdown" id="mobileSearchHistoryDropdown">
+                <div class="search-history-header">Recherches récentes</div>
+                <div id="mobileSearchHistoryList"></div>
+                <button class="clear-history-btn" onclick="clearSearchHistory()">Effacer l'historique</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-content">
+                <div class="sidebar-section">
+                    <h3>Catégories</h3>
+                    <ul id="categoryList" class="category-list">
+                        <li><a href="#" onclick="filterByCategory('all', this); return false;"><i data-lucide="layout-grid"></i> Tous</a></li>
+                        <li><a href="#" onclick="filterByCategory('Immobilier', this); return false;"><i data-lucide="home"></i> Immobilier</a></li>
+                        <li><a href="#" onclick="filterByCategory('Véhicules', this); return false;"><i data-lucide="car"></i> Véhicules</a></li>
+                        <li><a href="#" onclick="filterByCategory('Électronique', this); return false;"><i data-lucide="smartphone"></i> Électronique</a></li>
+                        <li><a href="#" onclick="filterByCategory('Emploi & Services', this); return false;"><i data-lucide="briefcase"></i> Emploi & Services</a></li>
+                        <li><a href="#" onclick="filterByCategory('Maison & Jardin', this); return false;"><i data-lucide="armchair"></i> Maison & Jardin</a></li>
+                        <li><a href="#" onclick="filterByCategory('Mode & Beauté', this); return false;"><i data-lucide="shopping-bag"></i> Mode & Beauté</a></li>
+                        <li><a href="#" onclick="filterByCategory('Loisirs & Divertissement', this); return false;"><i data-lucide="palmtree"></i> Loisirs</a></li>
+                        <li><a href="#" onclick="filterByCategory('Informatique', this); return false;"><i data-lucide="monitor"></i> Informatique</a></li>
+                        <li><a href="#" onclick="filterByCategory('Téléphonie', this); return false;"><i data-lucide="phone"></i> Téléphonie</a></li>
+                        <li><a href="#" onclick="filterByCategory('Sport & Santé', this); return false;"><i data-lucide="heart-pulse"></i> Sport & Santé</a></li>
+                        <li><a href="#" onclick="filterByCategory('Matériel Professionnel', this); return false;"><i data-lucide="wrench"></i> Matériel Pro</a></li>
+                        <li><a href="#" onclick="openModal('otherCategoriesModal'); return false;"><i data-lucide="more-horizontal"></i> Autres...</a></li>
+                    </ul>
+                </div>
+                <div class="sidebar-divider"></div>
+                <div class="sidebar-section">
+                    <h3>Mes Actions</h3>
+                    <ul>
+                        <li><a href="#" onclick="showSection('favorites-section'); return false;"><i data-lucide="heart"></i> Favoris</a></li>
+                        <li><a href="#" onclick="showSection('messages-section'); return false;"><i data-lucide="message-circle"></i> Messages</a></li>
+                        <li><a href="#" onclick="openVipModal(); return false;"><i data-lucide="crown"></i> <span style="color: #ffd700;">Devenir VIP</span></a></li>
+                        <li><a href="#" onclick="showSection('settings-section'); return false;"><i data-lucide="settings"></i> Paramètres</a></li>
+                    </ul>
+                </div>
+                <div class="sidebar-divider"></div>
+                <div class="sidebar-actions">
+                    <button class="add-listing-btn sidebar-only" onclick="openModal('addListingModal')" title="Ajouter une annonce">
+                        <i data-lucide="plus-circle"></i>
+                    </button>
+                    <button id="themeToggle" class="theme-toggle">
+                        <i data-lucide="moon" id="themeIcon"></i>
+                        <span>Mode Nuit</span>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <main id="content-area">
+            <section id="home-section" class="content-section active">
+                <div class="hero">
+                    <h1>Trouvez ce dont vous avez besoin, localement.</h1>
+                    <p>Le meilleur marché pour tout.</p>
+                </div>
+                <div class="listings-controls">
+                    <div class="filter-bar">
+                        <button class="filter-btn" onclick="toggleFilterPanel()">
+                            <i data-lucide="sliders-horizontal"></i> Filtres
+                        </button>
+                        <div class="sort-dropdown">
+                            <select id="sortSelect" onchange="handleSort()">
+                                <option value="newest">Plus récents</option>
+                                <option value="price-asc">Prix croissant</option>
+                                <option value="price-desc">Prix décroissant</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="active-filters" id="activeFilters"></div>
+                </div>
+                <div id="filterPanel" class="filter-panel">
+                    <div class="filter-section">
+                        <h4>Prix (DA)</h4>
+                        <div class="price-range">
+                            <input type="number" id="priceMin" placeholder="Min" onkeyup="applyFilters()">
+                            <span>—</span>
+                            <input type="number" id="priceMax" placeholder="Max" onkeyup="applyFilters()">
+                        </div>
+                    </div>
+                    <div class="filter-section">
+                        <h4>Wilaya</h4>
+                        <select id="filterWilaya" onchange="applyFilters()">
+                            <option value="">Toutes les wilayas</option>
+                        </select>
+                    </div>
+                    <div class="filter-section">
+                        <h4>Catégorie</h4>
+                        <select id="filterCategory" onchange="applyFilters()">
+                            <option value="">Toutes les catégories</option>
+                        </select>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="clear-filters-btn" onclick="clearFilters()">Effacer les filtres</button>
+                    </div>
+                </div>
+                <div class="listings-grid" id="listingsGrid"></div>
+                <div id="pagination" class="pagination"></div>
+                <div class="empty-state" id="emptyState" style="display: none;">
+                    <i data-lucide="search-x"></i>
+                    <h3>Aucune annonce trouvée</h3>
+                    <p>Essayez de modifier vos filtres ou votre recherche.</p>
+                    <button class="submit-btn" onclick="clearFilters()">Réinitialiser les filtres</button>
+                </div>
+                <div class="loading-skeleton" id="loadingSkeleton" style="display: none;">
+                    <div class="skeleton-grid">
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="profile-section" class="content-section">
+                <div id="myProfileContent">
+                    <div class="profile-header">
+                        <div class="cover-photo-container">
+                            <img src="https://images.unsplash.com/photo-1557683316-973673baf926?w=1200" alt="Couverture" id="profileCover">
+                            <button class="edit-cover-btn" onclick="openImageEditor('cover')">
+                                <i data-lucide="camera"></i>
+                            </button>
+                            <input type="file" id="coverInput" hidden accept="image/*">
+                        </div>
+                        <div class="profile-info-container">
+                            <div class="profile-pic-wrapper">
+                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="Profil" id="profilePic">
+                                <button class="edit-profile-pic-btn" onclick="openImageEditor('avatar')">
+                                    <i data-lucide="camera"></i>
+                                </button>
+                                <input type="file" id="profilePicInput" hidden accept="image/*">
+                            </div>
+                            <div class="profile-details">
+                                <div class="profile-text">
+                                    <div class="name-badge">
+                                        <h2 id="profileName">Kazmy</h2>
+                                    </div>
+                                    <p id="profileTag">@iamkazmy</p>
+                                    <div id="profileRatingContainer"></div>
+                                    <div class="profile-bio-box">
+                                        <div class="bio-item">
+                                            <i data-lucide="map-pin"></i>
+                                            <span id="profileLocation">Alger, Algérie</span>
+                                        </div>
+                                        <div class="bio-item">
+                                            <i data-lucide="briefcase"></i>
+                                            <span id="profileBusiness">Particulier</span>
+                                        </div>
+                                        <div class="bio-item">
+                                            <i data-lucide="calendar"></i>
+                                            <span>Inscrit en <span id="profileJoined">Mai 2024</span></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="edit-profile-btn" onclick="openModal('editProfileModal')">Modifier le profil</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="profile-content">
+                        <div id="verifiedQuestCard" class="verified-quest-card"></div>
+                        <div class="profile-sections-switcher">
+                            <button class="profile-switch-btn active" id="myProfileListingsTab" type="button" onclick="switchMyProfileSection('listings')">
+                                <i data-lucide="layout-grid"></i>
+                                <span>Annonces</span>
+                            </button>
+                            <button class="profile-switch-btn" id="myProfileReviewsTab" type="button" onclick="switchMyProfileSection('reviews')">
+                                <i data-lucide="star"></i>
+                                <span>Avis</span>
+                            </button>
+                        </div>
+                        <div id="myProfileListingsSection" class="profile-section-panel active">
+                            <h3>Mes Annonces</h3>
+                            <div class="listings-grid" id="myListingsGrid"></div>
+                        </div>
+                        <div id="myProfileReviewsSection" class="profile-section-panel">
+                            <div class="reviews-section">
+                                <h3>Laisser un avis sur mon profil</h3>
+                                <div class="review-form">
+                                    <select id="myProfileReviewRating">
+                                        <option value="5">5 - Excellent</option>
+                                        <option value="4">4 - Très bien</option>
+                                        <option value="3">3 - Correct</option>
+                                        <option value="2">2 - Moyen</option>
+                                        <option value="1">1 - Mauvais</option>
+                                    </select>
+                                    <textarea id="myProfileReviewComment" rows="3" placeholder="Votre commentaire..."></textarea>
+                                    <button class="submit-btn" type="button" onclick="addProfileReview(userProfile.tag,'my-profile')">Publier l'avis</button>
+                                </div>
+                                <h3>Avis sur mon profil</h3>
+                                <div class="reviews-list" id="myProfileReviewsList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="favorites-section" class="content-section">
+                <button class="back-btn" onclick="showSection('home-section')">
+                    <i data-lucide="arrow-left"></i> Retour
+                </button>
+                <h2><i data-lucide="heart" style="width: 24px; height: 24px; color: var(--primary-color);"></i> Mes Favoris</h2>
+                <div class="listings-grid" id="favoritesGrid"></div>
+                <div class="empty-state" id="favoritesEmpty" style="display: none;">
+                    <i data-lucide="heart-off"></i>
+                    <h3>Pas encore de favoris</h3>
+                    <p>Ajoutez des annonces à vos favoris en cliquant sur le cœur.</p>
+                </div>
+            </section>
+
+            <section id="messages-section" class="content-section">
+                <button class="back-btn" onclick="showSection('home-section')">
+                    <i data-lucide="arrow-left"></i> Retour
+                </button>
+                <h2><i data-lucide="message-circle" style="width: 24px; height: 24px; color: var(--primary-color);"></i> Messages</h2>
+                <div class="messages-container">
+                    <div class="messages-list" id="messagesList">
+                        <div class="message-item active" onclick="switchChat('@amine_dz')">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Amine" alt="">
+                            <div class="message-info">
+                                <div class="message-header">
+                                    <span class="message-name">Amine Tech</span>
+                                    <span class="message-time">Il y a 10 min</span>
+                                </div>
+                                <p class="message-preview">Bonjour, est-ce que l'article est toujours disponible ?</p>
+                            </div>
+                            <span class="unread-dot"></span>
+                        </div>
+                        <div class="message-item" onclick="switchChat('@sarah_immobilier')">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah" alt="">
+                            <div class="message-info">
+                                <div class="message-header">
+                                    <span class="message-name">Sarah Immo</span>
+                                    <span class="message-time">Il y a 2 heures</span>
+                                </div>
+                                <p class="message-preview">Merci pour votre intérêt !</p>
+                            </div>
+                        </div>
+                        <div class="message-item" onclick="switchChat('@karim_cars')">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Karim" alt="">
+                            <div class="message-info">
+                                <div class="message-header">
+                                    <span class="message-name">Karim Auto</span>
+                                    <span class="message-time">Hier</span>
+                                </div>
+                                <p class="message-preview">Le prix est négociable.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-area" id="chatArea">
+                        <div class="chat-header">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Amine" alt="" id="chatUserPic" onclick="viewChatUserProfile('@amine_dz')" style="cursor: pointer;">
+                            <div onclick="viewChatUserProfile('@amine_dz')" style="cursor: pointer; flex: 1;">
+                                <h4>
+                                    Amine Tech
+                                    <span class="verified-badge" title="Vendeur Vérifié" onclick="showVerifiedPopup(event)"><img src="https://upload.wikimedia.org/wikipedia/commons/e/e4/Twitter_Verified_Badge.svg" alt="Vérifié" style="filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(1deg) brightness(102%) contrast(105%);"></span>
+                                    <span class="vip-badge" title="VIP" onclick="showVipPopup(event)"><span class="vip-star">★</span></span>
+                                </h4>
+                                <span id="chatUserTag">@amine_dz</span>
+                            </div>
+                            <button class="chat-more-btn" onclick="event.stopPropagation(); openBlockModal();">
+                                <i data-lucide="more-horizontal"></i>
+                            </button>
+                        </div>
+                        <div class="chat-messages" id="chatMessages">
+                            <div class="chat-message received">
+                                <p>Bonjour, est-ce que l'article est toujours disponible ?</p>
+                                <span>Il y a 10 min</span>
+                            </div>
+                            <div class="chat-message sent">
+                                <p>Bonjour ! Oui, l'article est toujours disponible.</p>
+                                <span>Il y a 5 min</span>
+                            </div>
+                        </div>
+                        <div class="chat-input">
+                            <button class="chat-plus-btn" id="chatPlusBtn" onclick="toggleChatActions(event)" title="Ajouter">
+                                <i data-lucide="plus"></i>
+                            </button>
+                            <input type="text" id="chatInput" placeholder="Écrire un message...">
+                            <input type="file" id="chatFileInput" hidden multiple>
+                            <button class="chat-mic-btn" id="chatMicBtn" onclick="startVoiceRecording()" title="Message vocal"><i data-lucide="mic"></i></button>
+                            <button id="chatSendBtn" onclick="sendMessage()"><i data-lucide="send"></i></button>
+                        </div>
+                        <div class="voice-recording-bar" id="voiceRecordingBar">
+                            <span class="voice-rec-dot"></span>
+                            <span class="voice-rec-time" id="voiceRecTime">0:00</span>
+                            <button class="voice-rec-btn voice-rec-cancel" onclick="cancelVoiceRecording()" title="Annuler">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                            <button class="voice-rec-btn voice-rec-send" onclick="stopVoiceRecording(true)" title="Envoyer">
+                                <i data-lucide="send"></i>
+                            </button>
+                        </div>
+                        <div class="chat-actions" id="chatActions">
+                            <button class="chat-action-item" onclick="openChatFilePicker('file'); closeChatActions();" title="Document">
+                                <i data-lucide="file-text"></i>
+                                <span>Document</span>
+                            </button>
+                            <button class="chat-action-item" onclick="openChatFilePicker('media'); closeChatActions();" title="Photos & vidéos">
+                                <i data-lucide="image"></i>
+                                <span>Photos & vidéos</span>
+                            </button>
+                            <button class="chat-action-item" onclick="openChatCamera(); closeChatActions();" title="Caméra">
+                                <i data-lucide="camera"></i>
+                                <span>Caméra</span>
+                            </button>
+                            <button class="chat-action-item" onclick="openChatFilePicker('audio'); closeChatActions();" title="Audio">
+                                <i data-lucide="headphones"></i>
+                                <span>Audio</span>
+                            </button>
+                            <button class="chat-action-item" onclick="showToast('Bientôt disponible', 'info'); closeChatActions();" title="Contact">
+                                <i data-lucide="user"></i>
+                                <span>Contact</span>
+                            </button>
+                            <button class="chat-action-item" onclick="showToast('Bientôt disponible', 'info'); closeChatActions();" title="Sondage">
+                                <i data-lucide="bar-chart-3"></i>
+                                <span>Sondage</span>
+                            </button>
+                            <button class="chat-action-item" onclick="showToast('Bientôt disponible', 'info'); closeChatActions();" title="Événement">
+                                <i data-lucide="calendar"></i>
+                                <span>Événement</span>
+                            </button>
+                            <button class="chat-action-item" onclick="showToast('Bientôt disponible', 'info'); closeChatActions();" title="Sticker">
+                                <i data-lucide="sticker"></i>
+                                <span>Sticker</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="settings-section" class="content-section">
+                <button class="back-btn" onclick="showSection('home-section')">
+                    <i data-lucide="arrow-left"></i> Retour
+                </button>
+                <h2><i data-lucide="settings" style="width: 24px; height: 24px; color: var(--primary-color);"></i> Paramètres</h2>
+                <div class="settings-container">
+                    <div class="settings-group">
+                        <h3>Compte</h3>
+                        <div class="settings-item" onclick="openModal('editProfileModal')">
+                            <div>
+                                <i data-lucide="user"></i>
+                                <span>Modifier mon profil</span>
+                            </div>
+                            <i data-lucide="chevron-right"></i>
+                        </div>
+                        <div class="settings-item" onclick="openModal('changePasswordModal')">
+                            <div>
+                                <i data-lucide="lock"></i>
+                                <span>Changer le mot de passe</span>
+                            </div>
+                            <i data-lucide="chevron-right"></i>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3>Notifications</h3>
+                        <div class="settings-item toggle-item">
+                            <div>
+                                <i data-lucide="bell"></i>
+                                <span>Notifications push</span>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-item toggle-item">
+                            <div>
+                                <i data-lucide="mail"></i>
+                                <span>Emails de notification</span>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3>Confidentialité</h3>
+                        <div class="settings-item toggle-item">
+                            <div>
+                                <i data-lucide="eye-off"></i>
+                                <span>Profil privé</span>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3>Application</h3>
+                        <div class="settings-item toggle-item">
+                            <div>
+                                <i data-lucide="moon"></i>
+                                <span>Mode sombre par défaut</span>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="defaultDarkMode">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3>Support</h3>
+                        <div class="settings-item" onclick="openModal('contactModal')">
+                            <div>
+                                <i data-lucide="help-circle"></i>
+                                <span>Contactez-nous</span>
+                            </div>
+                            <i data-lucide="chevron-right"></i>
+                        </div>
+                        <div class="settings-item" onclick="showSection('terms-section')">
+                            <div>
+                                <i data-lucide="file-text"></i>
+                                <span>Conditions d'utilisation</span>
+                            </div>
+                            <i data-lucide="chevron-right"></i>
+                        </div>
+                    </div>
+                    <div class="settings-group danger-zone">
+                        <h3>Zone dangereuse</h3>
+                        <button class="logout-btn" onclick="handleLogout()">
+                            <i data-lucide="log-out"></i> Se déconnecter
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section id="about-section" class="content-section">
+                <button class="back-btn" onclick="showSection('home-section')">
+                    <i data-lucide="arrow-left"></i> Retour
+                </button>
+                <h2><i data-lucide="info" style="width: 24px; height: 24px; color: var(--primary-color);"></i> À propos</h2>
+                <div class="legal-container">
+                    <p><strong>winjay.dz</strong> est une marketplace moderne pensée pour acheter et vendre localement, en toute simplicité.</p>
+
+                    <h3>Notre mission</h3>
+                    <p>Mettre en relation vendeurs et acheteurs en Algérie avec une expérience rapide, claire et sécurisée.</p>
+
+                    <h3>Ce que vous pouvez faire</h3>
+                    <ul>
+                        <li>Publier des annonces avec photos et détails</li>
+                        <li>Rechercher, filtrer et sauvegarder des favoris</li>
+                        <li>Contacter un vendeur et discuter via la messagerie</li>
+                        <li>Consulter les profils vendeurs (badges Vérifié/VIP)</li>
+                    </ul>
+
+                    <h3>Confiance & sécurité</h3>
+                    <p>Nous encourageons les échanges transparents. Vérifiez toujours l'annonce, posez des questions, et privilégiez les rendez-vous dans des lieux publics.</p>
+                </div>
+            </section>
+
+            <section id="terms-section" class="content-section">
+                <button class="back-btn" onclick="showSection('home-section')">
+                    <i data-lucide="arrow-left"></i> Retour
+                </button>
+                <h2><i data-lucide="file-text" style="width: 24px; height: 24px; color: var(--primary-color);"></i> Conditions d'utilisation</h2>
+                <div class="legal-container">
+                    <p>En utilisant winjay.dz, vous acceptez les conditions suivantes. Ces règles existent pour protéger la communauté.</p>
+
+                    <h3>1. Comptes & responsabilité</h3>
+                    <p>Vous êtes responsable des informations publiées via votre compte, de la sécurité de vos accès, et des échanges effectués.</p>
+
+                    <h3>2. Annonces autorisées</h3>
+                    <ul>
+                        <li>Les annonces doivent être exactes (prix, état, photos, localisation)</li>
+                        <li>Interdiction de contenus illégaux, trompeurs ou offensants</li>
+                        <li>Interdiction de spam, d’arnaques, et de fausses annonces</li>
+                    </ul>
+
+                    <h3>3. Messagerie & comportement</h3>
+                    <p>Respectez les autres utilisateurs. Les insultes, menaces, harcèlement et comportements abusifs peuvent entraîner un blocage.</p>
+
+                    <h3>4. Transactions</h3>
+                    <p>winjay.dz facilite la mise en relation, mais n’intervient pas directement dans la transaction entre acheteur et vendeur.</p>
+
+                    <h3>5. Modération</h3>
+                    <p>Nous pouvons retirer une annonce, limiter un compte ou bloquer un utilisateur en cas de non-respect des règles.</p>
+
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">Ce texte est une base. Pour une version juridique complète, adaptez-le selon vos besoins et la législation applicable.</p>
+                </div>
+            </section>
+
+            <section id="privacy-section" class="content-section">
+                <button class="back-btn" onclick="showSection('home-section')">
+                    <i data-lucide="arrow-left"></i> Retour
+                </button>
+                <h2><i data-lucide="shield" style="width: 24px; height: 24px; color: var(--primary-color);"></i> Confidentialité</h2>
+                <div class="legal-container">
+                    <p>Votre confidentialité est importante. Cette page explique les informations utilisées par winjay.dz et comment elles servent l’expérience.</p>
+
+                    <h3>Données affichées</h3>
+                    <ul>
+                        <li>Nom/username, photo de profil, badges (Vérifié/VIP)</li>
+                        <li>Annonces publiées et avis</li>
+                    </ul>
+
+                    <h3>Données techniques</h3>
+                    <p>Nous pouvons utiliser des données techniques (ex. stockage local du navigateur) pour améliorer l’expérience, comme mémoriser la page/section consultée.</p>
+
+                    <h3>Partage</h3>
+                    <p>Nous ne vendons pas vos données. Certaines actions (ex. partage WhatsApp/Facebook) passent par des services tiers lorsque vous les déclenchez.</p>
+
+                    <h3>Sécurité</h3>
+                    <p>Nous mettons en place des mesures pour protéger l’utilisation, mais aucun système n’est parfait. Restez vigilant lors des échanges.</p>
+                </div>
+            </section>
+
+            <section id="seller-profile-section" class="content-section">
+                <button class="back-btn" onclick="showSection('home-section')">
+                    <i data-lucide="arrow-left"></i> Retour
+                </button>
+                <div id="externalProfileContent"></div>
+            </section>
+        </main>
+    </div>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-logo" onclick="showSection('home-section')" style="cursor: pointer;">
+                <img src="new official winjay dz logo.png" alt="Winjay Logo" style="height: 30px; width: auto; vertical-align: middle; margin-right: 8px;">
+                <span class="text-xl font-bold tracking-tight">winjay<span class="winjay-orange">.dz</span></span>
+            </div>
+            <p>&copy; 2026 winjay.dz. Tous droits réservés.</p>
+            <div class="footer-links">
+                <a href="#" onclick="showSection('about-section'); return false;">À propos</a>
+                <a href="#" onclick="showSection('terms-section'); return false;">Conditions</a>
+                <a href="#" onclick="showSection('privacy-section'); return false;">Confidentialité</a>
+                <a href="javascript:void(0)" onclick="openModal('contactModal')">Contactez-nous</a>
+            </div>
+        </div>
+    </footer>
+
+    <div class="mobile-footer-bar">
+        <button class="free-verified-pill mobile-free-verified-pill" onclick="openModal('freeVerifiedInfoModal')" title="Free verified badge program">
+            <i data-lucide="badge-check"></i>
+            <span><span id="freeVerifiedRemainingMobile">1000</span> free verified left</span>
+        </button>
+    </div>
+
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('loginModal')">&times;</span>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img src="new official winjay dz logo.png" alt="Winjay" style="height: 50px;">
+            </div>
+            <h2 style="text-align: center; margin-bottom: 20px;">Connexion</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="loginEmail" required placeholder="votre@email.com">
+                </div>
+                <div class="form-group">
+                    <label>Mot de passe</label>
+                    <input type="password" id="loginPassword" required placeholder="••••••••">
+                </div>
+                <div class="form-row">
+                    <label class="remember-me">
+                        <input type="checkbox" id="rememberMe"> Se souvenir de moi
+                    </label>
+                    <a href="#" onclick="openForgotPassword()" class="forgot-password">Mot de passe oublié ?</a>
+                </div>
+                <button type="submit" class="submit-btn">Se connecter</button>
+            </form>
+            <div class="social-login">
+                <button class="google-btn" onclick="loginWithGoogle()">
+                    <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                    Continuer avec Google
+                </button>
+            </div>
+            <p style="text-align: center; margin-top: 15px; color: var(--text-muted);">
+                Pas de compte ? <a href="#" onclick="switchToRegister()" style="color: var(--primary-color);">S'inscrire</a>
+            </p>
+        </div>
+    </div>
+
+    <div id="registerModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('registerModal')">&times;</span>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img src="new official winjay dz logo.png" alt="Winjay" style="height: 50px;">
+            </div>
+            <h2 style="text-align: center; margin-bottom: 20px;">Créer un compte</h2>
+            <form id="registerForm">
+                <div class="form-group">
+                    <label>Nom complet</label>
+                    <input type="text" id="registerName" required placeholder="Votre nom">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="registerEmail" required placeholder="votre@email.com">
+                </div>
+                <div class="form-group">
+                    <label>Mot de passe</label>
+                    <div class="password-input-wrapper">
+                        <input type="password" id="registerPassword" required placeholder="••••••••" minlength="6" oninput="checkPasswordStrength()">
+                        <button class="password-toggle-btn" type="button" onclick="togglePasswordVisibility('registerPassword', this)" aria-label="Afficher le mot de passe">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="password-strength" id="passwordStrength">
+                    <div class="strength-bars">
+                        <div class="strength-bar" id="strengthBar1"></div>
+                        <div class="strength-bar" id="strengthBar2"></div>
+                        <div class="strength-bar" id="strengthBar3"></div>
+                        <div class="strength-bar" id="strengthBar4"></div>
+                    </div>
+                    <span id="strengthText" class="strength-text"></span>
+                </div>
+                <div class="form-group">
+                    <label>Confirmer le mot de passe</label>
+                    <div class="password-input-wrapper">
+                        <input type="password" id="registerPasswordConfirm" required placeholder="••••••••">
+                        <button class="password-toggle-btn" type="button" onclick="togglePasswordVisibility('registerPasswordConfirm', this)" aria-label="Afficher le mot de passe">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" class="submit-btn">S'inscrire</button>
+            </form>
+            <div class="social-login">
+                <button class="google-btn" onclick="loginWithGoogle()">
+                    <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                    Continuer avec Google
+                </button>
+            </div>
+            <p style="text-align: center; margin-top: 15px; color: var(--text-muted);">
+                Déjà un compte ? <a href="#" onclick="switchToLogin()" style="color: var(--primary-color);">Se connecter</a>
+            </p>
+        </div>
+    </div>
+
+    <div id="changePasswordModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('changePasswordModal')">&times;</span>
+            <h2 style="margin-bottom: 20px;">Changer le mot de passe</h2>
+            <form id="changePasswordForm">
+                <div class="form-group">
+                    <label>Mot de passe actuel</label>
+                    <input type="password" id="changePasswordCurrent" required placeholder="••••••••">
+                </div>
+                <div class="form-group">
+                    <label>Nouveau mot de passe</label>
+                    <input type="password" id="changePasswordNew" required placeholder="••••••••" minlength="6">
+                </div>
+                <div class="form-group">
+                    <label>Confirmer le nouveau mot de passe</label>
+                    <input type="password" id="changePasswordConfirm" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="submit-btn">Mettre à jour</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="addListingModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('addListingModal')">&times;</span>
+            <h2>Créer une nouvelle annonce</h2>
+            <form id="addListingForm">
+                <div class="form-group">
+                    <label>Titre</label>
+                    <input type="text" id="listingTitle" required placeholder="Que vendez-vous ?">
+                </div>
+                <div class="form-group">
+                    <label>Prix (DA)</label>
+                    <input type="number" id="listingPrice" required placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>Catégorie</label>
+                    <select id="listingCategory"></select>
+                </div>
+                <div class="form-group">
+                    <label>Wilaya</label>
+                    <select id="listingWilaya" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Image de l'article</label>
+                    <div class="file-input-container">
+                        <button type="button" class="file-btn" onclick="document.getElementById('listingImageInput').click()">
+                            <i data-lucide="image"></i> Choisir une photo
+                        </button>
+                        <input type="file" id="listingImageInput" hidden accept="image/*" required>
+                        <div id="imagePreviewContainer" class="image-preview-mini"></div>
+                    </div>
+                </div>
+                <button type="submit" class="submit-btn">Publier l'annonce</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="editProfileModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('editProfileModal')">&times;</span>
+            <h2>Modifier le profil</h2>
+            <form id="editProfileForm">
+                <div class="form-group">
+                    <label>Nom</label>
+                    <input type="text" id="editName" value="John Doe">
+                </div>
+                <div class="form-group">
+                    <label>Nom d'utilisateur</label>
+                    <div class="username-input-wrapper">
+                        <span class="username-at">@</span>
+                        <input type="text" id="editTag" oninput="formatUsernameInput(this)" placeholder="">
+                    </div>
+                    <small id="usernameStatus" style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;"></small>
+                </div>
+                <div class="form-group">
+                    <label>Localisation</label>
+                    <input type="text" id="editLocation" value="Alger, Algérie">
+                </div>
+                <div class="form-group">
+                    <label>Type de compte</label>
+                    <select id="editBusinessType">
+                        <option value="Particulier">Particulier</option>
+                        <option value="Professionnel">Professionnel</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Numéro de téléphone</label>
+                    <input type="tel" id="editPhone" placeholder="+213 ..." autocomplete="tel">
+                </div>
+                <div class="form-group">
+                    <label>Catégorie de travail</label>
+                    <select id="editWorkCategory"></select>
+                </div>
+                <button type="submit" class="submit-btn">Enregistrer les modifications</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="editListingModal" class="modal edit-listing-modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('editListingModal')">&times;</span>
+            <h2>Modifier l'annonce</h2>
+            <form id="editListingForm">
+                <div class="form-group">
+                    <label>Titre</label>
+                    <input type="text" id="editListingTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Prix (DA)</label>
+                    <input type="number" id="editListingPrice" required>
+                </div>
+                <div class="form-group">
+                    <label>Catégorie</label>
+                    <select id="editListingCategory"></select>
+                </div>
+                <div class="form-group">
+                    <label>Wilaya</label>
+                    <select id="editListingWilaya"></select>
+                </div>
+                <button type="button" class="submit-btn" onclick="saveEditedListing()">Enregistrer</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="otherCategoriesModal" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeModal('otherCategoriesModal')">&times;</span>
+            <h2>Toutes les catégories</h2>
+            <div class="search-container modal-search">
+                <i data-lucide="search"></i>
+                <input type="text" id="categorySearch" placeholder="Rechercher une catégorie..." onkeyup="filterCategories()">
+            </div>
+            <div class="categories-grid" id="allCategoriesGrid"></div>
+        </div>
+    </div>
+
+    <div id="contactModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('contactModal')">&times;</span>
+            <h2>Contactez-nous</h2>
+            <form id="contactForm">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="contactEmail" required placeholder="votre@email.com">
+                </div>
+                <div class="form-group">
+                    <label>Numéro de téléphone</label>
+                    <input type="tel" id="contactPhone" required placeholder="+213 ">
+                </div>
+                <div class="form-group">
+                    <label>Message</label>
+                    <textarea id="contactMessage" required placeholder="Pourquoi nous contactez-vous ?" rows="4" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--border-color); background-color: var(--bg-main); color: var(--text-main); font-family: inherit; resize: vertical;"></textarea>
+                </div>
+                <button type="submit" class="submit-btn">Envoyer le message</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="listingDetailModal" class="modal">
+        <div class="modal-content modal-large listing-detail-modal">
+            <div class="listing-modal-header">
+                <span class="close listing-modal-close" onclick="closeModal('listingDetailModal')">&times;</span>
+            </div>
+            <div class="listing-modal-body">
+                <div id="listingDetailContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="imageLightbox" class="modal lightbox-modal">
+        <span class="close lightbox-close" onclick="closeLightbox()">&times;</span>
+        <img id="lightboxImage" src="" alt="">
+    </div>
+
+    <div id="notificationsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('notificationsModal')">&times;</span>
+            <h2 style="margin-bottom: 20px;">Notifications</h2>
+            <div class="notifications-list" id="notificationsList">
+                <div class="notification-item unread">
+                    <div class="notification-icon" style="background-color: var(--primary-color);">
+                        <i data-lucide="heart"></i>
+                    </div>
+                    <div class="notification-content">
+                        <p><strong>Amine Tech</strong> a ajouté votre annonce à ses favoris.</p>
+                        <span>Il y a 5 min</span>
+                    </div>
+                </div>
+                <div class="notification-item unread">
+                    <div class="notification-icon" style="background-color: #25d366;">
+                        <i data-lucide="message-circle"></i>
+                    </div>
+                    <div class="notification-content">
+                        <p><strong>Sarah Immo</strong> vous a envoyé un message.</p>
+                        <span>Il y a 1 heure</span>
+                    </div>
+                </div>
+                <div class="notification-item">
+                    <div class="notification-icon" style="background-color: #1877f2;">
+                        <i data-lucide="share-2"></i>
+                    </div>
+                    <div class="notification-content">
+                        <p><strong>Lina Fashion</strong> a partagé votre annonce.</p>
+                        <span>Il y a 3 heures</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <div id="verifiedSellerModal" class="modal">
+        <div class="modal-content" style="text-align: center;">
+            <span class="close" onclick="closeModal('verifiedSellerModal')">&times;</span>
+            <div style="margin-bottom: 20px;">
+                <div class="verified-badge" style="margin: 0 auto 15px; width: 60px; height: 60px;">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/e/e4/Twitter_Verified_Badge.svg" alt="Vérifié" style="filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(1deg) brightness(102%) contrast(105%); width: 100%; height: 100%;">
+                </div>
+                <h2 style="color: var(--primary-color); font-weight: 700;">Vendeur Vérifié</h2>
+            </div>
+            <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 25px;">
+                Ce profil a été authentifié par l'équipe <strong>winjay.dz</strong>. Nous avons vérifié l'identité et la fiabilité de ce vendeur pour vous garantir une expérience d'achat sécurisée.
+            </p>
+            <div class="confirm-actions">
+                <button class="confirm-ok-btn" onclick="closeModal('verifiedSellerModal'); openVerifiedUpgradeModal()">Devenir Vérifié</button>
+                <button class="confirm-cancel-btn" onclick="closeModal('verifiedSellerModal')">Compris</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="vipBadgeModal" class="modal">
+        <div class="modal-content" style="text-align: center;">
+            <span class="close" onclick="closeModal('vipBadgeModal')">&times;</span>
+            <div style="margin-bottom: 20px;">
+                <div class="vip-badge" style="margin: 0 auto 15px; width: 60px; height: 60px; font-size: 28px;"><span class="vip-star">★</span></div>
+                <h2 style="color: var(--primary-color); font-weight: 700;">Compte VIP</h2>
+            </div>
+            <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 25px;">
+                Ce profil possède un abonnement <strong>VIP</strong>.
+                Les vendeurs VIP bénéficient d'une meilleure visibilité et d'avantages exclusifs sur winjay.dz.
+            </p>
+            <div class="confirm-actions">
+                <button class="confirm-ok-btn" onclick="closeModal('vipBadgeModal'); openVipModal()">Devenir VIP</button>
+                <button class="confirm-cancel-btn" onclick="closeModal('vipBadgeModal')">Compris</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="verifiedUpgradeModal" class="modal">
+        <div class="modal-content vip-modal">
+            <span class="close" onclick="closeModal('verifiedUpgradeModal')">&times;</span>
+            <div class="vip-header">
+                <i data-lucide="badge-check" class="vip-crown"></i>
+                <h2>Devenir Vérifié</h2>
+                <p>Gagnez la confiance des acheteurs avec un badge Vérifié</p>
+            </div>
+            <div class="vip-plans">
+                <div class="vip-plan" onclick="selectVerifiedPlan('monthly')">
+                    <div class="plan-badge">Populaire</div>
+                    <h3>Mensuel</h3>
+                    <div class="plan-price">900 <span>DZD/mois</span></div>
+                    <ul>
+                        <li><i data-lucide="check"></i> Badge Vérifié</li>
+                        <li><i data-lucide="check"></i> Confiance renforcée</li>
+                        <li><i data-lucide="check"></i> Support prioritaire</li>
+                        <li><i data-lucide="check"></i> Contrôle renouvelable</li>
+                    </ul>
+                    <button class="vip-select-btn">Choisir</button>
+                </div>
+                <div class="vip-plan featured" onclick="selectVerifiedPlan('yearly')">
+                    <div class="plan-badge save">-30%</div>
+                    <h3>Annuel</h3>
+                    <div class="plan-price">7,500 <span>DZD/an</span></div>
+                    <ul>
+                        <li><i data-lucide="check"></i> Tout du plan mensuel</li>
+                        <li><i data-lucide="check"></i> Vérification annuelle</li>
+                        <li><i data-lucide="check"></i> Priorité d’assistance</li>
+                        <li><i data-lucide="check"></i> Meilleure visibilité</li>
+                    </ul>
+                    <button class="vip-select-btn">Choisir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="verifiedCodModal" class="modal">
+        <div class="modal-content cod-modal">
+            <span class="close" onclick="closeModal('verifiedCodModal')">&times;</span>
+            <div class="cod-header">
+                <i data-lucide="badge-check"></i>
+                <h2>Confirmation Vérifié</h2>
+            </div>
+            <div class="cod-content">
+                <p>Vous avez choisi le plan <strong id="verifiedPlanName">Mensuel</strong></p>
+                <div class="cod-price" id="verifiedPrice">900 DZD/mois</div>
+                <div class="cod-info">
+                    <p><i data-lucide="info"></i> Un agent vous contactera pour finaliser la vérification</p>
+                    <p>Préparez une pièce d’identité et vos informations de profil.</p>
+                </div>
+                <div class="cod-form">
+                    <div class="form-group">
+                        <label>Numéro de téléphone</label>
+                        <input type="tel" id="verifiedPhone" placeholder="0555 123 456">
+                    </div>
+                    <div class="form-group">
+                        <label>Wilaya</label>
+                        <select id="verifiedWilaya">
+                            <option value="">Sélectionner...</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <button class="submit-btn" onclick="submitVerifiedSubscription()">Confirmer</button>
+        </div>
+    </div>
+
+    <div id="vipModal" class="modal">
+        <div class="modal-content vip-modal">
+            <span class="close" onclick="closeModal('vipModal')">&times;</span>
+            <div class="vip-header">
+                <i data-lucide="crown" class="vip-crown"></i>
+                <h2>Devenir VIP</h2>
+                <p>Profitez d'avantages exclusifs pour vos annonces</p>
+            </div>
+            <div class="vip-plans">
+                <div class="vip-plan" onclick="selectVipPlan('monthly')">
+                    <div class="plan-badge">Populaire</div>
+                    <h3>Mensuel</h3>
+                    <div class="plan-price">1,500 <span>DZD/mois</span></div>
+                    <ul>
+                        <li><i data-lucide="check"></i> Annonces en haut de liste</li>
+                        <li><i data-lucide="check"></i> 10 annonces premium</li>
+                        <li><i data-lucide="check"></i> Badge VIP sur le profil</li>
+                        <li><i data-lucide="check"></i> Support prioritaire</li>
+                    </ul>
+                    <button class="vip-select-btn">Choisir</button>
+                </div>
+                <div class="vip-plan featured" onclick="selectVipPlan('yearly')">
+                    <div class="plan-badge save">-40%</div>
+                    <h3>Annuel</h3>
+                    <div class="plan-price">10,800 <span>DZD/an</span></div>
+                    <ul>
+                        <li><i data-lucide="check"></i> Tout du plan mensuel</li>
+                        <li><i data-lucide="check"></i> Annonces illimitées premium</li>
+                        <li><i data-lucide="check"></i> Analytics détaillés</li>
+                        <li><i data-lucide="check"></i> Promotion sur la page d'accueil</li>
+                    </ul>
+                    <button class="vip-select-btn">Choisir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="codModal" class="modal">
+        <div class="modal-content cod-modal">
+            <span class="close" onclick="closeModal('codModal')">&times;</span>
+            <div class="cod-header">
+                <i data-lucide="package"></i>
+                <h2>Confirmation VIP</h2>
+            </div>
+            <div class="cod-content" id="codContent">
+                <p>Vous avez choisi le plan <strong id="codPlanName">Mensuel</strong></p>
+                <div class="cod-price" id="codPrice">1,500 DZD/mois</div>
+                <div class="cod-info">
+                    <p><i data-lucide="info"></i> Paiement à la livraison (Cash on Delivery)</p>
+                    <p>Un agent vous contactera par téléphone pour confirmer votre abonnement.</p>
+                </div>
+                <div class="cod-form">
+                    <div class="form-group">
+                        <label>Numéro de téléphone</label>
+                        <input type="tel" id="codPhone" placeholder="0555 123 456">
+                    </div>
+                    <div class="form-group">
+                        <label>Wilaya</label>
+                        <select id="codWilaya">
+                            <option value="">Sélectionner...</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <button class="submit-btn" onclick="submitVipSubscription()">Confirmer l'abonnement</button>
+        </div>
+    </div>
+
+    <div id="reportModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('reportModal')">&times;</span>
+            <h2 style="margin-bottom: 20px;">Signaler cette annonce</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Pourquoi signalez-vous cette annonce ?</p>
+            <div class="report-options">
+                <label class="report-option"><input type="radio" name="reportReason" value="fake"> <span>Annonce falsifiée</span></label>
+                <label class="report-option"><input type="radio" name="reportReason" value="spam"> <span>Spam / Publicité</span></label>
+                <label class="report-option"><input type="radio" name="reportReason" value="inappropriate"> <span>Contenu inapproprié</span></label>
+                <label class="report-option"><input type="radio" name="reportReason" value="scam"> <span>Arnaque suspectée</span></label>
+                <label class="report-option"><input type="radio" name="reportReason" value="duplicate"> <span>Duplicata</span></label>
+                <label class="report-option"><input type="radio" name="reportReason" value="other"> <span>Autre</span></label>
+            </div>
+            <textarea id="reportDetails" placeholder="Détails supplémentaires (optionnel)" rows="3"></textarea>
+            <button class="submit-btn" onclick="submitReport()">Envoyer le signalement</button>
+        </div>
+    </div>
+
+    <div id="blockModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('blockModal')">&times;</span>
+            <h2 style="margin-bottom: 20px;">Bloquer / Signaler</h2>
+            <div class="block-options">
+                <button class="block-btn" onclick="blockUser()">
+                    <i data-lucide="ban"></i> Bloquer cet utilisateur
+                </button>
+                <button class="report-btn" onclick="reportUser()">
+                    <i data-lucide="flag"></i> Signaler cet utilisateur
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <button id="scrollTopBtn" class="scroll-top-btn" onclick="scrollToTop()">
+        <i data-lucide="chevron-up"></i>
+    </button>
+
+    <div id="toastContainer" class="toast-container"></div>
+
+    <div id="confirmModal" class="modal">
+        <div class="modal-content confirm-modal-content">
+            <h2 id="confirmTitle">Confirmation</h2>
+            <p id="confirmMessage">Êtes-vous sûr ?</p>
+            <div class="confirm-actions">
+                <button class="confirm-cancel-btn" onclick="closeConfirmModal()">Annuler</button>
+                <button class="confirm-ok-btn" id="confirmOkBtn" onclick="confirmAction()">Confirmer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="freeVerifiedInfoModal" class="modal">
+        <div class="modal-content free-verified-modal">
+            <span class="close" onclick="closeModal('freeVerifiedInfoModal')">&times;</span>
+            <h2>Get Verified for Free</h2>
+            <p class="muted">We’re giving away <strong>1000</strong> verified badges to early users. Complete the tasks to claim a permanent verified badge.</p>
+            <div class="free-verified-counter">
+                <i data-lucide="badge-check"></i>
+                <span><strong id="freeVerifiedRemainingModal">1000</strong> badges left</span>
+            </div>
+            <div class="free-verified-steps">
+                <div class="step"><span class="step-dot">1</span> Set up your profile (name + username)</div>
+                <div class="step"><span class="step-dot">2</span> Add phone number + work category</div>
+                <div class="step"><span class="step-dot">3</span> Refer 10 people to create an account</div>
+                <div class="step"><span class="step-dot">4</span> Verify identity (ID / passport / driving licence)</div>
+            </div>
+            <div class="free-verified-actions">
+                <button class="confirm-cancel-btn" onclick="closeModal('freeVerifiedInfoModal')">Later</button>
+                <button class="confirm-ok-btn" onclick="closeModal('freeVerifiedInfoModal'); openModal('registerModal');">Create account</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="imageChooserModal" class="modal">
+        <div class="modal-content image-chooser-modal">
+            <span class="close" onclick="closeModal('imageChooserModal')">&times;</span>
+            <h2 id="imageChooserTitle">Choose profile picture</h2>
+            <button class="upload-photo-btn" type="button" onclick="triggerImageUpload()">
+                <i data-lucide="plus"></i>
+                <span>Upload photo</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="imageEditorModal" class="modal">
+        <div class="modal-content image-editor-modal">
+            <span class="close" onclick="closeImageEditor()">&times;</span>
+            <h2 id="imageEditorTitle">Modifier l'image</h2>
+            <div class="image-editor-container">
+                <div class="image-preview-wrapper" id="imagePreviewWrapper">
+                    <img id="imageEditorPreview" src="" alt="Preview">
+                </div>
+                <div class="image-controls">
+                    <div class="control-group">
+                        <label>Zoom</label>
+                        <input type="range" id="imageZoom" min="0.8" max="3" step="0.05" value="1" oninput="updateImagePreview()">
+                    </div>
+                    <div class="image-editor-hint">
+                        Glissez l'image pour la repositionner.
+                    </div>
+                    <button class="image-reset-btn" type="button" onclick="resetImageEditor()">Réinitialiser</button>
+                </div>
+            </div>
+            <div class="image-editor-actions">
+                <button class="confirm-cancel-btn" onclick="closeImageEditor()">Cancel</button>
+                <button class="confirm-ok-btn" onclick="applyImageChanges()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="cameraModal" class="modal">
+        <div class="modal-content camera-modal">
+            <span class="close" onclick="closeCameraModal()">&times;</span>
+            <h2 style="margin-bottom: 15px;">Caméra</h2>
+            <video id="cameraPreview" autoplay playsinline muted></video>
+            <div class="camera-timer" id="cameraTimer">0:00</div>
+            <div class="camera-actions">
+                <button class="camera-btn" id="cameraRecordBtn" onclick="toggleCameraRecording()">
+                    <i data-lucide="video"></i>
+                    <span>Enregistrer</span>
+                </button>
+                <button class="camera-btn" id="cameraSendBtn" onclick="sendRecordedVideo()" disabled>
+                    <i data-lucide="send"></i>
+                    <span>Envoyer</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="identityVerificationModal" class="modal">
+        <div class="modal-content identity-modal">
+            <span class="close" onclick="closeModal('identityVerificationModal')">&times;</span>
+            <h2>Verify identity</h2>
+            <p class="muted">Upload a valid ID (front & back). You must be 18+.</p>
+            <div class="identity-grid">
+                <div class="identity-upload">
+                    <div class="identity-label">Front</div>
+                    <button type="button" class="file-btn" onclick="document.getElementById('idFrontInput').click()">
+                        <i data-lucide="image"></i> Upload front
+                    </button>
+                    <input type="file" id="idFrontInput" hidden accept="image/*">
+                    <img id="idFrontPreview" class="identity-preview" alt="" style="display:none;">
+                </div>
+                <div class="identity-upload">
+                    <div class="identity-label">Back</div>
+                    <button type="button" class="file-btn" onclick="document.getElementById('idBackInput').click()">
+                        <i data-lucide="image"></i> Upload back
+                    </button>
+                    <input type="file" id="idBackInput" hidden accept="image/*">
+                    <img id="idBackPreview" class="identity-preview" alt="" style="display:none;">
+                </div>
+            </div>
+            <div class="form-group" style="margin-top: 12px;">
+                <label>Date of birth</label>
+                <input type="date" id="idDob" max="9999-12-31">
+            </div>
+            <label class="remember-me" style="margin-top: 10px;">
+                <input type="checkbox" id="idConfirm18"> I confirm I’m 18+ and this document is valid.
+            </label>
+            <div class="identity-actions">
+                <button class="confirm-cancel-btn" onclick="closeModal('identityVerificationModal')">Cancel</button>
+                <button class="confirm-ok-btn" onclick="submitIdentityVerification()">Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="verifiedCongratsModal" class="modal">
+        <div class="modal-content congrats-modal">
+            <div class="congrats-badge">
+                <i data-lucide="badge-check"></i>
+            </div>
+            <h2>Congratulations!</h2>
+            <p class="muted">You acquired a <strong>lifelong permanent verified badge</strong>.</p>
+            <div class="free-verified-counter">
+                <i data-lucide="sparkles"></i>
+                <span>Welcome to the Verified Club</span>
+            </div>
+            <button class="confirm-ok-btn" onclick="closeModal('verifiedCongratsModal')">Awesome</button>
+        </div>
+    </div>
+
+    <button id="scrollTopBtn" class="scroll-top-btn" onclick="scrollToTop()">
+        <i data-lucide="chevron-up"></i>
+    </button>
+
+    <script src="script.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
