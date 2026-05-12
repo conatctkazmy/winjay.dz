@@ -2623,94 +2623,107 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         showToast('Supabase is not configured', 'alert-circle');
         return;
     }
-
-    const { data: userData, error: userErr } = await client.auth.getUser();
-    const userId = userData?.user?.id || null;
-    if (userErr || !userId) {
-        showToast('Please log in again', 'log-in');
-        openModal('loginModal');
-        return;
+    const submitBtn = e.target?.querySelector?.('button[type="submit"]') || null;
+    const originalBtnText = submitBtn?.textContent || '';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Posting...';
     }
 
-    const title = document.getElementById('listingTitle').value.trim();
-    const price = Number(document.getElementById('listingPrice').value) || 0;
-    const category = document.getElementById('listingCategory').value;
-    const wilaya = document.getElementById('listingWilaya').value;
-    const file = document.getElementById('listingImageInput')?.files?.[0];
+    try {
+        const { data: userData, error: userErr } = await client.auth.getUser();
+        const userId = userData?.user?.id || null;
+        if (userErr || !userId) {
+            showToast('Please log in again', 'log-in');
+            openModal('loginModal');
+            return;
+        }
 
-    if (!title) {
-        showToast('Title is required', 'alert-circle');
-        return;
+        const title = document.getElementById('listingTitle').value.trim();
+        const price = Number(document.getElementById('listingPrice').value) || 0;
+        const category = document.getElementById('listingCategory').value;
+        const wilaya = document.getElementById('listingWilaya').value;
+        const file = document.getElementById('listingImageInput')?.files?.[0];
+
+        if (!title) {
+            showToast('Title is required', 'alert-circle');
+            return;
+        }
+        if (!wilaya) {
+            showToast('Wilaya is required', 'alert-circle');
+            return;
+        }
+        if (!file) {
+            showToast('Please choose a photo', 'alert-circle');
+            return;
+        }
+
+        const { data: inserted, error: insertErr } = await client
+            .from('listings')
+            .insert({
+                owner_id: userId,
+                title,
+                description: null,
+                price,
+                category: category || null,
+                wilaya: wilaya || null,
+                status: 'active'
+            })
+            .select('id')
+            .single();
+
+        if (insertErr || !inserted?.id) {
+            const msg = insertErr?.message || 'Failed to create listing';
+            showToast(msg.includes('row-level security') ? 'Listings: permission denied (RLS)' : msg, 'alert-circle');
+            return;
+        }
+
+        const listingId = Number(inserted.id);
+        const safeName = String(file.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const objectPath = `${userId}/${listingId}/${Date.now()}_${safeName}`;
+
+        const { error: uploadErr } = await client.storage
+            .from(LISTING_IMAGES_BUCKET)
+            .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || undefined });
+
+        if (uploadErr) {
+            await client.from('listings').delete().eq('id', listingId).eq('owner_id', userId);
+            const msg = uploadErr?.message || 'Image upload failed';
+            showToast(msg.includes('row-level security') ? 'Storage: permission denied (RLS)' : msg, 'alert-circle');
+            return;
+        }
+
+        const { data: publicData } = client.storage.from(LISTING_IMAGES_BUCKET).getPublicUrl(objectPath);
+        const publicUrl = publicData?.publicUrl || '';
+        if (!publicUrl) {
+            showToast('Failed to generate image URL', 'alert-circle');
+            return;
+        }
+
+        const { error: imgErr } = await client.from('listing_images').insert({
+            listing_id: listingId,
+            url: publicUrl,
+            sort_order: 1
+        });
+        if (imgErr) {
+            const msg = imgErr?.message || 'Failed to save listing image';
+            showToast(msg.includes('row-level security') ? 'Listing images: permission denied (RLS)' : msg, 'alert-circle');
+            return;
+        }
+
+        closeModal('addListingModal');
+        showToast('Listing posted!', 'check-circle');
+        e.target.reset();
+        selectedListingImage = null;
+        document.getElementById('imagePreviewContainer').style.display = 'none';
+        showSection('home-section');
+        await fetchListingsFromSupabase({ silent: true });
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalBtnText || 'Publish listing';
+        }
     }
-    if (!wilaya) {
-        showToast('Wilaya is required', 'alert-circle');
-        return;
-    }
-    if (!file) {
-        showToast('Please choose a photo', 'alert-circle');
-        return;
-    }
-
-    const { data: inserted, error: insertErr } = await client
-        .from('listings')
-        .insert({
-            owner_id: userId,
-            title,
-            description: null,
-            price,
-            category: category || null,
-            wilaya: wilaya || null,
-            status: 'active'
-        })
-        .select('id')
-        .single();
-
-    if (insertErr || !inserted?.id) {
-        const msg = insertErr?.message || 'Failed to create listing';
-        showToast(msg.includes('row-level security') ? 'Listings: permission denied (RLS)' : msg, 'alert-circle');
-        return;
-    }
-
-    const listingId = Number(inserted.id);
-    const safeName = String(file.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_');
-    const objectPath = `${userId}/${listingId}/${Date.now()}_${safeName}`;
-
-    const { error: uploadErr } = await client.storage
-        .from(LISTING_IMAGES_BUCKET)
-        .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || undefined });
-
-    if (uploadErr) {
-        await client.from('listings').delete().eq('id', listingId).eq('owner_id', userId);
-        const msg = uploadErr?.message || 'Image upload failed';
-        showToast(msg.includes('row-level security') ? 'Storage: permission denied (RLS)' : msg, 'alert-circle');
-        return;
-    }
-
-    const { data: publicData } = client.storage.from(LISTING_IMAGES_BUCKET).getPublicUrl(objectPath);
-    const publicUrl = publicData?.publicUrl || '';
-    if (!publicUrl) {
-        showToast('Failed to generate image URL', 'alert-circle');
-        return;
-    }
-
-    const { error: imgErr } = await client.from('listing_images').insert({
-        listing_id: listingId,
-        url: publicUrl,
-        sort_order: 1
-    });
-    if (imgErr) {
-        const msg = imgErr?.message || 'Failed to save listing image';
-        showToast(msg.includes('row-level security') ? 'Listing images: permission denied (RLS)' : msg, 'alert-circle');
-        return;
-    }
-
-    closeModal('addListingModal');
-    showToast('Listing posted!', 'check-circle');
-    e.target.reset();
-    selectedListingImage = null;
-    document.getElementById('imagePreviewContainer').style.display = 'none';
-    showSection('home-section');
-    await fetchListingsFromSupabase({ silent: true });
 });
 
 document.getElementById('editProfileForm').addEventListener('submit', (e) => {
