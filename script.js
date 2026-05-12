@@ -2630,8 +2630,30 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         submitBtn.textContent = 'Posting...';
     }
 
+    const withTimeout = (promise, ms, label) => {
+        let timeoutId;
+        const timeout = new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error(label)), ms);
+        });
+        return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+    };
+
+    let watchdogFired = false;
+    const watchdogId = setTimeout(() => {
+        watchdogFired = true;
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalBtnText || 'Publish listing';
+        }
+        showToast('Request taking too long. Check your internet and try again.', 'alert-circle');
+    }, 20000);
+
     try {
-        const { data: userData, error: userErr } = await client.auth.getUser();
+        const { data: userData, error: userErr } = await withTimeout(
+            client.auth.getUser(),
+            12000,
+            'Login check timed out'
+        );
         const userId = userData?.user?.id || null;
         if (userErr || !userId) {
             showToast('Please log in again', 'log-in');
@@ -2658,19 +2680,23 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             return;
         }
 
-        const { data: inserted, error: insertErr } = await client
-            .from('listings')
-            .insert({
-                owner_id: userId,
-                title,
-                description: null,
-                price,
-                category: category || null,
-                wilaya: wilaya || null,
-                status: 'active'
-            })
-            .select('id')
-            .single();
+        const { data: inserted, error: insertErr } = await withTimeout(
+            client
+                .from('listings')
+                .insert({
+                    owner_id: userId,
+                    title,
+                    description: null,
+                    price,
+                    category: category || null,
+                    wilaya: wilaya || null,
+                    status: 'active'
+                })
+                .select('id')
+                .single(),
+            15000,
+            'Listing creation timed out'
+        );
 
         if (insertErr || !inserted?.id) {
             const msg = insertErr?.message || 'Failed to create listing';
@@ -2682,9 +2708,13 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         const safeName = String(file.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_');
         const objectPath = `${userId}/${listingId}/${Date.now()}_${safeName}`;
 
-        const { error: uploadErr } = await client.storage
-            .from(LISTING_IMAGES_BUCKET)
-            .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || undefined });
+        const { error: uploadErr } = await withTimeout(
+            client.storage
+                .from(LISTING_IMAGES_BUCKET)
+                .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || undefined }),
+            20000,
+            'Image upload timed out'
+        );
 
         if (uploadErr) {
             await client.from('listings').delete().eq('id', listingId).eq('owner_id', userId);
@@ -2700,11 +2730,15 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             return;
         }
 
-        const { error: imgErr } = await client.from('listing_images').insert({
-            listing_id: listingId,
-            url: publicUrl,
-            sort_order: 1
-        });
+        const { error: imgErr } = await withTimeout(
+            client.from('listing_images').insert({
+                listing_id: listingId,
+                url: publicUrl,
+                sort_order: 1
+            }),
+            15000,
+            'Saving image timed out'
+        );
         if (imgErr) {
             const msg = imgErr?.message || 'Failed to save listing image';
             showToast(msg.includes('row-level security') ? 'Listing images: permission denied (RLS)' : msg, 'alert-circle');
@@ -2717,8 +2751,11 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         selectedListingImage = null;
         document.getElementById('imagePreviewContainer').style.display = 'none';
         showSection('home-section');
-        await fetchListingsFromSupabase({ silent: true });
+        await withTimeout(fetchListingsFromSupabase({ silent: true }), 12000, 'Refreshing listings timed out');
+    } catch (err) {
+        showToast(err?.message || 'Something went wrong', 'alert-circle');
     } finally {
+        clearTimeout(watchdogId);
         if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.textContent = originalBtnText || 'Publish listing';
@@ -2914,6 +2951,10 @@ document.getElementById('changePasswordForm').addEventListener('submit', (e) => 
 });
 
 function showToast(message, icon = 'info') {
+    if (!toastContainer) {
+        alert(String(message || ''));
+        return;
+    }
     const toast = document.createElement('div');
     toast.className = 'toast';
     toast.innerHTML = `<i data-lucide="${icon}"></i><span>${message}</span>`;
