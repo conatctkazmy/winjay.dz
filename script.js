@@ -155,13 +155,13 @@ function mapSupabaseListingRow(row) {
     const profile = row?.profiles && typeof row.profiles === 'object' ? row.profiles : null;
     const sellerFromProfile = profile
         ? {
-              name: profile.name || profile.full_name || 'Seller',
-              tag: profile.tag || (profile.username ? `@${profile.username}` : `@${String(ownerId || '').slice(0, 8)}`),
+              name: profile.display_name || profile.full_name || 'Seller',
+              tag: profile.tag || `@${String(ownerId || '').slice(0, 8)}`,
               pic:
-                  pickFirstValue(profile, ['profile_pic', 'avatar_url', 'profilePic', 'picture', 'photo_url']) ||
+                  pickFirstValue(profile, ['avatar_url', 'profile_pic', 'profilePic', 'picture', 'photo_url']) ||
                   `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(ownerId || 'user'))}`,
               verified: !!(profile.verified ?? profile.is_verified),
-              vip: !!(profile.vip ?? profile.is_vip),
+              vip: !!(profile.is_vip ?? profile.vip),
               rating: Number(profile.rating) || 0,
               reviews: Number(profile.reviews) || 0,
               reviewsData: []
@@ -308,10 +308,10 @@ async function ensureSupabaseProfileRow(client, user) {
 
     const payload = {
         id: user.id,
-        name: baseName || 'User',
+        display_name: baseName || 'User',
         tag: safeTag.startsWith('@') ? safeTag : '@' + safeTag,
-        profile_pic: avatar || null,
-        cover_pic: null,
+        avatar_url: avatar || null,
+        cover_url: null,
         location: 'Algeria',
         business_type: 'Particulier'
     };
@@ -327,11 +327,11 @@ function applySupabaseProfileRowToLocalState(row, user) {
     userProfile = {
         ...createEmptyUserProfile(),
         ...userProfile,
-        name: row.name || userProfile.name,
+        name: row.display_name || userProfile.name,
         tag: row.tag || userProfile.tag,
         profilePic:
-            pickFirstValue(row, ['profile_pic', 'avatar_url', 'profilePic', 'picture', 'photo_url']) || userProfile.profilePic,
-        coverPic: pickFirstValue(row, ['cover_pic', 'coverPic', 'cover_url']) || userProfile.coverPic,
+            pickFirstValue(row, ['avatar_url', 'profile_pic', 'profilePic', 'picture', 'photo_url']) || userProfile.profilePic,
+        coverPic: pickFirstValue(row, ['cover_url', 'cover_pic', 'coverPic', 'cover_url']) || userProfile.coverPic,
         location: row.location || userProfile.location,
         businessType: row.business_type || row.businessType || userProfile.businessType,
         joinedDate: user?.created_at
@@ -2939,7 +2939,7 @@ document.getElementById('editProfileForm').addEventListener('submit', async (e) 
     const { error: upsertErr } = await client.from('profiles').upsert(
         {
             id: user.id,
-            name,
+            display_name: name,
             tag: tagValue,
             location,
             business_type: businessType,
@@ -3240,10 +3240,10 @@ async function fetchProfileSearchResults(term) {
 
     const safe = clean.replace(/[,%]/g, '').slice(0, 32);
     const tagPrefix = safe.startsWith('@') ? safe : '@' + safe;
-    const orClause = `tag.ilike.${tagPrefix}%,name.ilike.%${safe}%`;
+    const orClause = `tag.ilike.${tagPrefix}%,display_name.ilike.%${safe}%`;
     const { data, error } = await client
         .from('profiles')
-        .select('id, name, tag, profile_pic')
+        .select('id, display_name, tag, avatar_url')
         .or(orClause)
         .limit(6);
     if (error) return;
@@ -3258,9 +3258,9 @@ async function fetchProfileSearchResults(term) {
         ${rows
             .map((p) => {
                 const pic =
-                    p.profile_pic ||
+                    p.avatar_url ||
                     `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(p.id || p.tag || 'user'))}`;
-                const name = p.name || 'User';
+                const name = p.display_name || 'User';
                 const tag = p.tag || '';
                 return `
                     <div class="profile-search-item" onclick="openSellerProfileByOwnerId('${p.id}')">
@@ -4424,14 +4424,14 @@ function switchSellerProfileSection(section = 'listings') {
 function mapProfileRowToSeller(row) {
     const id = row?.id || '';
     const pic =
-        pickFirstValue(row, ['profile_pic', 'avatar_url', 'profilePic', 'picture', 'photo_url']) ||
+        pickFirstValue(row, ['avatar_url', 'profile_pic', 'profilePic', 'picture', 'photo_url']) ||
         `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(id || 'user'))}`;
     const cover =
-        pickFirstValue(row, ['cover_pic', 'coverPic', 'cover_url']) || 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1200';
+        pickFirstValue(row, ['cover_url', 'cover_pic', 'coverPic', 'cover_url']) || 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1200';
     const tag = row?.tag || (id ? `@${String(id).slice(0, 8)}` : '@user');
     return {
         id,
-        name: row?.name || row?.full_name || 'Seller',
+        name: row?.display_name || row?.full_name || 'Seller',
         tag,
         pic,
         profilePic: pic,
@@ -4442,7 +4442,7 @@ function mapProfileRowToSeller(row) {
             ? new Date(row.created_at).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })
             : '',
         verified: !!(row?.verified ?? row?.is_verified),
-        vip: !!(row?.vip ?? row?.is_vip),
+        vip: !!(row?.is_vip ?? row?.vip),
         rating: Number(row?.rating) || 0,
         reviews: Number(row?.reviews) || 0,
         reviewsData: []
