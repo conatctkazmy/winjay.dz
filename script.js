@@ -553,6 +553,14 @@ function submitMobileSearch() {
 function handleSearchKeydown(e, inputId = 'mainSearchInput') {
     if (e.key !== 'Enter') return;
     e.preventDefault();
+    const input = document.getElementById(inputId) || document.getElementById('mainSearchInput');
+    const term = String(input?.value || '').trim();
+    if (term.startsWith('@')) {
+        openSellerProfile(term.toLowerCase());
+        if (inputId === 'mobileSearchExpandInput') closeMobileSearchExpand();
+        document.getElementById('searchHistoryDropdown')?.classList.remove('active');
+        return;
+    }
     handleSearch(inputId);
     showSection('home-section');
     if (inputId === 'mobileSearchExpandInput') {
@@ -1886,9 +1894,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
     const blocked = ['profile-section', 'messages-section', 'favorites-section', 'settings-section'];
     const lastSection = (blocked.includes(lastSectionRaw) && !isLoggedIn()) ? 'home-section' : lastSectionRaw;
-    const lastSellerTag = localStorage.getItem('winjayLastSellerTag');
-    if (lastSection === 'seller-profile-section' && lastSellerTag) {
-        openSellerProfile(lastSellerTag);
+    const params = new URLSearchParams(window.location.search);
+    const profileParam = params.get('profile');
+    if (profileParam) {
+        const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
+        openSellerProfile(tag.toLowerCase());
     } else {
         showSection(lastSection);
     }
@@ -2855,8 +2865,14 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
     }
 });
 
-document.getElementById('editProfileForm').addEventListener('submit', (e) => {
+document.getElementById('editProfileForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
 
     const name = document.getElementById('editName').value.trim();
     let tagValue = document.getElementById('editTag').value.trim().toLowerCase().replace(/\s+/g, '');
@@ -2879,9 +2895,24 @@ document.getElementById('editProfileForm').addEventListener('submit', (e) => {
 
     if (!tagValue.startsWith('@')) tagValue = '@' + tagValue;
 
-    // Check if username is taken (exclude current user's tag)
-    const allTags = [...botProfiles.map(p => p.tag), ...reviewers.map(r => r.tag)];
-    if (allTags.includes(tagValue) && tagValue !== userProfile.tag) {
+    const { data: authData, error: authErr } = await client.auth.getUser();
+    const user = authData?.user || null;
+    if (authErr || !user?.id) {
+        showToast('Please log in again', 'log-in');
+        openModal('loginModal');
+        return;
+    }
+
+    const { data: existingProfile, error: existingErr } = await client
+        .from('profiles')
+        .select('id')
+        .eq('tag', tagValue)
+        .maybeSingle();
+    if (existingErr) {
+        showToast(existingErr.message || 'Failed to validate username', 'alert-circle');
+        return;
+    }
+    if (existingProfile?.id && existingProfile.id !== user.id) {
         showToast('Username already taken', 'user-x');
         return;
     }
@@ -2900,14 +2931,33 @@ document.getElementById('editProfileForm').addEventListener('submit', (e) => {
         }
     }
 
-    userProfile.name = name;
-    userProfile.tag = tagValue;
-    userProfile.location = document.getElementById('editLocation').value;
-    userProfile.businessType = document.getElementById('editBusinessType').value;
-    userProfile.phone = document.getElementById('editPhone')?.value?.trim() || '';
-    userProfile.workCategory = document.getElementById('editWorkCategory')?.value || '';
-    saveUserProfileToStorage();
-    updateProfileUI();
+    const location = document.getElementById('editLocation').value;
+    const businessType = document.getElementById('editBusinessType').value;
+    const phone = document.getElementById('editPhone')?.value?.trim() || '';
+    const workCategory = document.getElementById('editWorkCategory')?.value || '';
+
+    const { error: upsertErr } = await client.from('profiles').upsert(
+        {
+            id: user.id,
+            name,
+            tag: tagValue,
+            location,
+            business_type: businessType,
+            phone,
+            work_category: workCategory
+        },
+        { onConflict: 'id' }
+    );
+    if (upsertErr) {
+        showToast(upsertErr.message || 'Failed to save profile', 'alert-circle');
+        return;
+    }
+
+    await client.auth.updateUser({ data: { full_name: name, tag: tagValue } });
+
+    const { data: row } = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
+    if (row) applySupabaseProfileRowToLocalState(row, user);
+
     closeModal('editProfileModal');
     showToast('Profile updated!', 'check-circle');
 });
@@ -3099,7 +3149,6 @@ function formatUsernameInput(input) {
     input.value = value;
 
     const statusEl = document.getElementById('usernameStatus');
-    const allTags = [...botProfiles.map(p => p.tag), ...reviewers.map(r => r.tag)];
     const currentTag = '@' + value;
 
     if (!value) {
@@ -3120,13 +3169,31 @@ function formatUsernameInput(input) {
         return;
     }
 
-    if (allTags.includes(currentTag) && currentTag !== userProfile.tag) {
-        statusEl.textContent = '❌ Username already taken';
-        statusEl.style.color = '#dc3545';
-    } else {
+    if (!statusEl) return;
+    statusEl.textContent = 'Checking...';
+    statusEl.style.color = 'var(--text-muted)';
+    clearTimeout(window.winjayUsernameCheckTimer);
+    window.winjayUsernameCheckTimer = setTimeout(async () => {
+        const client = initSupabase();
+        if (!client || !currentSupabaseUserId) {
+            statusEl.textContent = '✓ Looks good';
+            statusEl.style.color = '#28a745';
+            return;
+        }
+        const { data, error } = await client.from('profiles').select('id').eq('tag', currentTag).maybeSingle();
+        if (error) {
+            statusEl.textContent = '⚠ Unable to check';
+            statusEl.style.color = 'var(--text-muted)';
+            return;
+        }
+        if (data?.id && data.id !== currentSupabaseUserId) {
+            statusEl.textContent = '❌ Username already taken';
+            statusEl.style.color = '#dc3545';
+            return;
+        }
         statusEl.textContent = '✓ Username available';
         statusEl.style.color = '#28a745';
-    }
+    }, 250);
 }
 
 function handleSearch(inputId = 'mainSearchInput') {
@@ -3134,6 +3201,7 @@ function handleSearch(inputId = 'mainSearchInput') {
     const searchTerm = (input?.value || '').toLowerCase().trim();
     currentFilters.search = searchTerm;
     applyFilters();
+    scheduleProfileSearch(searchTerm);
     const mainInput = document.getElementById('mainSearchInput');
     const mobileExpandInput = document.getElementById('mobileSearchExpandInput');
     if (mainInput && inputId !== 'mainSearchInput') mainInput.value = searchTerm;
@@ -3143,6 +3211,70 @@ function handleSearch(inputId = 'mainSearchInput') {
         if (searchHistory.length > 5) searchHistory.pop();
         localStorage.setItem('winjaySearchHistory', JSON.stringify(searchHistory));
     }
+}
+
+let profileSearchTimer = null;
+let lastProfileSearchTerm = '';
+
+function scheduleProfileSearch(term) {
+    clearTimeout(profileSearchTimer);
+    profileSearchTimer = setTimeout(() => {
+        fetchProfileSearchResults(term);
+    }, 220);
+}
+
+async function fetchProfileSearchResults(term) {
+    const container = document.getElementById('profileSearchResults');
+    if (!container) return;
+    const clean = String(term || '').trim();
+    if (!clean || clean.length < 2) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+    if (clean === lastProfileSearchTerm) return;
+    lastProfileSearchTerm = clean;
+
+    const client = initSupabase();
+    if (!client) return;
+
+    const safe = clean.replace(/[,%]/g, '').slice(0, 32);
+    const tagPrefix = safe.startsWith('@') ? safe : '@' + safe;
+    const orClause = `tag.ilike.${tagPrefix}%,name.ilike.%${safe}%`;
+    const { data, error } = await client
+        .from('profiles')
+        .select('id, name, tag, profile_pic')
+        .or(orClause)
+        .limit(6);
+    if (error) return;
+    const rows = Array.isArray(data) ? data : [];
+    if (rows.length === 0) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = `
+        <div class="profile-search-header">People</div>
+        ${rows
+            .map((p) => {
+                const pic =
+                    p.profile_pic ||
+                    `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(p.id || p.tag || 'user'))}`;
+                const name = p.name || 'User';
+                const tag = p.tag || '';
+                return `
+                    <div class="profile-search-item" onclick="openSellerProfileByOwnerId('${p.id}')">
+                        <img class="profile-search-avatar" src="${pic}" alt="">
+                        <div class="profile-search-meta">
+                            <div class="profile-search-name">${name}</div>
+                            <div class="profile-search-tag">${tag}</div>
+                        </div>
+                    </div>`;
+            })
+            .join('')}
+    `;
+    container.style.display = 'block';
+    lucide.createIcons();
 }
 
 function showSearchHistory(inputId = 'mainSearchInput', dropdownId = 'searchHistoryDropdown', listId = 'searchHistoryList') {
@@ -4171,14 +4303,14 @@ function openListingDetail(listingId) {
                     <span><i data-lucide="calendar"></i> ${item.date}</span>
                 </div>
                 <h3>Vendeur</h3>
-                <div class="seller-card" onclick="openSellerProfile('${seller.tag}')">
+                <div class="seller-card" onclick="openSellerProfileByOwnerId('${item.owner_id}')">
                     <div class="seller-info">
                         <img src="${seller.pic || seller.profilePic}" class="seller-avatar">
                         <div>
                             <div class="seller-name">${seller.name} ${getUserBadgesHTML(seller)}</div>
                             <div class="seller-tag">${seller.tag}</div>
                             ${getRatingHTML(seller.rating || 4.5, seller.reviews || 10)}
-                            <button class="see-reviews-btn" type="button" onclick="event.stopPropagation(); openSellerProfile('${seller.tag}', 'reviews')">
+                            <button class="see-reviews-btn" type="button" onclick="event.stopPropagation(); openSellerProfileByOwnerId('${item.owner_id}', 'reviews')">
                                 <i data-lucide="star"></i>
                                 Avis du vendeur
                             </button>
@@ -4255,6 +4387,26 @@ function shareListing(platform, id) {
     }
 }
 
+async function shareMyProfile() {
+    if (!isLoggedIn()) {
+        openModal('loginModal');
+        return;
+    }
+    const tag = userProfile.tag || '';
+    const url = `${window.location.origin}${window.location.pathname}?profile=${encodeURIComponent(tag)}`;
+    const text = `Check my profile on winjay.dz: ${userProfile.name} (${tag})`;
+    try {
+        if (navigator.share) {
+            await navigator.share({ title: 'winjay.dz', text, url });
+            return;
+        }
+    } catch (e) {
+        null;
+    }
+    const ok = await copyTextToClipboard(url);
+    showToast(ok ? 'Link copied!' : 'Unable to copy link', ok ? 'copy' : 'alert-circle');
+}
+
 function switchSellerProfileSection(section = 'listings') {
     const listingsTab = document.getElementById('sellerListingsTab');
     const reviewsTab = document.getElementById('sellerReviewsTab');
@@ -4269,22 +4421,137 @@ function switchSellerProfileSection(section = 'listings') {
     reviewsPanel.classList.toggle('active', !showListings);
 }
 
-function openSellerProfile(tag, section = 'listings') {
-    currentSellerProfileTag = tag;
-    if (tag === userProfile.tag) {
-        localStorage.removeItem('winjayLastSellerTag');
+function mapProfileRowToSeller(row) {
+    const id = row?.id || '';
+    const pic =
+        pickFirstValue(row, ['profile_pic', 'avatar_url', 'profilePic', 'picture', 'photo_url']) ||
+        `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(id || 'user'))}`;
+    const cover =
+        pickFirstValue(row, ['cover_pic', 'coverPic', 'cover_url']) || 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1200';
+    const tag = row?.tag || (id ? `@${String(id).slice(0, 8)}` : '@user');
+    return {
+        id,
+        name: row?.name || row?.full_name || 'Seller',
+        tag,
+        pic,
+        profilePic: pic,
+        cover,
+        location: row?.location || 'Algeria',
+        businessType: row?.business_type || row?.businessType || 'Particulier',
+        joinedDate: row?.created_at
+            ? new Date(row.created_at).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })
+            : '',
+        verified: !!(row?.verified ?? row?.is_verified),
+        vip: !!(row?.vip ?? row?.is_vip),
+        rating: Number(row?.rating) || 0,
+        reviews: Number(row?.reviews) || 0,
+        reviewsData: []
+    };
+}
+
+async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
+    if (!ownerId) return;
+    if (ownerId === currentSupabaseUserId) {
         closeModal('listingDetailModal');
         showSection('profile-section');
         switchMyProfileSection(section);
         return;
     }
-    localStorage.setItem('winjayLastSellerTag', tag);
-    let seller = botProfiles.find(p => p.tag === tag);
-    if (!seller) seller = reviewers.find(p => p.tag === tag);
-    if (!seller) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { data: profileRow, error } = await client.from('profiles').select('*').eq('id', ownerId).maybeSingle();
+    if (error || !profileRow?.id) {
+        showToast('Seller profile not found', 'alert-circle');
+        return;
+    }
+    currentSellerProfileTag = profileRow.tag || '';
+    const seller = mapProfileRowToSeller(profileRow);
     closeModal('listingDetailModal');
     const content = document.getElementById('externalProfileContent');
-    const sellerListings = listings.filter(l => l.seller && l.seller.tag === tag);
+    const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === ownerId);
+    if (!content) return;
+    content.innerHTML = `
+        <div class="profile-header">
+            <div class="cover-photo-container">
+                <img src="${seller.cover || 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1200'}" alt="Couverture">
+            </div>
+            <div class="profile-info-container">
+                <div class="profile-pic-wrapper">
+                    <img src="${seller.pic || seller.profilePic}" alt="Profil">
+                </div>
+                <div class="profile-details">
+                    <div class="profile-text">
+                        <div class="name-badge"><h2>${seller.name}</h2> ${getUserBadgesHTML(seller)}</div>
+                        <p>${seller.tag}</p>
+                        ${getRatingHTML(seller.rating, seller.reviews)}
+                        <div class="profile-bio-box">
+                            <div class="bio-item"><i data-lucide="map-pin"></i><span>${seller.location}</span></div>
+                            <div class="bio-item"><i data-lucide="briefcase"></i><span>${seller.businessType}</span></div>
+                            ${seller.joinedDate ? `<div class="bio-item"><i data-lucide="calendar"></i><span>Inscrit en ${seller.joinedDate}</span></div>` : ''}
+                        </div>
+                    </div>
+                    <button class="message-contact-btn" onclick="startChatWithSeller('${seller.tag}')">
+                        <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
+                        Message
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="profile-content">
+            <div class="profile-sections-switcher">
+                <button class="profile-switch-btn active" id="sellerListingsTab" type="button" onclick="switchSellerProfileSection('listings')">
+                    <i data-lucide="layout-grid"></i>
+                    <span>Listings</span>
+                </button>
+                <button class="profile-switch-btn" id="sellerReviewsTab" type="button" onclick="switchSellerProfileSection('reviews')">
+                    <i data-lucide="star"></i>
+                    <span>Reviews</span>
+                </button>
+            </div>
+            <div id="sellerListingsSection" class="profile-section-panel active">
+                ${sellerListings.length > 0 ? `<h3>Listings from ${seller.name}</h3><div class="listings-grid">${sellerListings.map(l => createCardHTML(l)).join('')}</div>` : '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="shopping-bag" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>No listings yet.</p></div>'}
+            </div>
+            <div id="sellerReviewsSection" class="profile-section-panel">
+                <div class="reviews-section">
+                    <h3>Leave a review on ${seller.name}</h3>
+                    <div class="review-form">
+                        <select id="sellerProfileReviewRating">
+                            <option value="5">5 - Excellent</option>
+                            <option value="4">4 - Very good</option>
+                            <option value="3">3 - Ok</option>
+                            <option value="2">2 - Bad</option>
+                            <option value="1">1 - Very bad</option>
+                        </select>
+                        <textarea id="sellerProfileReviewComment" rows="3" placeholder="Your comment..."></textarea>
+                        <button class="submit-btn" type="button" onclick="addProfileReview('${seller.tag}','seller-profile')">Post review</button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    showSection('seller-profile-section');
+    switchSellerProfileSection(section);
+    lucide.createIcons();
+}
+
+async function openSellerProfile(tag, section = 'listings') {
+    currentSellerProfileTag = tag;
+    if (tag === userProfile.tag) {
+        closeModal('listingDetailModal');
+        showSection('profile-section');
+        switchMyProfileSection(section);
+        return;
+    }
+    const client = initSupabase();
+    if (!client) return;
+    const { data: profileRow, error } = await client.from('profiles').select('*').eq('tag', tag).maybeSingle();
+    if (error || !profileRow?.id) {
+        showToast('Seller profile not found', 'alert-circle');
+        return;
+    }
+    const seller = mapProfileRowToSeller(profileRow);
+    closeModal('listingDetailModal');
+    const content = document.getElementById('externalProfileContent');
+    const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === profileRow.id);
     content.innerHTML = `
         <div class="profile-header">
             <div class="cover-photo-container">
