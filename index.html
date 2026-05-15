@@ -139,6 +139,7 @@
                 </div>
             </div>
         </aside>
+        <div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebarOverlay()"></div>
 
         <main id="content-area">
             <section id="home-section" class="content-section active">
@@ -722,15 +723,27 @@
                 <div class="form-group">
                     <label>Image de l'article</label>
                     <div class="file-input-container">
-                        <button type="button" class="file-btn" onclick="document.getElementById('listingImageInput').click()">
-                            <i data-lucide="image"></i> Choisir une photo
+                        <button type="button" class="file-btn" onclick="openListingImagesModal()">
+                            <i data-lucide="image"></i> Ajouter des photos
                         </button>
-                        <input type="file" id="listingImageInput" hidden accept="image/*" required>
                         <div id="imagePreviewContainer" class="image-preview-mini"></div>
                     </div>
                 </div>
                 <button type="submit" class="submit-btn">Publier l'annonce</button>
             </form>
+        </div>
+    </div>
+
+    <div id="listingImagesModal" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeListingImagesModal()">&times;</span>
+            <h2>Photos du produit</h2>
+            <p class="muted" style="margin-top: 6px;">Ajoutez jusqu’à 10 photos. Touchez un emplacement pour ajouter une photo.</p>
+            <div id="listingImagesSlots" class="listing-images-grid"></div>
+            <input type="file" id="listingImageSlotInput" hidden accept="image/*">
+            <div class="confirm-actions" style="margin-top: 16px;">
+                <button class="confirm-ok-btn" onclick="closeListingImagesModal()">Done</button>
+            </div>
         </div>
     </div>
 
@@ -1077,6 +1090,18 @@
     </button>
 
     <div id="toastContainer" class="toast-container"></div>
+
+    <div id="listingLimitModal" class="modal">
+        <div class="modal-content confirm-modal-content" style="text-align: center;">
+            <h2>Listing limit reached</h2>
+            <p id="listingLimitMessage">You reached your listing limit of 4.</p>
+            <div class="confirm-actions" style="flex-wrap: wrap;">
+                <button class="confirm-ok-btn" onclick="upgradeToVipFromListingLimit()">Become VIP</button>
+                <button class="confirm-ok-btn" onclick="upgradeToVerifiedFromListingLimit()">Get Verified</button>
+                <button class="confirm-cancel-btn" onclick="closeModal('listingLimitModal')">Close</button>
+            </div>
+        </div>
+    </div>
 
     <div id="confirmModal" class="modal">
         <div class="modal-content confirm-modal-content">
