@@ -2130,6 +2130,12 @@ async function switchChat(tag, isModal = false) {
 }
 
 function viewChatUserProfile(tag) {
+    if (!tag) return;
+    const chat = mockChats?.[tag] || null;
+    if (chat?.userId) {
+        openSellerProfileByOwnerId(chat.userId);
+        return;
+    }
     openSellerProfile(tag);
 }
 

@@ -239,8 +239,10 @@ html.app-loading main {
     border: 1px solid var(--border-color);
     border-radius: 14px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.12);
-    overflow: hidden;
-    z-index: 1400;
+    overflow: auto;
+    max-height: calc(100vh - 80px);
+    -webkit-overflow-scrolling: touch;
+    z-index: 2000;
 }
 
 .profile-dropdown.active {
@@ -4273,6 +4275,15 @@ footer {
     .listing-images-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
+
+    .profile-dropdown {
+        position: fixed;
+        top: 64px;
+        right: 10px;
+        left: auto;
+        min-width: min(260px, calc(100vw - 20px));
+        max-width: calc(100vw - 20px);
+    }
 }
 
 @media (max-width: 420px) {
@@ -4310,6 +4321,12 @@ footer {
     .nav-right {
         gap: 4px;
     }
+
+    .notification-btn,
+    .messages-btn {
+        display: none;
+    }
+
 
     .add-listing-btn,
     .profile-btn {
