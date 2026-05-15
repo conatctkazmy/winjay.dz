@@ -1568,9 +1568,25 @@ main.expanded {
     margin-bottom: 4px;
 }
 
+.message-title {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+}
+
 .message-name {
     font-weight: 700;
     font-size: 0.95rem;
+}
+
+.message-tag {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
 }
 
 .message-time {

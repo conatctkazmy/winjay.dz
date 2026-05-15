@@ -1653,13 +1653,14 @@ async function startChatWithSellerByOwnerId(ownerId) {
         return;
     }
     const seller = mapProfileRowToSeller(profileRow);
+    const chatKey = `id:${ownerId}`;
     const chatTag = seller.tag || `@${String(ownerId).slice(0, 8)}`;
     closeModal('listingDetailModal');
     suppressNextMessagesBootstrap = true;
     showSection('messages-section');
     await bootstrapMessages();
-    if (!mockChats[chatTag]) {
-        mockChats[chatTag] = {
+    if (!mockChats[chatKey]) {
+        mockChats[chatKey] = {
             userId: ownerId,
             tag: chatTag,
             name: seller.name,
@@ -1669,9 +1670,9 @@ async function startChatWithSellerByOwnerId(ownerId) {
             messages: []
         };
     }
-    activeChatTag = chatTag;
+    activeChatTag = chatKey;
     renderMessagesList();
-    await switchChat(chatTag);
+    await switchChat(chatKey);
 }
 
 async function refreshUnreadMessageCount() {
@@ -1736,7 +1737,8 @@ async function refreshLiveChatsFromSupabase() {
         const p = profilesById[id];
         const seller = mapProfileRowToSeller(p?.id ? p : { id });
         const tag = seller.tag || `@${String(id).slice(0, 8)}`;
-        chats[tag] = {
+        const key = `id:${id}`;
+        chats[key] = {
             userId: id,
             tag,
             name: seller.name,
@@ -1748,8 +1750,9 @@ async function refreshLiveChatsFromSupabase() {
     });
     rows.forEach((r) => {
         const otherId = r.sender_id === currentSupabaseUserId ? r.receiver_id : r.sender_id;
-        const ownerTag = Object.keys(chats).find((t) => chats[t]?.userId === otherId) || null;
+        const ownerTag = otherId ? `id:${otherId}` : null;
         if (!ownerTag) return;
+        if (!chats[ownerTag]) return;
         const type = r.sender_id === currentSupabaseUserId ? 'sent' : 'received';
         chats[ownerTag].messages.push({
             id: r.id,
@@ -1936,12 +1939,16 @@ function renderMessagesList() {
             else preview = last.text || '';
         }
 
+        const displayTag = chat?.tag || tag;
         return `
             <div class="message-item ${tag === activeChatTag ? 'active' : ''}" onclick="switchChat('${tag}')">
                 <img src="${chat.pic}" alt="">
                 <div class="message-info">
                     <div class="message-header">
-                        <span class="message-name">${escapeHtml(chat.name)}</span>
+                        <div class="message-title">
+                            <span class="message-name">${escapeHtml(chat.name)}</span>
+                            <span class="message-tag">${escapeHtml(displayTag)}</span>
+                        </div>
                         <span class="message-time">${escapeHtml(last?.time || '')}</span>
                     </div>
                     <p class="message-preview">${escapeHtml(preview)}</p>
@@ -2001,12 +2008,13 @@ async function startChatWithSeller(tag) {
         }
         const seller = mapProfileRowToSeller(profileRow);
         const normalizedTag = seller.tag || (String(tag).startsWith('@') ? tag : '@' + tag);
+        const chatKey = `id:${profileRow.id}`;
         closeModal('listingDetailModal');
         suppressNextMessagesBootstrap = true;
         showSection('messages-section');
         await bootstrapMessages();
-        if (!mockChats[normalizedTag]) {
-            mockChats[normalizedTag] = {
+        if (!mockChats[chatKey]) {
+            mockChats[chatKey] = {
                 userId: profileRow.id,
                 tag: normalizedTag,
                 name: seller.name,
@@ -2016,9 +2024,9 @@ async function startChatWithSeller(tag) {
                 messages: []
             };
         }
-        activeChatTag = normalizedTag;
+        activeChatTag = chatKey;
         renderMessagesList();
-        await switchChat(normalizedTag);
+        await switchChat(chatKey);
         return;
     }
 
@@ -2102,8 +2110,8 @@ async function switchChat(tag, isModal = false) {
 
     const displayTag = chat?.tag || tag;
     chatHeader.innerHTML = `
-        <img src="${chat.pic}" alt="" id="chatUserPic" onclick="viewChatUserProfile('${displayTag}')" style="cursor: pointer;">
-        <div onclick="viewChatUserProfile('${displayTag}')" style="cursor: pointer; flex: 1;">
+        <img src="${chat.pic}" alt="" id="chatUserPic" onclick="viewChatUserProfile('${tag}')" style="cursor: pointer;">
+        <div onclick="viewChatUserProfile('${tag}')" style="cursor: pointer; flex: 1;">
             <h4>${chat.name} ${getUserBadgesHTML(chat)}</h4>
             <span id="chatUserTag">${displayTag}</span>
         </div>
