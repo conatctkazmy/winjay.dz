@@ -29,6 +29,7 @@ const MARKETPLACE_LISTINGS_STORAGE_KEY = 'marketplaceListingsV1';
 const LISTING_IMAGES_BUCKET = 'listing-images';
 const PROFILE_IMAGES_BUCKET = 'profile-images';
 const FREE_LISTING_LIMIT = 4;
+const SELLER_PROFILE_LAST_TAG_STORAGE_KEY = 'winjayLastSellerProfileTagV1';
 
 function normalizeSupabaseProjectUrl(url) {
     if (typeof url !== 'string') return '';
@@ -1525,6 +1526,43 @@ function isMessagingBackendMissing(error) {
     return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('messages');
 }
 
+function isProfileReviewsBackendMissing(error) {
+    const msg = String(error?.message || '');
+    return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('profile_reviews');
+}
+
+function setSellerProfileRouteTag(tag) {
+    const t = String(tag || '').trim().toLowerCase();
+    if (!t) return;
+    try {
+        localStorage.setItem(SELLER_PROFILE_LAST_TAG_STORAGE_KEY, t);
+    } catch (e) {
+        null;
+    }
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('profile', t.startsWith('@') ? t : '@' + t);
+        window.history.replaceState({}, '', url.toString());
+    } catch (e) {
+        null;
+    }
+}
+
+function clearSellerProfileRouteTag() {
+    try {
+        localStorage.removeItem(SELLER_PROFILE_LAST_TAG_STORAGE_KEY);
+    } catch (e) {
+        null;
+    }
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('profile');
+        window.history.replaceState({}, '', url.toString());
+    } catch (e) {
+        null;
+    }
+}
+
 async function fetchProfileByTag(tag) {
     const client = initSupabase();
     if (!client) return null;
@@ -1534,6 +1572,51 @@ async function fetchProfileByTag(tag) {
     const { data, error } = await client.from('profiles').select('*').eq('tag', normalized).maybeSingle();
     if (error) return null;
     return data || null;
+}
+
+function computeRatingSummaryFromReviews(reviewsData) {
+    const rows = Array.isArray(reviewsData) ? reviewsData : [];
+    if (!rows.length) return { rating: 0, reviews: 0 };
+    const sum = rows.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
+    const rating = Math.round((sum / rows.length) * 10) / 10;
+    return { rating, reviews: rows.length };
+}
+
+async function fetchProfileReviews(profileId) {
+    const client = initSupabase();
+    if (!client || !profileId) return [];
+    const { data, error } = await client
+        .from('profile_reviews')
+        .select('id, created_at, author_id, rating, comment')
+        .eq('target_profile_id', profileId)
+        .order('created_at', { ascending: false })
+        .limit(200);
+    if (error) {
+        if (!isProfileReviewsBackendMissing(error)) showToast(error.message || 'Failed to load reviews', 'alert-circle');
+        return [];
+    }
+    const rows = Array.isArray(data) ? data : [];
+    const authorIds = Array.from(new Set(rows.map((r) => r.author_id).filter(Boolean)));
+    let profilesById = {};
+    if (authorIds.length) {
+        const { data: profRows } = await client.from('profiles').select('id, display_name, tag, avatar_url').in('id', authorIds);
+        (profRows || []).forEach((p) => (profilesById[p.id] = p));
+    }
+    return rows.map((r) => {
+        const p = profilesById[r.author_id] || {};
+        return {
+            user: p.display_name || 'User',
+            tag: p.tag || `@${String(r.author_id || '').slice(0, 8)}`,
+            pic: p.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(r.author_id || 'user'))}`,
+            rating: Number(r.rating) || 0,
+            date: formatRelativeDate(r.created_at),
+            comment: escapeHtml(r.comment || ''),
+            reply: null,
+            replyAuthorTag: null,
+            thread: [],
+            likes: 0
+        };
+    });
 }
 
 async function startChatWithSellerByOwnerId(ownerId) {
@@ -2206,7 +2289,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         await openSellerProfile(tag.toLowerCase());
     } else {
-        showSection(lastSection);
+        if (lastSection === 'seller-profile-section') {
+            const storedTag = (localStorage.getItem(SELLER_PROFILE_LAST_TAG_STORAGE_KEY) || '').trim();
+            if (storedTag) {
+                showSection('seller-profile-section');
+                const content = document.getElementById('externalProfileContent');
+                if (content) {
+                    content.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 44px; height: 44px;"></i><p style="margin-top: 12px;">Loading profile...</p></div>`;
+                    lucide.createIcons();
+                }
+                await openSellerProfile(storedTag.toLowerCase());
+            } else {
+                showSection('home-section');
+            }
+        } else {
+            showSection(lastSection);
+        }
     }
 
     renderListings();
@@ -2214,6 +2312,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderFavorites();
     setupChatFeatures();
     await bootstrapMessages();
+    document.documentElement.classList.remove('app-loading');
 });
 
 function setupPasswordNoSpaceInputs() {
@@ -4081,13 +4180,17 @@ function showSection(sectionId) {
     localStorage.setItem('winjayLastSection', sectionId);
 
     if (sectionId === 'home-section') {
+        clearSellerProfileRouteTag();
         renderListings();
     } else if (sectionId === 'favorites-section') {
+        clearSellerProfileRouteTag();
         renderFavorites();
     } else if (sectionId === 'profile-section') {
+        clearSellerProfileRouteTag();
         renderMyListings();
         renderMyProfileReviews();
     } else if (sectionId === 'messages-section') {
+        clearSellerProfileRouteTag();
         bootstrapMessages();
     }
 }
@@ -4568,14 +4671,11 @@ function saveThreadEdit(contextType, targetId, index, threadIndex) {
     }
 }
 
-function addProfileReview(targetTag, source = 'seller-profile') {
-    const profile = findProfileByTag(targetTag);
-    if (!profile) return;
-
+async function addProfileReview(targetTag, source = 'seller-profile') {
     const ratingInput = document.getElementById(source === 'my-profile' ? 'myProfileReviewRating' : 'sellerProfileReviewRating');
     const commentInput = document.getElementById(source === 'my-profile' ? 'myProfileReviewComment' : 'sellerProfileReviewComment');
     const rating = Number(ratingInput?.value || 0);
-    const comment = commentInput?.value.trim() || '';
+    const comment = commentInput?.value?.trim?.() || '';
 
     if (!rating || rating < 1 || rating > 5) {
         showToast('Sélectionnez une note entre 1 et 5.', 'alert-circle');
@@ -4586,30 +4686,75 @@ function addProfileReview(targetTag, source = 'seller-profile') {
         return;
     }
 
-    const reviewer = getCurrentReviewerIdentity();
-    profile.reviewsData = profile.reviewsData || [];
-    profile.reviewsData.unshift({
-        user: reviewer.user,
-        tag: reviewer.tag,
-        pic: reviewer.pic,
+    if (DEMO_MODE) {
+        const profile = findProfileByTag(targetTag);
+        if (!profile) return;
+        const reviewer = getCurrentReviewerIdentity();
+        profile.reviewsData = profile.reviewsData || [];
+        profile.reviewsData.unshift({
+            user: reviewer.user,
+            tag: reviewer.tag,
+            pic: reviewer.pic,
+            rating,
+            date: "À l'instant",
+            comment: escapeHtml(comment),
+            reply: null,
+            replyAuthorTag: null,
+            thread: [],
+            likes: 0
+        });
+        recalculateProfileRating(profile);
+        ratingInput.value = '5';
+        commentInput.value = '';
+        if (targetTag === userProfile.tag) {
+            updateProfileUI();
+            renderMyProfileReviews();
+            switchMyProfileSection('reviews');
+        } else {
+            openSellerProfile(targetTag, 'reviews');
+        }
+        showToast('Avis ajouté avec succès !', 'check-circle');
+        return;
+    }
+
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId) {
+        showToast('Please log in again', 'log-in');
+        return;
+    }
+    const targetProfile = await fetchProfileByTag(targetTag);
+    if (!targetProfile?.id) {
+        showToast('Seller profile not found', 'alert-circle');
+        return;
+    }
+
+    const { error } = await client.from('profile_reviews').insert({
+        target_profile_id: targetProfile.id,
+        author_id: currentSupabaseUserId,
         rating,
-        date: "À l'instant",
-        comment: escapeHtml(comment),
-        reply: null,
-        replyAuthorTag: null,
-        thread: [],
-        likes: 0
+        comment
     });
-    recalculateProfileRating(profile);
+    if (error) {
+        if (isProfileReviewsBackendMissing(error)) {
+            showToast('Profile reviews backend is not set up yet', 'alert-circle');
+        } else {
+            showToast(error.message || 'Failed to post review', 'alert-circle');
+        }
+        return;
+    }
     ratingInput.value = '5';
     commentInput.value = '';
-
-    if (targetTag === userProfile.tag) {
+    if (targetProfile.id === currentSupabaseUserId) {
+        userProfile.reviewsData = await fetchProfileReviews(currentSupabaseUserId);
+        const summary = computeRatingSummaryFromReviews(userProfile.reviewsData);
+        userProfile.rating = summary.rating;
+        userProfile.reviews = summary.reviews;
         updateProfileUI();
         renderMyProfileReviews();
         switchMyProfileSection('reviews');
     } else {
-        openSellerProfile(targetTag, 'reviews');
+        await openSellerProfile(String(targetProfile.tag || targetTag).toLowerCase(), 'reviews');
     }
     showToast('Avis ajouté avec succès !', 'check-circle');
 }
@@ -5011,6 +5156,11 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
     }
     currentSellerProfileTag = profileRow.tag || '';
     const seller = mapProfileRowToSeller(profileRow);
+    setSellerProfileRouteTag(seller.tag || profileRow.tag || '');
+    seller.reviewsData = await fetchProfileReviews(profileRow.id);
+    const sellerSummary = computeRatingSummaryFromReviews(seller.reviewsData);
+    seller.rating = sellerSummary.rating;
+    seller.reviews = sellerSummary.reviews;
     closeModal('listingDetailModal');
     const content = document.getElementById('externalProfileContent');
     const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === ownerId);
@@ -5068,8 +5218,10 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
                             <option value="1">1 - Very bad</option>
                         </select>
                         <textarea id="sellerProfileReviewComment" rows="3" placeholder="Your comment..."></textarea>
-                        <button class="submit-btn" type="button" onclick="addProfileReview('${seller.tag}','seller-profile')">Post review</button>
+                    <button class="submit-btn" type="button" onclick="addProfileReview('${seller.tag}','seller-profile')">Post review</button>
                     </div>
+                <h3 style="margin-top:18px;">Reviews about ${seller.name}</h3>
+                <div class="reviews-list">${getReviewsListHTML(seller.reviewsData, seller.name, false, 'profile', seller.tag)}</div>
                 </div>
             </div>
         </div>`;
@@ -5102,6 +5254,11 @@ async function openSellerProfile(tag, section = 'listings') {
         return;
     }
     const seller = mapProfileRowToSeller(profileRow);
+    setSellerProfileRouteTag(seller.tag || profileRow.tag || '');
+    seller.reviewsData = await fetchProfileReviews(profileRow.id);
+    const sellerSummary = computeRatingSummaryFromReviews(seller.reviewsData);
+    seller.rating = sellerSummary.rating;
+    seller.reviews = sellerSummary.reviews;
     closeModal('listingDetailModal');
     if (!content) return;
     const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === profileRow.id);
