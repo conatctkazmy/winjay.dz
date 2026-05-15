@@ -306,6 +306,8 @@ function applyAuthSessionToLocalState(session) {
 
 async function ensureSupabaseProfileRow(client, user) {
     if (!client || !user?.id) return null;
+    const { data: existing, error: existingErr } = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
+    if (!existingErr && existing?.id) return existing;
     const meta = user.user_metadata || {};
     const email = user.email || '';
     const baseName = meta.full_name || meta.name || meta.fullName || (email ? email.split('@')[0] : '');
@@ -317,12 +319,14 @@ async function ensureSupabaseProfileRow(client, user) {
         id: user.id,
         display_name: baseName || 'User',
         tag: safeTag.startsWith('@') ? safeTag : '@' + safeTag,
-        location: 'Algeria',
-        business_type: 'Particulier'
+        location: '',
+        business_type: 'Particulier',
+        phone: '',
+        work_category: ''
     };
     if (avatar) payload.avatar_url = avatar;
 
-    const { error } = await client.from('profiles').upsert(payload, { onConflict: 'id' });
+    const { error } = await client.from('profiles').insert(payload).select('*').single();
     if (error) return null;
     const { data } = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
     return data || null;
@@ -959,6 +963,7 @@ let confirmCallback = null;
 let currentListingDetailId = null;
 let currentSellerProfileTag = null;
 const listingReviewPanelState = {};
+const listingDetailImageIndex = {};
 
 let mockChats = DEMO_MODE ? {
     "@amine_dz": {
@@ -1529,6 +1534,36 @@ async function fetchProfileByTag(tag) {
     const { data, error } = await client.from('profiles').select('*').eq('tag', normalized).maybeSingle();
     if (error) return null;
     return data || null;
+}
+
+async function startChatWithSellerByOwnerId(ownerId) {
+    if (!ownerId) return;
+    if (!requireAuthOrPrompt()) return;
+    if (DEMO_MODE) return;
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId) return;
+    const { data: profileRow, error } = await client.from('profiles').select('*').eq('id', ownerId).maybeSingle();
+    if (error || !profileRow?.id) {
+        showToast('User not found', 'alert-circle');
+        return;
+    }
+    const seller = mapProfileRowToSeller(profileRow);
+    const chatTag = seller.tag || `@${String(ownerId).slice(0, 8)}`;
+    if (!mockChats[chatTag]) {
+        mockChats[chatTag] = {
+            userId: ownerId,
+            name: seller.name,
+            pic: seller.pic || seller.profilePic,
+            verified: !!seller.verified,
+            vip: !!(seller.vip || seller.isVip),
+            messages: []
+        };
+    }
+    closeModal('listingDetailModal');
+    activeChatTag = chatTag;
+    showSection('messages-section');
+    await bootstrapMessages();
+    await switchChat(chatTag);
 }
 
 async function refreshUnreadMessageCount() {
@@ -3577,6 +3612,12 @@ function updateProfileUI() {
     document.getElementById('profileCover').src = userProfile.coverPic;
     document.getElementById('profileLocation').textContent = userProfile.location;
     document.getElementById('profileBusiness').textContent = userProfile.businessType;
+    const phoneText = userProfile.phone ? String(userProfile.phone) : '—';
+    const phoneDisplay = document.getElementById('profilePhone');
+    if (phoneDisplay) phoneDisplay.textContent = phoneText;
+    const workText = userProfile.workCategory ? String(userProfile.workCategory) : '—';
+    const workDisplay = document.getElementById('profileWorkCategory');
+    if (workDisplay) workDisplay.textContent = workText;
     document.getElementById('profileRatingContainer').innerHTML = getRatingHTML(userProfile.rating, userProfile.reviews);
     document.getElementById('editName').value = userProfile.name;
     document.getElementById('editTag').value = userProfile.tag.replace('@', '');
@@ -4725,6 +4766,34 @@ function toggleFavorite(event, id) {
     lucide.createIcons();
 }
 
+function getListingImagesForDetail(item) {
+    const urls = [];
+    const push = (u) => {
+        const v = String(u || '').trim();
+        if (!v) return;
+        if (!urls.includes(v)) urls.push(v);
+    };
+    if (Array.isArray(item?.images)) item.images.forEach(push);
+    push(item?.image);
+    return urls;
+}
+
+function setListingDetailImage(listingId, index) {
+    listingDetailImageIndex[listingId] = index;
+    const main = document.getElementById('detailMainImage');
+    const urls = getListingImagesForDetail(listings.find((l) => l.id === listingId));
+    const idx = Math.max(0, Math.min(urls.length - 1, Number(index) || 0));
+    if (main && urls[idx]) {
+        main.src = urls[idx];
+        main.setAttribute('data-src', urls[idx]);
+        main.onclick = () => openLightbox(urls[idx]);
+    }
+    document.querySelectorAll('[data-detail-thumb]').forEach((btn) => {
+        const n = Number(btn.getAttribute('data-detail-thumb')) || 0;
+        btn.classList.toggle('active', n === idx);
+    });
+}
+
 function openListingDetail(listingId) {
     const item = listings.find(l => l.id === listingId);
     if (!item) return;
@@ -4732,6 +4801,19 @@ function openListingDetail(listingId) {
     if (!Array.isArray(item.reviewsData)) item.reviewsData = [];
     const content = document.getElementById('listingDetailContent');
     const seller = item.seller || { name: "Utilisateur Winjay", tag: "@user", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay", verified: false, rating: 4.5, reviews: 10, reviewsData: [] };
+    const detailImages = getListingImagesForDetail(item);
+    const selectedIdxRaw = listingDetailImageIndex[listingId] ?? 0;
+    const selectedIdx = Math.max(0, Math.min(detailImages.length - 1, Number(selectedIdxRaw) || 0));
+    listingDetailImageIndex[listingId] = selectedIdx;
+    const mainImageUrl = detailImages[selectedIdx] || item.image;
+    const thumbsHtml = detailImages.length > 1
+        ? `<div class="detail-thumbs">${detailImages
+              .map(
+                  (u, i) =>
+                      `<button type="button" class="detail-thumb ${i === selectedIdx ? 'active' : ''}" data-detail-thumb="${i}" onclick="setListingDetailImage(${listingId}, ${i})"><img src="${u}" alt=""></button>`
+              )
+              .join('')}</div>`
+        : '';
     const bestListingReview = item.reviewsData.length > 0 ? item.reviewsData[0] : null;
     const similarListings = getSimilarListings(item);
     const reviewsCount = item.reviewsData.length;
@@ -4753,7 +4835,10 @@ function openListingDetail(listingId) {
         </div>` : '';
     content.innerHTML = `
         <div class="detail-container">
-            <img src="${item.image}" class="detail-image" alt="${item.title}" onclick="openLightbox('${item.image}')">
+            <div class="detail-gallery">
+                <img id="detailMainImage" src="${mainImageUrl}" data-src="${mainImageUrl}" class="detail-image" alt="${item.title}" onclick="openLightbox('${mainImageUrl}')">
+                ${thumbsHtml}
+            </div>
             <div class="detail-info">
                 <h2>${item.title}</h2>
                 <div class="detail-price">${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD</div>
@@ -4779,7 +4864,7 @@ function openListingDetail(listingId) {
                     <i data-lucide="chevron-right"></i>
                 </div>
                 <div style="margin-top: 15px;">
-                    <button class="message-contact-btn" onclick="startChatWithSeller('${seller.tag}')">
+                    <button class="message-contact-btn" onclick="startChatWithSellerByOwnerId('${item.owner_id}')">
                         <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
                         Message
                     </button>
@@ -4950,7 +5035,7 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
                             ${seller.joinedDate ? `<div class="bio-item"><i data-lucide="calendar"></i><span>Inscrit en ${seller.joinedDate}</span></div>` : ''}
                         </div>
                     </div>
-                    <button class="message-contact-btn" onclick="startChatWithSeller('${seller.tag}')">
+                    <button class="message-contact-btn" onclick="startChatWithSellerByOwnerId('${ownerId}')">
                         <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
                         Message
                     </button>
@@ -5040,7 +5125,7 @@ async function openSellerProfile(tag, section = 'listings') {
                             <div class="bio-item"><i data-lucide="calendar"></i><span>Inscrit en ${seller.joinedDate}</span></div>
                         </div>
                     </div>
-                    <button class="message-contact-btn" onclick="startChatWithSeller('${seller.tag}')">
+                    <button class="message-contact-btn" onclick="startChatWithSellerByOwnerId('${profileRow.id}')">
                         <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
                         Message
                     </button>
