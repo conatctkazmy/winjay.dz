@@ -239,9 +239,7 @@ html.app-loading main {
     border: 1px solid var(--border-color);
     border-radius: 14px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.12);
-    overflow: auto;
-    max-height: calc(100vh - 80px);
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
     z-index: 2000;
 }
 

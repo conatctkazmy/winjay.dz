@@ -1661,6 +1661,7 @@ async function startChatWithSellerByOwnerId(ownerId) {
     if (!mockChats[chatTag]) {
         mockChats[chatTag] = {
             userId: ownerId,
+            tag: chatTag,
             name: seller.name,
             pic: seller.pic || seller.profilePic,
             verified: !!seller.verified,
@@ -1732,11 +1733,12 @@ async function refreshLiveChatsFromSupabase() {
     }
     const chats = {};
     ids.forEach((id) => {
-        const p = profilesById[id] || {};
-        const seller = mapProfileRowToSeller(p);
+        const p = profilesById[id];
+        const seller = mapProfileRowToSeller(p?.id ? p : { id });
         const tag = seller.tag || `@${String(id).slice(0, 8)}`;
         chats[tag] = {
             userId: id,
+            tag,
             name: seller.name,
             pic: seller.pic || seller.profilePic,
             verified: !!seller.verified,
@@ -2006,6 +2008,7 @@ async function startChatWithSeller(tag) {
         if (!mockChats[normalizedTag]) {
             mockChats[normalizedTag] = {
                 userId: profileRow.id,
+                tag: normalizedTag,
                 name: seller.name,
                 pic: seller.pic || seller.profilePic,
                 verified: !!seller.verified,
@@ -2097,11 +2100,12 @@ async function switchChat(tag, isModal = false) {
         });
     }
 
+    const displayTag = chat?.tag || tag;
     chatHeader.innerHTML = `
-        <img src="${chat.pic}" alt="" id="chatUserPic" onclick="viewChatUserProfile('${tag}')" style="cursor: pointer;">
-        <div onclick="viewChatUserProfile('${tag}')" style="cursor: pointer; flex: 1;">
+        <img src="${chat.pic}" alt="" id="chatUserPic" onclick="viewChatUserProfile('${displayTag}')" style="cursor: pointer;">
+        <div onclick="viewChatUserProfile('${displayTag}')" style="cursor: pointer; flex: 1;">
             <h4>${chat.name} ${getUserBadgesHTML(chat)}</h4>
-            <span id="chatUserTag">${tag}</span>
+            <span id="chatUserTag">${displayTag}</span>
         </div>
         <button class="chat-more-btn" onclick="event.stopPropagation(); openBlockModal();">
             <i data-lucide="more-horizontal"></i>
