@@ -1002,6 +1002,7 @@ let messagesRealtimeChannel = null;
 let lastUnreadMessageCount = 0;
 let profileReviewsTargetColumn = 'profile_id';
 let suppressNextMessagesBootstrap = false;
+let hasShownProfilesReadToast = false;
 let voiceRecorder = null;
 let voiceChunks = [];
 let voiceStream = null;
@@ -1579,7 +1580,13 @@ async function fetchProfileByTag(tag) {
     if (!t) return null;
     const normalized = t.startsWith('@') ? t : '@' + t;
     const { data, error } = await client.from('profiles').select('*').eq('tag', normalized).maybeSingle();
-    if (error) return null;
+    if (error) {
+        if (!hasShownProfilesReadToast) {
+            hasShownProfilesReadToast = true;
+            showToast('Profiles are private. Enable profiles SELECT policy in Supabase to show real name/avatar.', 'alert-circle');
+        }
+        return null;
+    }
     return data || null;
 }
 
@@ -1647,12 +1654,17 @@ async function startChatWithSellerByOwnerId(ownerId) {
     if (DEMO_MODE) return;
     const client = initSupabase();
     if (!client || !currentSupabaseUserId) return;
-    const { data: profileRow, error } = await client.from('profiles').select('*').eq('id', ownerId).maybeSingle();
-    if (error || !profileRow?.id) {
-        showToast('User not found', 'alert-circle');
-        return;
+    let profileRow = null;
+    const { data, error } = await client.from('profiles').select('*').eq('id', ownerId).maybeSingle();
+    if (error) {
+        if (!hasShownProfilesReadToast) {
+            hasShownProfilesReadToast = true;
+            showToast('Profiles are private. Enable profiles SELECT policy in Supabase to show real name/avatar.', 'alert-circle');
+        }
+    } else if (data?.id) {
+        profileRow = data;
     }
-    const seller = mapProfileRowToSeller(profileRow);
+    const seller = mapProfileRowToSeller(profileRow?.id ? profileRow : { id: ownerId });
     const chatKey = `id:${ownerId}`;
     const chatTag = seller.tag || `@${String(ownerId).slice(0, 8)}`;
     closeModal('listingDetailModal');
@@ -1724,10 +1736,11 @@ async function refreshLiveChatsFromSupabase() {
     const ids = Array.from(otherIds);
     let profilesById = {};
     if (ids.length) {
-        const { data: profRows } = await client
-            .from('profiles')
-            .select('id, display_name, tag, avatar_url, verified, is_verified, is_vip, vip')
-            .in('id', ids);
+        const { data: profRows, error: profErr } = await client.from('profiles').select('*').in('id', ids);
+        if (profErr && !hasShownProfilesReadToast) {
+            hasShownProfilesReadToast = true;
+            showToast('Profiles are private. Enable profiles SELECT policy in Supabase to show real name/avatar.', 'alert-circle');
+        }
         (profRows || []).forEach((p) => {
             profilesById[p.id] = p;
         });
@@ -5185,10 +5198,13 @@ function mapProfileRowToSeller(row) {
         `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(id || 'user'))}`;
     const cover =
         pickFirstValue(row, ['cover_url', 'cover_pic', 'coverPic', 'cover_url']) || 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1200';
-    const tag = row?.tag || (id ? `@${String(id).slice(0, 8)}` : '@user');
+    const rawTag =
+        pickFirstValue(row, ['tag', 'username', 'handle']) ||
+        (id ? `@${String(id).slice(0, 8)}` : '@user');
+    const tag = rawTag.startsWith('@') ? rawTag.toLowerCase() : '@' + rawTag.toLowerCase();
     return {
         id,
-        name: row?.display_name || row?.full_name || 'Seller',
+        name: row?.display_name || row?.name || row?.full_name || row?.username || row?.handle || 'Seller',
         tag,
         pic,
         profilePic: pic,
