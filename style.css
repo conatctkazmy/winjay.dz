@@ -56,7 +56,8 @@ html.app-loading main {
     justify-content: space-between;
     padding: 0 20px;
     z-index: 1000;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: visible;
 }
 
 .nav-left {
@@ -4284,6 +4285,35 @@ footer {
 
     .nav-right {
         gap: 6px;
+    }
+}
+
+@media (max-width: 360px) {
+    .navbar {
+        padding: 0 8px;
+    }
+
+    .icon-btn {
+        padding: 6px;
+    }
+
+    .nav-right {
+        gap: 4px;
+    }
+
+    .add-listing-btn,
+    .profile-btn {
+        width: 34px;
+        height: 34px;
+    }
+
+    .add-listing-btn i {
+        width: 20px;
+        height: 20px;
+    }
+
+    .logo .text-xl {
+        font-size: 0.95rem;
     }
 }
 

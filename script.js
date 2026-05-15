@@ -1000,6 +1000,8 @@ let mockChats = DEMO_MODE ? {
 let activeChatTag = Object.keys(mockChats)[0] || null;
 let messagesRealtimeChannel = null;
 let lastUnreadMessageCount = 0;
+let profileReviewsTargetColumn = 'profile_id';
+let suppressNextMessagesBootstrap = false;
 let voiceRecorder = null;
 let voiceChunks = [];
 let voiceStream = null;
@@ -1531,6 +1533,13 @@ function isProfileReviewsBackendMissing(error) {
     return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('profile_reviews');
 }
 
+function isMissingColumnError(error, columnName) {
+    const msg = String(error?.message || '').toLowerCase();
+    const col = String(columnName || '').toLowerCase();
+    if (msg.includes('schema cache') && msg.includes(col)) return true;
+    return msg.includes('column') && msg.includes(col) && msg.includes('does not exist');
+}
+
 function setSellerProfileRouteTag(tag) {
     const t = String(tag || '').trim().toLowerCase();
     if (!t) return;
@@ -1585,12 +1594,25 @@ function computeRatingSummaryFromReviews(reviewsData) {
 async function fetchProfileReviews(profileId) {
     const client = initSupabase();
     if (!client || !profileId) return [];
-    const { data, error } = await client
-        .from('profile_reviews')
-        .select('id, created_at, author_id, rating, comment')
-        .eq('target_profile_id', profileId)
-        .order('created_at', { ascending: false })
-        .limit(200);
+    const baseQuery = (targetColumn) =>
+        client
+            .from('profile_reviews')
+            .select('id, created_at, author_id, rating, comment')
+            .eq(targetColumn, profileId)
+            .order('created_at', { ascending: false })
+            .limit(200);
+
+    const firstColumn = profileReviewsTargetColumn || 'profile_id';
+    let { data, error } = await baseQuery(firstColumn);
+    if (error && isMissingColumnError(error, firstColumn)) {
+        const fallback = firstColumn === 'profile_id' ? 'target_profile_id' : 'profile_id';
+        const retry = await baseQuery(fallback);
+        data = retry.data;
+        error = retry.error;
+        if (!error) profileReviewsTargetColumn = fallback;
+    } else if (!error) {
+        profileReviewsTargetColumn = firstColumn;
+    }
     if (error) {
         if (!isProfileReviewsBackendMissing(error)) showToast(error.message || 'Failed to load reviews', 'alert-circle');
         return [];
@@ -1632,6 +1654,10 @@ async function startChatWithSellerByOwnerId(ownerId) {
     }
     const seller = mapProfileRowToSeller(profileRow);
     const chatTag = seller.tag || `@${String(ownerId).slice(0, 8)}`;
+    closeModal('listingDetailModal');
+    suppressNextMessagesBootstrap = true;
+    showSection('messages-section');
+    await bootstrapMessages();
     if (!mockChats[chatTag]) {
         mockChats[chatTag] = {
             userId: ownerId,
@@ -1642,10 +1668,8 @@ async function startChatWithSellerByOwnerId(ownerId) {
             messages: []
         };
     }
-    closeModal('listingDetailModal');
     activeChatTag = chatTag;
-    showSection('messages-section');
-    await bootstrapMessages();
+    renderMessagesList();
     await switchChat(chatTag);
 }
 
@@ -1975,6 +1999,10 @@ async function startChatWithSeller(tag) {
         }
         const seller = mapProfileRowToSeller(profileRow);
         const normalizedTag = seller.tag || (String(tag).startsWith('@') ? tag : '@' + tag);
+        closeModal('listingDetailModal');
+        suppressNextMessagesBootstrap = true;
+        showSection('messages-section');
+        await bootstrapMessages();
         if (!mockChats[normalizedTag]) {
             mockChats[normalizedTag] = {
                 userId: profileRow.id,
@@ -1985,10 +2013,8 @@ async function startChatWithSeller(tag) {
                 messages: []
             };
         }
-        closeModal('listingDetailModal');
         activeChatTag = normalizedTag;
-        showSection('messages-section');
-        await bootstrapMessages();
+        renderMessagesList();
         await switchChat(normalizedTag);
         return;
     }
@@ -4191,7 +4217,14 @@ function showSection(sectionId) {
         renderMyProfileReviews();
     } else if (sectionId === 'messages-section') {
         clearSellerProfileRouteTag();
-        bootstrapMessages();
+        if (suppressNextMessagesBootstrap) {
+            suppressNextMessagesBootstrap = false;
+            renderMessagesList();
+            if (activeChatTag) switchChat(activeChatTag);
+            else renderEmptyChat();
+        } else {
+            bootstrapMessages();
+        }
     }
 }
 
@@ -4729,12 +4762,29 @@ async function addProfileReview(targetTag, source = 'seller-profile') {
         return;
     }
 
-    const { error } = await client.from('profile_reviews').insert({
-        target_profile_id: targetProfile.id,
+    const targetColumn = profileReviewsTargetColumn || 'profile_id';
+    let insertPayload = {
         author_id: currentSupabaseUserId,
         rating,
         comment
-    });
+    };
+    insertPayload[targetColumn] = targetProfile.id;
+
+    let { error } = await client.from('profile_reviews').insert(insertPayload);
+    if (error && isMissingColumnError(error, targetColumn)) {
+        const fallback = targetColumn === 'profile_id' ? 'target_profile_id' : 'profile_id';
+        insertPayload = {
+            author_id: currentSupabaseUserId,
+            rating,
+            comment
+        };
+        insertPayload[fallback] = targetProfile.id;
+        const retry = await client.from('profile_reviews').insert(insertPayload);
+        error = retry.error;
+        if (!error) profileReviewsTargetColumn = fallback;
+    } else if (!error) {
+        profileReviewsTargetColumn = targetColumn;
+    }
     if (error) {
         if (isProfileReviewsBackendMissing(error)) {
             showToast('Profile reviews backend is not set up yet', 'alert-circle');
