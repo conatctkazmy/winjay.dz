@@ -4220,8 +4220,7 @@ function showSection(sectionId) {
         if (suppressNextMessagesBootstrap) {
             suppressNextMessagesBootstrap = false;
             renderMessagesList();
-            if (activeChatTag) switchChat(activeChatTag);
-            else renderEmptyChat();
+            renderEmptyChat();
         } else {
             bootstrapMessages();
         }
