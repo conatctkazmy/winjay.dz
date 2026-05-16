@@ -3540,7 +3540,7 @@ function openOtherCategoriesModal(clearTarget = false) {
         if (input) {
             input.value = '';
             filterCategories();
-            setTimeout(() => input.focus(), 0);
+            setTimeout(() => input.focus(), 80);
         }
     } catch (e) {
         null;
@@ -3559,6 +3559,7 @@ function setupCategoryPickers() {
     ids.forEach((id) => {
         const el = document.getElementById(id);
         if (!el) return;
+        let lastOpenAt = 0;
         const open = (e) => {
             try {
                 e.preventDefault();
@@ -3566,11 +3567,21 @@ function setupCategoryPickers() {
             } catch (err) {
                 null;
             }
+            const now = Date.now();
+            if (now - lastOpenAt < 400) return;
+            lastOpenAt = now;
+            try {
+                el.blur();
+            } catch (err) {
+                null;
+            }
             openCategoryPicker(id);
         };
+        el.addEventListener('touchstart', open, { passive: false });
         el.addEventListener('pointerdown', open);
         el.addEventListener('mousedown', open);
         el.addEventListener('click', open);
+        el.addEventListener('focus', open);
         el.addEventListener('keydown', (e) => {
             const k = String(e.key || '');
             if (k === 'Enter' || k === ' ' || k === 'ArrowDown') open(e);
