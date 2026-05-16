@@ -191,6 +191,8 @@ function mapSupabaseListingRow(row) {
         created_at: row.created_at,
         date: formatRelativeDate(row.created_at),
         seller: sellerFromProfile,
+        views_count: Number(row.views_count) || 0,
+        likes_count: Number(row.likes_count) || 0,
         reviewsData: []
     };
 }
@@ -201,7 +203,7 @@ async function fetchListingsFromSupabase({ silent = false } = {}) {
     const { data, error } = await client
         .from('listings')
         .select(
-            'id, created_at, owner_id, title, description, price, category, wilaya, status, listing_images(url, sort_order), profiles:profiles!listings_owner_id_fkey(*)'
+            'id, created_at, owner_id, title, description, price, category, wilaya, status, views_count, likes_count, listing_images(url, sort_order), profiles:profiles!listings_owner_id_fkey(*)'
         )
         .order('created_at', { ascending: false });
     if (error) {
@@ -212,6 +214,9 @@ async function fetchListingsFromSupabase({ silent = false } = {}) {
     syncMyListingsFromListings();
     renderListings();
     renderMyListings();
+    await refreshFavoritesFromSupabase({ silent: true });
+    renderListings();
+    renderFavorites();
 }
 
 function loadMarketplaceListingsFromStorage() {
@@ -274,6 +279,7 @@ function applyAuthSessionToLocalState(session) {
 
     if (!user) {
         userProfile = createEmptyUserProfile();
+        favorites = [];
         try {
             localStorage.removeItem(USER_PROFILE_STORAGE_KEY);
         } catch (e) {
@@ -281,6 +287,11 @@ function applyAuthSessionToLocalState(session) {
         }
         syncMyListingsFromListings();
         updateProfileUI();
+        try {
+            renderFavorites();
+        } catch (e) {
+            null;
+        }
         return;
     }
 
@@ -366,6 +377,13 @@ async function handleAuthSessionChange(session) {
             mockChats = {};
             activeChatTag = null;
             setMessageBadge(0);
+            favorites = [];
+            try {
+                renderListings();
+                renderFavorites();
+            } catch (e) {
+                null;
+            }
             try {
                 const client = initSupabase();
                 if (client && messagesRealtimeChannel) client.removeChannel(messagesRealtimeChannel);
@@ -392,6 +410,13 @@ async function handleAuthSessionChange(session) {
         }
     }
     await bootstrapMessages();
+    await refreshFavoritesFromSupabase({ silent: true });
+    try {
+        renderListings();
+        renderFavorites();
+    } catch (e) {
+        null;
+    }
 }
 
 async function bootstrapSupabaseAuth() {
@@ -967,6 +992,7 @@ const listingReviewPanelState = {};
 const listingDetailImageIndex = {};
 const listingReviewsCache = new Map();
 const profileRatingSummaryCache = new Map();
+const listingViewSessionSet = new Set();
 
 let mockChats = DEMO_MODE ? {
     "@amine_dz": {
@@ -1536,6 +1562,11 @@ function isListingReviewsBackendMissing(error) {
     return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('listing_reviews');
 }
 
+function isListingLikesBackendMissing(error) {
+    const msg = String(error?.message || '');
+    return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('listing_likes');
+}
+
 function isPublicProfilesBackendMissing(error) {
     const msg = String(error?.message || '');
     return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('public_profiles');
@@ -1665,6 +1696,44 @@ async function fetchListingReviews(listingId) {
             comment: escapeHtml(r.comment || '')
         };
     });
+}
+
+async function refreshFavoritesFromSupabase({ silent = false } = {}) {
+    if (DEMO_MODE) return;
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId) {
+        favorites = [];
+        return;
+    }
+    const { data, error } = await client
+        .from('listing_likes')
+        .select('listing_id')
+        .eq('user_id', currentSupabaseUserId)
+        .limit(500);
+    if (error) {
+        if (!silent && !isListingLikesBackendMissing(error)) showToast(error.message || 'Failed to load likes', 'alert-circle');
+        favorites = [];
+        return;
+    }
+    favorites = (data || []).map((r) => Number(r.listing_id)).filter((x) => Number.isFinite(x));
+}
+
+async function recordListingView(listingId) {
+    if (DEMO_MODE) return;
+    const id = Number(listingId);
+    if (!Number.isFinite(id)) return;
+    if (listingViewSessionSet.has(id)) return;
+    listingViewSessionSet.add(id);
+
+    const client = initSupabase();
+    if (!client) return;
+    const { data, error } = await client.rpc('increment_listing_view', { p_listing_id: id });
+    if (error) return;
+    const nextCount = Number(data?.views_count ?? data) || 0;
+    const item = listings.find((l) => l.id === id);
+    if (item) item.views_count = nextCount;
+    const el = document.getElementById('listingViewsCount');
+    if (el) el.textContent = String(nextCount);
 }
 
 function renderListingReviewsListHTML(reviewsData) {
@@ -4585,6 +4654,10 @@ function createCardHTML(item) {
                     <span><i data-lucide="map-pin" style="width:12px"></i> ${item.location}</span>
                     <span>${item.date}</span>
                 </div>
+                <div class="card-stats">
+                    <span><i data-lucide="eye"></i> ${Number(item.views_count) || 0}</span>
+                    <span><i data-lucide="heart"></i> ${Number(item.likes_count) || 0}</span>
+                </div>
             </div>
         </div>`;
 }
@@ -5175,19 +5248,53 @@ async function fetchProfileRatingSummary(profileId) {
     return out;
 }
 
-function toggleFavorite(event, id) {
+async function toggleFavorite(event, id) {
     event.stopPropagation();
     const btn = event.currentTarget;
-    const index = favorites.indexOf(id);
-    if (index > -1) {
-        favorites.splice(index, 1);
-        btn?.classList?.remove('active');
-        showToast('Retiré des favoris', 'heart');
-    } else {
-        favorites.push(id);
-        btn?.classList?.add('active');
-        showToast('Ajouté aux favoris', 'heart');
+    const listingId = Number(id);
+    if (!Number.isFinite(listingId)) return;
+
+    if (DEMO_MODE) {
+        const index = favorites.indexOf(listingId);
+        if (index > -1) {
+            favorites.splice(index, 1);
+            btn?.classList?.remove('active');
+            showToast('Retiré des favoris', 'heart');
+        } else {
+            favorites.push(listingId);
+            btn?.classList?.add('active');
+            showToast('Ajouté aux favoris', 'heart');
+        }
+        renderListings();
+        renderFavorites();
+        lucide.createIcons();
+        return;
     }
+
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId) return;
+
+    const { data, error } = await client.rpc('toggle_listing_like', { p_listing_id: listingId });
+    if (error) {
+        if (isListingLikesBackendMissing(error)) showToast('Listing likes backend is not set up yet', 'alert-circle');
+        else showToast(error.message || 'Failed to like listing', 'alert-circle');
+        return;
+    }
+
+    const liked = !!data?.liked;
+    const likesCount = Number(data?.likes_count) || 0;
+    const idx = favorites.indexOf(listingId);
+    if (liked && idx === -1) favorites.push(listingId);
+    if (!liked && idx > -1) favorites.splice(idx, 1);
+
+    const item = listings.find((l) => l.id === listingId);
+    if (item) item.likes_count = likesCount;
+    const likesEl = document.getElementById('listingLikesCount');
+    if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(likesCount);
+
+    btn?.classList?.toggle('active', liked);
+    showToast(liked ? 'Liked' : 'Unliked', 'heart');
     renderListings();
     renderFavorites();
     lucide.createIcons();
@@ -5232,6 +5339,7 @@ function openListingDetail(listingId) {
     }
     const content = document.getElementById('listingDetailContent');
     const seller = item.seller || { name: "Utilisateur Winjay", tag: "@user", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay", verified: false, rating: 0, reviews: 0, reviewsData: [] };
+    const isLiked = favorites.includes(listingId);
     const detailImages = getListingImagesForDetail(item);
     const selectedIdxRaw = listingDetailImageIndex[listingId] ?? 0;
     const selectedIdx = Math.max(0, Math.min(detailImages.length - 1, Number(selectedIdxRaw) || 0));
@@ -5277,6 +5385,11 @@ function openListingDetail(listingId) {
                     <span><i data-lucide="map-pin"></i> ${item.location}</span>
                     <span><i data-lucide="tag"></i> ${item.category}</span>
                     <span><i data-lucide="calendar"></i> ${item.date}</span>
+                    <span><i data-lucide="eye"></i> <span id="listingViewsCount">${Number(item.views_count) || 0}</span></span>
+                    <button class="detail-like-btn ${isLiked ? 'active' : ''}" type="button" onclick="toggleFavorite(event, ${item.id})" title="Like">
+                        <i data-lucide="heart"></i>
+                        <span id="listingLikesCount">${Number(item.likes_count) || 0}</span>
+                    </button>
                 </div>
                 <h3>Vendeur</h3>
                 <div class="seller-card" onclick="openSellerProfileByOwnerId('${item.owner_id}')">
@@ -5351,6 +5464,7 @@ function openListingDetail(listingId) {
     openModal('listingDetailModal');
     lucide.createIcons();
     refreshListingReviewsForListingDetail(listingId, seller?.name || 'Vendeur');
+    recordListingView(listingId);
     if (!DEMO_MODE) {
         fetchProfileRatingSummary(item.owner_id).then((summary) => {
             if (currentListingDetailId !== listingId) return;

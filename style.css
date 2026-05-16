@@ -1236,6 +1236,25 @@ main.expanded {
     font-size: 0.85rem;
 }
 
+.card-stats {
+    display: flex;
+    gap: 14px;
+    margin-top: 10px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.card-stats span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.card-stats svg {
+    width: 14px;
+    height: 14px;
+}
+
 .empty-state {
     text-align: center;
     padding: 60px 20px;
@@ -2619,6 +2638,40 @@ main.expanded {
     margin-bottom: 20px;
     padding-bottom: 20px;
     border-bottom: 1px solid var(--border-color);
+}
+
+.detail-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.detail-like-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font: inherit;
+}
+
+.detail-like-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+}
+
+.detail-like-btn.active {
+    color: var(--primary-color);
+}
+
+.detail-like-btn.active svg {
+    fill: currentColor;
+    stroke: currentColor;
 }
 
 .seller-card {
