@@ -1423,12 +1423,12 @@ main.expanded {
 .vip-badge {
     display: inline-grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     background-color: #ffd700;
     color: #000;
     border-radius: 50%;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: bold;
     line-height: 1;
     padding: 0;
@@ -1442,7 +1442,12 @@ main.expanded {
 .vip-badge .vip-star {
     display: block;
     line-height: 1;
-    transform: translateY(-0.6px);
+    transform: translateY(-0.4px);
+}
+
+.verified-badge,
+.vip-badge {
+    margin-top: 1px;
 }
 
 .chat-header h4 {
@@ -5047,7 +5052,9 @@ footer {
     }
 
     .chat-header .vip-badge {
-        font-size: 11px;
+        width: 22px;
+        height: 22px;
+        font-size: 12px;
     }
 
     .messages-list {
