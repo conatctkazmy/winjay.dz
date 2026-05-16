@@ -3752,6 +3752,7 @@ function openModal(modalId) {
     }
     try {
         updateUpgradeOfferVisibility();
+        updateFreeVerifiedPrimaryAction();
     } catch (e) {
         null;
     }
@@ -4975,6 +4976,7 @@ function updateProfileUI() {
     updateFreeVerifiedCounterUI();
     renderVerifiedQuestCard();
     updateUpgradeOfferVisibility();
+    updateFreeVerifiedPrimaryAction();
     updateAdminDashboardButtonVisibility();
     lucide.createIcons();
 }
@@ -5004,6 +5006,31 @@ function updateUpgradeOfferVisibility() {
 
     const questCard = document.getElementById('verifiedQuestCard');
     if (questCard && verified) questCard.style.display = 'none';
+}
+
+function updateFreeVerifiedPrimaryAction() {
+    const btn = document.getElementById('freeVerifiedPrimaryBtn');
+    if (!btn) return;
+    if (!isLoggedIn()) {
+        btn.textContent = 'Create account';
+        btn.onclick = () => {
+            closeModal('freeVerifiedInfoModal');
+            openModal('registerModal');
+        };
+        return;
+    }
+    btn.textContent = 'Apply';
+    btn.onclick = () => {
+        closeModal('freeVerifiedInfoModal');
+        showSection('profile-section');
+        setTimeout(() => {
+            try {
+                document.getElementById('verifiedQuestCard')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+            } catch (e) {
+                null;
+            }
+        }, 200);
+    };
 }
 
 function updateAdminDashboardButtonVisibility() {

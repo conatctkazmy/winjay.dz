@@ -4294,6 +4294,33 @@ footer {
     background-color: var(--primary-hover);
 }
 
+@media (max-width: 520px) {
+    .vip-modal {
+        max-width: calc(100vw - 24px) !important;
+        width: calc(100vw - 24px);
+        max-height: calc(100svh - 24px);
+        overflow: auto;
+        padding: 16px !important;
+    }
+
+    .vip-header {
+        margin-bottom: 16px;
+    }
+
+    .vip-plans {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .vip-plan {
+        padding: 16px;
+    }
+
+    .plan-badge {
+        top: -9px;
+    }
+}
+
 .cod-modal {
     max-width: 450px !important;
 }
