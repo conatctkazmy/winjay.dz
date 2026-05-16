@@ -4668,7 +4668,40 @@ function showSection(sectionId) {
         } else {
             bootstrapMessages();
         }
+        scheduleSyncMessagesContainerHeight();
     }
+}
+
+let syncMessagesHeightTimer = null;
+let messagesViewportHooked = false;
+
+function syncMessagesContainerHeight() {
+    const section = document.getElementById('messages-section');
+    if (!section || !section.classList.contains('active')) return;
+    const container = section.querySelector('.messages-container');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const viewportHeight = window.visualViewport?.height || window.innerHeight || 0;
+    const bottomPadding = 16;
+    const nextHeight = Math.max(240, Math.floor(viewportHeight - rect.top - bottomPadding));
+    container.style.height = `${nextHeight}px`;
+}
+
+function scheduleSyncMessagesContainerHeight() {
+    if (syncMessagesHeightTimer) window.clearTimeout(syncMessagesHeightTimer);
+    syncMessagesHeightTimer = window.setTimeout(() => {
+        syncMessagesContainerHeight();
+        syncMessagesHeightTimer = null;
+    }, 80);
+
+    if (!messagesViewportHooked) {
+        messagesViewportHooked = true;
+        window.addEventListener('resize', syncMessagesContainerHeight, { passive: true });
+        window.visualViewport?.addEventListener?.('resize', syncMessagesContainerHeight, { passive: true });
+        window.visualViewport?.addEventListener?.('scroll', syncMessagesContainerHeight, { passive: true });
+    }
+
+    window.setTimeout(syncMessagesContainerHeight, 240);
 }
 
 function filterByCategory(category, element) {
