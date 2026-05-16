@@ -435,6 +435,8 @@ async function bootstrapSupabaseAuth() {
     if (data?.session?.user) {
         const row = await ensureSupabaseProfileRow(supabaseClient, data.session.user);
         if (row) applySupabaseProfileRowToLocalState(row, data.session.user);
+        await bootstrapMessages();
+        await bootstrapNotifications();
     }
 }
 
@@ -1040,6 +1042,7 @@ let messagesRealtimeChannel = null;
 let notificationsRealtimeChannel = null;
 let lastUnreadMessageCount = 0;
 let lastUnreadNotificationCount = 0;
+let lastFetchedNotifications = [];
 let profileReviewsTargetColumn = 'profile_id';
 let suppressNextMessagesBootstrap = false;
 let hasShownProfilesReadToast = false;
@@ -1819,6 +1822,7 @@ async function renderNotificationsModal() {
     const listEl = document.getElementById('notificationsList');
     if (!listEl) return;
     const rows = await fetchNotificationsFromSupabase({ limit: 60 });
+    lastFetchedNotifications = rows;
     if (rows.length === 0) {
         listEl.innerHTML = `
             <div class="notification-empty">
@@ -1833,16 +1837,26 @@ async function renderNotificationsModal() {
     const profilesById = actorIds.length ? await fetchProfilesByIds(actorIds) : {};
     const items = await Promise.all(
         rows.map(async (r) => {
-            const seller = r.actor_id ? mapProfileRowToSeller(profilesById[r.actor_id] || { id: r.actor_id }) : { name: 'User', tag: '@user', pic: '' };
+            let seller = r.actor_id ? mapProfileRowToSeller(profilesById[r.actor_id] || { id: r.actor_id }) : { name: 'User', tag: '@user', pic: '' };
             const created = r.created_at ? formatRelativeDate(r.created_at) : '';
             const unread = !r.read_at;
             const listingTitle = r.listing_id ? await getListingTitleById(r.listing_id) : '';
+            const meta = r.meta && typeof r.meta === 'object' ? r.meta : {};
             let text = '';
-            if (r.type === 'listing_like') text = `liked your listing${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`;
+            if (r.type === 'listing_like') text = `saved your listing${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`;
             else if (r.type === 'listing_share') text = `shared your listing${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`;
             else if (r.type === 'listing_review') text = `left a review on your listing${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`;
+            else if (r.type === 'listing_review_comment') text = `commented on a review on your listing${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`;
+            else if (r.type === 'listing_review_reply') text = `replied to a review on your listing${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`;
             else if (r.type === 'profile_share') text = 'shared your profile';
             else if (r.type === 'profile_review') text = 'left a review on your profile';
+            else if (r.type === 'profile_review_comment') text = 'commented on a review on your profile';
+            else if (r.type === 'profile_review_reply') text = 'replied to a review on your profile';
+            else if (r.type === 'listing_view_milestone') {
+                const milestone = Number(meta.milestone) || Number(meta.views) || 0;
+                seller = { name: 'Winjay', tag: '', pic: `https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay` };
+                text = `Your listing reached ${milestone || ''} views${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`.trim();
+            }
             else text = escapeHtml(String(r.type || 'notification'));
             return `
                 <button class="notification-item ${unread ? 'unread' : ''}" type="button" onclick="handleNotificationClick('${r.id}')">
@@ -1862,6 +1876,7 @@ async function renderNotificationsModal() {
 async function handleNotificationClick(notificationId) {
     const id = String(notificationId || '').trim();
     if (!id) return;
+    const row = lastFetchedNotifications.find((r) => String(r?.id) === id) || null;
     if (!DEMO_MODE) {
         const client = initSupabase();
         if (client && currentSupabaseUserId) {
@@ -1873,7 +1888,27 @@ async function handleNotificationClick(notificationId) {
         }
         await refreshUnreadNotificationCount();
     }
-    await renderNotificationsModal();
+    closeModal('notificationsModal');
+    if ((row?.type === 'listing_review' || row?.type === 'listing_review_comment' || row?.type === 'listing_review_reply') && row?.listing_id) {
+        expandListingReviews(Number(row.listing_id));
+        return;
+    }
+    if ((row?.type === 'listing_like' || row?.type === 'listing_share') && row?.listing_id) {
+        openListingDetail(Number(row.listing_id));
+        return;
+    }
+    if ((row?.type === 'profile_review' || row?.type === 'profile_review_comment' || row?.type === 'profile_review_reply') && row?.target_profile_id) {
+        openSellerProfileByOwnerId(String(row.target_profile_id), 'reviews');
+        return;
+    }
+    if (row?.type === 'profile_share' && row?.target_profile_id) {
+        openSellerProfileByOwnerId(String(row.target_profile_id), 'listings');
+        return;
+    }
+    if (row?.type === 'listing_view_milestone' && row?.listing_id) {
+        openListingDetail(Number(row.listing_id));
+        return;
+    }
 }
 
 function setupNotificationsRealtime() {
@@ -1989,30 +2024,88 @@ async function fetchListingReviews(listingId) {
     if (!Number.isFinite(id)) return [];
     const client = initSupabase();
     if (!client) return [];
-    const { data, error } = await client
+    const baseSelect = 'id, created_at, author_id, rating, comment, reply, reply_author_id, reply_created_at';
+    let { data, error } = await client
         .from('listing_reviews')
-        .select('id, created_at, author_id, rating, comment')
+        .select(baseSelect)
         .eq('listing_id', id)
         .order('created_at', { ascending: false })
         .limit(200);
+    if (error && isMissingColumnError(error, 'reply')) {
+        const retry = await client
+            .from('listing_reviews')
+            .select('id, created_at, author_id, rating, comment')
+            .eq('listing_id', id)
+            .order('created_at', { ascending: false })
+            .limit(200);
+        data = retry.data;
+        error = retry.error;
+    }
     if (error) {
         if (isListingReviewsBackendMissing(error)) return [];
         showToast(error.message || 'Failed to load reviews', 'alert-circle');
         return [];
     }
     const rows = Array.isArray(data) ? data : [];
-    const authorIds = Array.from(new Set(rows.map((r) => r.author_id).filter(Boolean)));
+    const reviewIds = rows.map((r) => r.id).filter(Boolean);
+    let comments = [];
+    if (reviewIds.length) {
+        const res = await client
+            .from('listing_review_comments')
+            .select('id, created_at, review_id, author_id, text')
+            .in('review_id', reviewIds)
+            .order('created_at', { ascending: true })
+            .limit(500);
+        if (!res.error) comments = Array.isArray(res.data) ? res.data : [];
+    }
+    const commentsByReviewId = new Map();
+    comments.forEach((c) => {
+        const key = String(c.review_id || '');
+        if (!key) return;
+        if (!commentsByReviewId.has(key)) commentsByReviewId.set(key, []);
+        commentsByReviewId.get(key).push(c);
+    });
+    const authorIds = Array.from(
+        new Set(
+            rows
+                .flatMap((r) => [r.author_id, r.reply_author_id])
+                .concat(comments.map((c) => c.author_id))
+                .filter(Boolean)
+        )
+    );
     const profilesById = authorIds.length ? await fetchProfilesByIds(authorIds) : {};
     return rows.map((r) => {
         const p = profilesById[r.author_id] || { id: r.author_id };
         const seller = mapProfileRowToSeller(p);
+        const replyProfile = r.reply_author_id ? profilesById[r.reply_author_id] : null;
+        const replySeller = replyProfile ? mapProfileRowToSeller(replyProfile) : null;
+        const threadRows = commentsByReviewId.get(String(r.id)) || [];
+        const thread = threadRows.map((t) => {
+            const tp = profilesById[t.author_id] || { id: t.author_id };
+            const ts = mapProfileRowToSeller(tp);
+            return {
+                id: t.id,
+                authorId: t.author_id,
+                user: ts.name,
+                tag: ts.tag,
+                pic: ts.pic || ts.profilePic,
+                date: formatRelativeDate(t.created_at),
+                text: escapeHtml(t.text || '')
+            };
+        });
         return {
+            id: r.id,
+            authorId: r.author_id,
             user: seller.name,
             tag: seller.tag,
             pic: seller.pic || seller.profilePic,
             rating: Number(r.rating) || 0,
             date: formatRelativeDate(r.created_at),
-            comment: escapeHtml(r.comment || '')
+            comment: escapeHtml(r.comment || ''),
+            reply: r.reply ? escapeHtml(r.reply || '') : null,
+            replyAuthorTag: replySeller?.tag || null,
+            thread,
+            likes: 0
         };
     });
 }
@@ -2064,6 +2157,35 @@ async function refreshListingCountsFromSupabase(listingId) {
     return data;
 }
 
+const LISTING_VIEW_MILESTONES = [10, 50, 100, 500, 1000];
+
+async function maybeNotifyListingViewMilestone(listingId, prevCount, nextCount) {
+    if (DEMO_MODE) return;
+    if (!currentSupabaseUserId) return;
+    const id = Number(listingId);
+    if (!Number.isFinite(id)) return;
+    const item = listings.find((l) => l.id === id);
+    const ownerId = String(item?.owner_id || '').trim();
+    if (!ownerId || ownerId === currentSupabaseUserId) return;
+    const client = initSupabase();
+    if (!client) return;
+    const prev = Number(prevCount) || 0;
+    const next = Number(nextCount) || 0;
+    const milestones = LISTING_VIEW_MILESTONES.filter((m) => m > prev && m <= next);
+    for (const milestone of milestones) {
+        const dedupe = await client
+            .from('notifications')
+            .select('id')
+            .eq('recipient_id', ownerId)
+            .eq('type', 'listing_view_milestone')
+            .eq('listing_id', id)
+            .contains('meta', { milestone })
+            .limit(1);
+        if (!dedupe.error && Array.isArray(dedupe.data) && dedupe.data.length) continue;
+        await createNotificationFromClient({ recipientId: ownerId, type: 'listing_view_milestone', listingId: id, meta: { milestone, views: next } });
+    }
+}
+
 async function recordListingView(listingId) {
     if (DEMO_MODE) return;
     const id = Number(listingId);
@@ -2093,6 +2215,7 @@ async function recordListingView(listingId) {
     if (item) item.views_count = nextCount;
     const el = document.getElementById('listingViewsCount');
     if (el) el.textContent = String(nextCount);
+    await maybeNotifyListingViewMilestone(id, prevCount, nextCount);
     renderListings();
     await refreshListingCountsFromSupabase(id);
 }
@@ -2143,7 +2266,7 @@ async function refreshListingReviewsForListingDetail(listingId, sellerName) {
     if (countEl) countEl.textContent = String(rows.length);
 
     const listEl = document.getElementById('listingReviewsList');
-    if (listEl) listEl.innerHTML = renderListingReviewsListHTML(rows);
+    if (listEl) listEl.innerHTML = getReviewsListHTML(rows, sellerName, false, 'listing', String(id));
 
     const highlightEl = document.getElementById('listingReviewHighlightWrap');
     if (highlightEl) {
@@ -2173,19 +2296,26 @@ function computeRatingSummaryFromReviews(reviewsData) {
 async function fetchProfileReviews(profileId) {
     const client = initSupabase();
     if (!client || !profileId) return [];
-    const baseQuery = (targetColumn) =>
+    const selectWithReplies = 'id, created_at, author_id, rating, comment, reply, reply_author_id, reply_created_at';
+    const baseQuery = (targetColumn, selectCols) =>
         client
             .from('profile_reviews')
-            .select('id, created_at, author_id, rating, comment')
+            .select(selectCols)
             .eq(targetColumn, profileId)
             .order('created_at', { ascending: false })
             .limit(200);
 
-    const firstColumn = profileReviewsTargetColumn || 'profile_id';
-    let { data, error } = await baseQuery(firstColumn);
+    const firstColumn = profileReviewsTargetColumn || 'target_profile_id';
+    let { data, error } = await baseQuery(firstColumn, selectWithReplies);
+    if (error && isMissingColumnError(error, 'reply')) {
+        const retry = await baseQuery(firstColumn, 'id, created_at, author_id, rating, comment');
+        data = retry.data;
+        error = retry.error;
+    }
     if (error && isMissingColumnError(error, firstColumn)) {
         const fallback = firstColumn === 'profile_id' ? 'target_profile_id' : 'profile_id';
-        const retry = await baseQuery(fallback);
+        let retry = await baseQuery(fallback, selectWithReplies);
+        if (retry.error && isMissingColumnError(retry.error, 'reply')) retry = await baseQuery(fallback, 'id, created_at, author_id, rating, comment');
         data = retry.data;
         error = retry.error;
         if (!error) profileReviewsTargetColumn = fallback;
@@ -2197,24 +2327,63 @@ async function fetchProfileReviews(profileId) {
         return [];
     }
     const rows = Array.isArray(data) ? data : [];
-    const authorIds = Array.from(new Set(rows.map((r) => r.author_id).filter(Boolean)));
-    let profilesById = {};
-    if (authorIds.length) {
-        const { data: profRows } = await client.from('profiles').select('id, display_name, tag, avatar_url').in('id', authorIds);
-        (profRows || []).forEach((p) => (profilesById[p.id] = p));
+    const reviewIds = rows.map((r) => r.id).filter(Boolean);
+    let comments = [];
+    if (reviewIds.length) {
+        const res = await client
+            .from('profile_review_comments')
+            .select('id, created_at, review_id, author_id, text')
+            .in('review_id', reviewIds)
+            .order('created_at', { ascending: true })
+            .limit(500);
+        if (!res.error) comments = Array.isArray(res.data) ? res.data : [];
     }
+    const commentsByReviewId = new Map();
+    comments.forEach((c) => {
+        const key = String(c.review_id || '');
+        if (!key) return;
+        if (!commentsByReviewId.has(key)) commentsByReviewId.set(key, []);
+        commentsByReviewId.get(key).push(c);
+    });
+    const authorIds = Array.from(
+        new Set(
+            rows
+                .flatMap((r) => [r.author_id, r.reply_author_id])
+                .concat(comments.map((c) => c.author_id))
+                .filter(Boolean)
+        )
+    );
+    const profilesById = authorIds.length ? await fetchProfilesByIds(authorIds) : {};
     return rows.map((r) => {
         const p = profilesById[r.author_id] || {};
+        const replyProfile = r.reply_author_id ? profilesById[r.reply_author_id] : null;
+        const replySeller = replyProfile ? mapProfileRowToSeller(replyProfile) : null;
+        const threadRows = commentsByReviewId.get(String(r.id)) || [];
+        const thread = threadRows.map((t) => {
+            const tp = profilesById[t.author_id] || {};
+            const ts = mapProfileRowToSeller(tp);
+            return {
+                id: t.id,
+                authorId: t.author_id,
+                user: ts.name,
+                tag: ts.tag,
+                pic: ts.pic || ts.profilePic,
+                date: formatRelativeDate(t.created_at),
+                text: escapeHtml(t.text || '')
+            };
+        });
         return {
+            id: r.id,
+            authorId: r.author_id,
             user: p.display_name || 'User',
             tag: p.tag || `@${String(r.author_id || '').slice(0, 8)}`,
             pic: p.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(r.author_id || 'user'))}`,
             rating: Number(r.rating) || 0,
             date: formatRelativeDate(r.created_at),
             comment: escapeHtml(r.comment || ''),
-            reply: null,
-            replyAuthorTag: null,
-            thread: [],
+            reply: r.reply ? escapeHtml(r.reply || '') : null,
+            replyAuthorTag: replySeller?.tag || null,
+            thread,
             likes: 0
         };
     });
@@ -5209,7 +5378,7 @@ function toggleReplyBox(contextType, targetId, index) {
     if (show) input.focus();
 }
 
-function saveReplyToReview(contextType, targetId, index) {
+async function saveReplyToReview(contextType, targetId, index) {
     const { inputId } = getReplyElementIds(contextType, targetId, index);
     const input = document.getElementById(inputId);
     if (!input) return;
@@ -5227,26 +5396,96 @@ function saveReplyToReview(contextType, targetId, index) {
     }
 
     if (contextType === 'profile') {
-        record.reply = escapeHtml(reply);
-        record.replyAuthorTag = userProfile.tag;
-        const profile = findProfileByTag(targetId);
-        if (profile) recalculateProfileRating(profile);
-        if (targetId === userProfile.tag) {
-            updateProfileUI();
-            renderMyProfileReviews();
-            switchMyProfileSection('reviews');
-        } else {
-            openSellerProfile(targetId, 'reviews');
+        if (DEMO_MODE) {
+            record.reply = escapeHtml(reply);
+            record.replyAuthorTag = userProfile.tag;
+            const profile = findProfileByTag(targetId);
+            if (profile) recalculateProfileRating(profile);
+            if (targetId === userProfile.tag) {
+                updateProfileUI();
+                renderMyProfileReviews();
+                switchMyProfileSection('reviews');
+            } else {
+                openSellerProfile(targetId, 'reviews');
+            }
+            showToast('Réponse enregistrée.', 'check-circle');
+            return;
         }
+        if (!requireAuthOrPrompt()) return;
+        if (!currentSupabaseUserId) return;
+        if (targetId !== userProfile.tag) {
+            showToast('Vous ne pouvez répondre que sur votre propre profil.', 'alert-circle');
+            return;
+        }
+        const client = initSupabase();
+        if (!client) return;
+        const reviewId = String(record?.id || '').trim();
+        if (!reviewId) {
+            showToast('Review not found', 'alert-circle');
+            return;
+        }
+        const updatePayload = { reply: escapeHtml(reply), reply_author_id: currentSupabaseUserId, reply_created_at: new Date().toISOString() };
+        const { error } = await client.from('profile_reviews').update(updatePayload).eq('id', reviewId);
+        if (error) {
+            showToast(error.message || 'Failed to save reply', 'alert-circle');
+            return;
+        }
+        if (record?.authorId) {
+            await createNotificationFromClient({
+                recipientId: record.authorId,
+                type: 'profile_review_reply',
+                targetProfileId: currentSupabaseUserId,
+                meta: { reviewId }
+            });
+        }
+        userProfile.reviewsData = await fetchProfileReviews(currentSupabaseUserId);
+        updateProfileUI();
+        renderMyProfileReviews();
+        switchMyProfileSection('reviews');
         showToast('Réponse enregistrée.', 'check-circle');
         return;
     }
 
     if (contextType === 'listing') {
         const listingId = Number(targetId);
-        record.reply = escapeHtml(reply);
-        record.replyAuthorTag = userProfile.tag;
+        if (DEMO_MODE) {
+            record.reply = escapeHtml(reply);
+            record.replyAuthorTag = userProfile.tag;
+            listingReviewPanelState[listingId] = true;
+            openListingDetail(listingId);
+            showToast('Réponse enregistrée.', 'check-circle');
+            return;
+        }
+        if (!requireAuthOrPrompt()) return;
+        if (!currentSupabaseUserId) return;
+        const listing = listings.find((l) => l.id === listingId);
+        if (!listing?.owner_id || String(listing.owner_id) !== String(currentSupabaseUserId)) {
+            showToast('Vous ne pouvez répondre que sur vos propres annonces.', 'alert-circle');
+            return;
+        }
+        const client = initSupabase();
+        if (!client) return;
+        const reviewId = String(record?.id || '').trim();
+        if (!reviewId) {
+            showToast('Review not found', 'alert-circle');
+            return;
+        }
+        const updatePayload = { reply: escapeHtml(reply), reply_author_id: currentSupabaseUserId, reply_created_at: new Date().toISOString() };
+        const { error } = await client.from('listing_reviews').update(updatePayload).eq('id', reviewId);
+        if (error) {
+            showToast(error.message || 'Failed to save reply', 'alert-circle');
+            return;
+        }
+        if (record?.authorId) {
+            await createNotificationFromClient({
+                recipientId: record.authorId,
+                type: 'listing_review_reply',
+                listingId: listingId,
+                meta: { reviewId }
+            });
+        }
         listingReviewPanelState[listingId] = true;
+        await refreshListingReviewsForListingDetail(listingId, listing?.seller?.name || 'Vendeur');
         openListingDetail(listingId);
         showToast('Réponse enregistrée.', 'check-circle');
     }
@@ -5262,7 +5501,7 @@ function toggleThreadBox(contextType, targetId, index) {
     if (show) input.focus();
 }
 
-function addThreadComment(contextType, targetId, index) {
+async function addThreadComment(contextType, targetId, index) {
     const record = getReviewRecord(contextType, targetId, index);
     if (!record) return;
     const { inputId } = getThreadElementIds(contextType, targetId, index);
@@ -5274,23 +5513,56 @@ function addThreadComment(contextType, targetId, index) {
         return;
     }
 
-    record.thread = Array.isArray(record.thread) ? record.thread : [];
-    const reviewer = getCurrentReviewerIdentity();
-    record.thread.push({
-        user: reviewer.user,
-        tag: reviewer.tag,
-        pic: reviewer.pic,
-        date: "À l'instant",
-        text: escapeHtml(text)
-    });
-    input.value = '';
-
     if (contextType === 'profile') {
+        if (DEMO_MODE) {
+            record.thread = Array.isArray(record.thread) ? record.thread : [];
+            const reviewer = getCurrentReviewerIdentity();
+            record.thread.push({
+                user: reviewer.user,
+                tag: reviewer.tag,
+                pic: reviewer.pic,
+                date: "À l'instant",
+                text: escapeHtml(text)
+            });
+            input.value = '';
+            if (targetId === userProfile.tag) {
+                renderMyProfileReviews();
+                switchMyProfileSection('reviews');
+            } else {
+                openSellerProfile(targetId, 'reviews');
+            }
+            showToast('Commentaire ajouté.', 'check-circle');
+            return;
+        }
+        if (!requireAuthOrPrompt()) return;
+        const client = initSupabase();
+        if (!client || !currentSupabaseUserId) return;
+        const reviewId = String(record?.id || '').trim();
+        if (!reviewId) {
+            showToast('Review not found', 'alert-circle');
+            return;
+        }
+        const { error } = await client.from('profile_review_comments').insert({ review_id: reviewId, author_id: currentSupabaseUserId, text: escapeHtml(text) });
+        if (error) {
+            showToast(error.message || 'Failed to add comment', 'alert-circle');
+            return;
+        }
+        input.value = '';
+        if (record?.authorId) {
+            await createNotificationFromClient({
+                recipientId: record.authorId,
+                type: 'profile_review_comment',
+                targetProfileId: currentSupabaseUserId,
+                meta: { reviewId }
+            });
+        }
         if (targetId === userProfile.tag) {
+            userProfile.reviewsData = await fetchProfileReviews(currentSupabaseUserId);
+            updateProfileUI();
             renderMyProfileReviews();
             switchMyProfileSection('reviews');
         } else {
-            openSellerProfile(targetId, 'reviews');
+            await openSellerProfile(targetId, 'reviews');
         }
         showToast('Commentaire ajouté.', 'check-circle');
         return;
@@ -5298,7 +5570,47 @@ function addThreadComment(contextType, targetId, index) {
 
     if (contextType === 'listing') {
         const listingId = Number(targetId);
+        if (DEMO_MODE) {
+            record.thread = Array.isArray(record.thread) ? record.thread : [];
+            const reviewer = getCurrentReviewerIdentity();
+            record.thread.push({
+                user: reviewer.user,
+                tag: reviewer.tag,
+                pic: reviewer.pic,
+                date: "À l'instant",
+                text: escapeHtml(text)
+            });
+            input.value = '';
+            listingReviewPanelState[listingId] = true;
+            openListingDetail(listingId);
+            showToast('Commentaire ajouté.', 'check-circle');
+            return;
+        }
+        if (!requireAuthOrPrompt()) return;
+        const client = initSupabase();
+        if (!client || !currentSupabaseUserId) return;
+        const reviewId = String(record?.id || '').trim();
+        if (!reviewId) {
+            showToast('Review not found', 'alert-circle');
+            return;
+        }
+        const { error } = await client.from('listing_review_comments').insert({ review_id: reviewId, author_id: currentSupabaseUserId, text: escapeHtml(text) });
+        if (error) {
+            showToast(error.message || 'Failed to add comment', 'alert-circle');
+            return;
+        }
+        input.value = '';
+        const listing = listings.find((l) => l.id === listingId);
+        if (record?.authorId) {
+            await createNotificationFromClient({
+                recipientId: record.authorId,
+                type: 'listing_review_comment',
+                listingId: listingId,
+                meta: { reviewId }
+            });
+        }
         listingReviewPanelState[listingId] = true;
+        await refreshListingReviewsForListingDetail(listingId, listing?.seller?.name || 'Vendeur');
         openListingDetail(listingId);
         showToast('Commentaire ajouté.', 'check-circle');
     }
@@ -5317,7 +5629,7 @@ function toggleReviewEditBox(contextType, targetId, index) {
     if (show) input.focus();
 }
 
-function saveReviewEdit(contextType, targetId, index) {
+async function saveReviewEdit(contextType, targetId, index) {
     const { inputId } = getReviewEditElementIds(contextType, targetId, index);
     const input = document.getElementById(inputId);
     if (!input) return;
@@ -5335,6 +5647,12 @@ function saveReviewEdit(contextType, targetId, index) {
     record.comment = escapeHtml(text);
 
     if (contextType === 'profile') {
+        if (!DEMO_MODE) {
+            const client = initSupabase();
+            if (client && currentSupabaseUserId && record?.id) {
+                await client.from('profile_reviews').update({ comment: escapeHtml(text) }).eq('id', record.id).eq('author_id', currentSupabaseUserId);
+            }
+        }
         if (targetId === userProfile.tag) {
             renderMyProfileReviews();
             switchMyProfileSection('reviews');
@@ -5347,6 +5665,12 @@ function saveReviewEdit(contextType, targetId, index) {
 
     if (contextType === 'listing') {
         const listingId = Number(targetId);
+        if (!DEMO_MODE) {
+            const client = initSupabase();
+            if (client && currentSupabaseUserId && record?.id) {
+                await client.from('listing_reviews').update({ comment: escapeHtml(text) }).eq('id', record.id).eq('author_id', currentSupabaseUserId);
+            }
+        }
         listingReviewPanelState[listingId] = true;
         openListingDetail(listingId);
         showToast('Avis modifié.', 'check-circle');
@@ -5367,7 +5691,7 @@ function toggleThreadEditBox(contextType, targetId, index, threadIndex) {
     if (show) input.focus();
 }
 
-function saveThreadEdit(contextType, targetId, index, threadIndex) {
+async function saveThreadEdit(contextType, targetId, index, threadIndex) {
     const { inputId } = getThreadEditElementIds(contextType, targetId, index, threadIndex);
     const input = document.getElementById(inputId);
     if (!input) return;
@@ -5386,6 +5710,12 @@ function saveThreadEdit(contextType, targetId, index, threadIndex) {
     entry.text = escapeHtml(text);
 
     if (contextType === 'profile') {
+        if (!DEMO_MODE) {
+            const client = initSupabase();
+            if (client && currentSupabaseUserId && entry?.id) {
+                await client.from('profile_review_comments').update({ text: escapeHtml(text) }).eq('id', entry.id).eq('author_id', currentSupabaseUserId);
+            }
+        }
         if (targetId === userProfile.tag) {
             renderMyProfileReviews();
             switchMyProfileSection('reviews');
@@ -5398,6 +5728,12 @@ function saveThreadEdit(contextType, targetId, index, threadIndex) {
 
     if (contextType === 'listing') {
         const listingId = Number(targetId);
+        if (!DEMO_MODE) {
+            const client = initSupabase();
+            if (client && currentSupabaseUserId && entry?.id) {
+                await client.from('listing_review_comments').update({ text: escapeHtml(text) }).eq('id', entry.id).eq('author_id', currentSupabaseUserId);
+            }
+        }
         listingReviewPanelState[listingId] = true;
         openListingDetail(listingId);
         showToast('Commentaire modifié.', 'check-circle');
@@ -5794,6 +6130,9 @@ async function toggleFavorite(event, id) {
     const likesCount = hasServerCount ? (Number(payload.likes_count) || 0) : optimisticLikesCount;
     await refreshFavoritesFromSupabase({ silent: true });
     const likedNow = favorites.includes(listingId);
+    if (!wasLiked && likedNow && item?.owner_id) {
+        createNotificationFromClient({ recipientId: item.owner_id, type: 'listing_like', listingId: listingId });
+    }
     if (item) item.likes_count = likesCount;
     if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(likesCount);
     btn?.classList?.toggle('active', likedNow);
@@ -5958,7 +6297,7 @@ function openListingDetail(listingId) {
                                 <button class="submit-btn" type="button" onclick="addListingReview(${item.id})">Publier l'avis</button>
                             </div>
                             <h3 style="margin-top:18px;">Avis sur l'annonce</h3>
-                            <div class="reviews-list" id="listingReviewsList">${renderListingReviewsListHTML(item.reviewsData || [])}</div>
+                            <div class="reviews-list" id="listingReviewsList">${getReviewsListHTML(item.reviewsData || [], seller?.name || 'Vendeur', false, 'listing', String(item.id))}</div>
                         </div>
                     </div>
                 </div>
@@ -6238,6 +6577,10 @@ async function openSellerProfile(tag, section = 'listings') {
                     <button class="message-contact-btn" onclick="startChatWithSellerByOwnerId('${profileRow.id}')">
                         <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
                         Message
+                    </button>
+                    <button class="share-profile-btn" type="button" onclick="shareSellerProfile('${profileRow.id}', '${seller.tag}', ''); event.stopPropagation();">
+                        <i data-lucide="share-2"></i>
+                        Share
                     </button>
                 </div>
             </div>

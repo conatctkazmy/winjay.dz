@@ -2785,10 +2785,32 @@ main.expanded {
     gap: 15px;
     padding: 15px;
     border-bottom: 1px solid var(--border-color);
+    width: 100%;
+    background: none;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    text-align: left;
+    cursor: pointer;
 }
 
 .notification-item.unread {
     background-color: var(--light-gray);
+}
+
+.notification-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.notification-tag {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-left: 6px;
 }
 
 .notification-icon {
