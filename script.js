@@ -28,8 +28,13 @@ const REFERRALS_REQUIRED = 10;
 const MARKETPLACE_LISTINGS_STORAGE_KEY = 'marketplaceListingsV1';
 const LISTING_IMAGES_BUCKET = 'listing-images';
 const PROFILE_IMAGES_BUCKET = 'profile-images';
+const MESSAGE_MEDIA_BUCKET = 'message-media';
 const FREE_LISTING_LIMIT = 4;
 const SELLER_PROFILE_LAST_TAG_STORAGE_KEY = 'winjayLastSellerProfileTagV1';
+
+function safeStorageFilename(name) {
+    return String(name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
+}
 
 function normalizeSupabaseProjectUrl(url) {
     if (typeof url !== 'string') return '';
@@ -1033,6 +1038,7 @@ let profileReviewsTargetColumn = 'profile_id';
 let suppressNextMessagesBootstrap = false;
 let hasShownProfilesReadToast = false;
 let hasShownViewsBackendToast = false;
+let messagesHasMediaColumns = null;
 let voiceRecorder = null;
 let voiceChunks = [];
 let voiceStream = null;
@@ -1040,6 +1046,7 @@ let cameraStream = null;
 let cameraRecorder = null;
 let cameraChunks = [];
 let recordedVideoUrl = null;
+let recordedVideoBlob = null;
 let activeVoiceAudio = null;
 let activeVoiceContainer = null;
 let voiceShouldSend = true;
@@ -1237,6 +1244,97 @@ function renderChatMessageBody(m) {
     return `<p>${escapeHtml(m.text || '')}</p>`;
 }
 
+function getChatPreviewText(m) {
+    const kind = m?.kind || (m?.url ? 'file' : 'text');
+    if (kind === 'image') return 'Photo';
+    if (kind === 'video') return 'Vidéo';
+    if (kind === 'audio') return 'Message vocal';
+    if (kind === 'file') return m?.name ? `Fichier: ${m.name}` : 'Fichier';
+    return m?.text || '';
+}
+
+async function sendChatMediaMessage({ kind, file, blob, name } = {}) {
+    if (!activeChatTag) {
+        showToast('Select a chat first', 'alert-circle');
+        return;
+    }
+    const chat = mockChats[activeChatTag];
+    if (!chat) return;
+    if (!requireAuthOrPrompt()) return;
+
+    const source = file || blob;
+    if (!source) return;
+    const fileName = String(name || file?.name || `${kind || 'file'}.bin`);
+    const mime = String(file?.type || blob?.type || '').trim();
+
+    if (DEMO_MODE) {
+        const url = URL.createObjectURL(source);
+        chat.messages.push({ id: newMessageId(), type: 'sent', kind, url, name: fileName, time: "À l'instant" });
+        await switchChat(activeChatTag);
+        return;
+    }
+
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId || !chat.userId) {
+        showToast('Messaging is not ready', 'alert-circle');
+        return;
+    }
+
+    const pendingId = newMessageId();
+    const localUrl = URL.createObjectURL(source);
+    chat.messages.push({ id: pendingId, type: 'sent', kind, url: localUrl, name: fileName, time: "À l'instant" });
+    await switchChat(activeChatTag);
+
+    const safeName = safeStorageFilename(fileName);
+    const objectPath = `${currentSupabaseUserId}/${chat.userId}/${Date.now()}_${pendingId}_${safeName}`;
+
+    const { error: uploadError } = await client.storage.from(MESSAGE_MEDIA_BUCKET).upload(objectPath, source, {
+        contentType: mime || undefined,
+        upsert: false
+    });
+    if (uploadError) {
+        showToast(uploadError.message || 'Failed to upload media', 'alert-circle');
+        try { URL.revokeObjectURL(localUrl); } catch {}
+        await refreshLiveChatsFromSupabase();
+        renderMessagesList();
+        await switchChat(activeChatTag);
+        return;
+    }
+
+    const { data: publicData } = client.storage.from(MESSAGE_MEDIA_BUCKET).getPublicUrl(objectPath);
+    const mediaUrl = publicData?.publicUrl || '';
+
+    const { error: insertError } = await client.from('messages').insert({
+        sender_id: currentSupabaseUserId,
+        receiver_id: chat.userId,
+        body: '',
+        kind: kind || 'file',
+        media_url: mediaUrl,
+        media_name: fileName,
+        media_mime: mime || null,
+        media_size: Number(source.size) || 0
+    });
+    if (insertError) {
+        if (isMissingColumnError(insertError, 'kind') || isMissingColumnError(insertError, 'media_url')) {
+            showToast('Update Supabase messages table to support media (kind/media_url columns).', 'alert-circle');
+            messagesHasMediaColumns = false;
+        } else {
+            showToast(insertError.message || 'Failed to send media', 'alert-circle');
+        }
+        try { await client.storage.from(MESSAGE_MEDIA_BUCKET).remove([objectPath]); } catch {}
+        try { URL.revokeObjectURL(localUrl); } catch {}
+        await refreshLiveChatsFromSupabase();
+        renderMessagesList();
+        await switchChat(activeChatTag);
+        return;
+    }
+
+    try { URL.revokeObjectURL(localUrl); } catch {}
+    await refreshLiveChatsFromSupabase();
+    renderMessagesList();
+    await switchChat(activeChatTag);
+}
+
 function openChatFilePicker(type = 'media') {
     const input = document.getElementById('chatFileInput');
     if (!input) return;
@@ -1311,16 +1409,17 @@ async function startVoiceRecording() {
         voiceRecorder.onstop = () => {
             const shouldSend = voiceShouldSend;
             const blob = new Blob(voiceChunks, { type: voiceRecorder.mimeType || 'audio/webm' });
-            const url = URL.createObjectURL(blob);
-
             if (shouldSend) {
-                const chat = mockChats[activeChatTag];
-                if (chat) {
-                    chat.messages.push({ id: newMessageId(), type: 'sent', kind: 'audio', url, name: 'message-vocal.webm', time: "À l'instant" });
-                    switchChat(activeChatTag);
+                if (DEMO_MODE) {
+                    const url = URL.createObjectURL(blob);
+                    const chat = mockChats[activeChatTag];
+                    if (chat) {
+                        chat.messages.push({ id: newMessageId(), type: 'sent', kind: 'audio', url, name: 'message-vocal.webm', time: "À l'instant" });
+                        switchChat(activeChatTag);
+                    }
+                } else {
+                    sendChatMediaMessage({ kind: 'audio', blob, name: 'message-vocal.webm' });
                 }
-            } else {
-                URL.revokeObjectURL(url);
             }
 
             voiceStream?.getTracks()?.forEach(t => t.stop());
@@ -1362,6 +1461,7 @@ async function openChatCamera() {
     }
 
     recordedVideoUrl = null;
+    recordedVideoBlob = null;
     cameraChunks = [];
 
     const preview = document.getElementById('cameraPreview');
@@ -1415,6 +1515,7 @@ function toggleCameraRecording() {
 
     cameraRecorder.onstop = () => {
         const blob = new Blob(cameraChunks, { type: cameraRecorder.mimeType || 'video/webm' });
+        recordedVideoBlob = blob;
         recordedVideoUrl = URL.createObjectURL(blob);
 
         preview.pause();
@@ -1450,13 +1551,21 @@ function toggleCameraRecording() {
     showToast('Enregistrement vidéo...', 'video');
 }
 
-function sendRecordedVideo() {
-    if (!recordedVideoUrl) return;
-    const chat = mockChats[activeChatTag];
-    if (!chat) return;
-    chat.messages.push({ id: newMessageId(), type: 'sent', kind: 'video', url: recordedVideoUrl, name: 'video.webm', time: "À l'instant" });
-    switchChat(activeChatTag);
-    closeCameraModal(true);
+async function sendRecordedVideo() {
+    if (!recordedVideoUrl && !recordedVideoBlob) return;
+    if (DEMO_MODE) {
+        const chat = mockChats[activeChatTag];
+        if (!chat || !recordedVideoUrl) return;
+        chat.messages.push({ id: newMessageId(), type: 'sent', kind: 'video', url: recordedVideoUrl, name: 'video.webm', time: "À l'instant" });
+        await switchChat(activeChatTag);
+        closeCameraModal(true);
+        return;
+    }
+
+    const blob = recordedVideoBlob || (recordedVideoUrl ? await fetch(recordedVideoUrl).then((r) => r.blob()) : null);
+    if (!blob) return;
+    await sendChatMediaMessage({ kind: 'video', blob, name: 'video.webm' });
+    closeCameraModal(false);
 }
 
 function closeCameraModal(keepRecorded = false) {
@@ -1489,28 +1598,23 @@ function closeCameraModal(keepRecorded = false) {
         URL.revokeObjectURL(recordedVideoUrl);
         recordedVideoUrl = null;
     }
+    if (!keepRecorded) recordedVideoBlob = null;
 
     closeModal('cameraModal');
     lucide.createIcons();
 }
 
-function handleChatFiles(e) {
+async function handleChatFiles(e) {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-    const chat = mockChats[activeChatTag];
-    if (!chat) return;
-
-    files.forEach(file => {
-        const url = URL.createObjectURL(file);
+    e.target.value = '';
+    for (const file of files) {
         let kind = 'file';
         if (file.type.startsWith('image/')) kind = 'image';
         else if (file.type.startsWith('video/')) kind = 'video';
         else if (file.type.startsWith('audio/')) kind = 'audio';
-        chat.messages.push({ id: newMessageId(), type: 'sent', kind, url, name: file.name, time: "À l'instant" });
-    });
-
-    e.target.value = '';
-    switchChat(activeChatTag);
+        await sendChatMediaMessage({ kind, file, name: file.name });
+    }
 }
 
 function toggleVoiceRecording() {
@@ -1720,6 +1824,32 @@ async function refreshFavoritesFromSupabase({ silent = false } = {}) {
     favorites = (data || []).map((r) => Number(r.listing_id)).filter((x) => Number.isFinite(x));
 }
 
+async function refreshListingCountsFromSupabase(listingId) {
+    if (DEMO_MODE) return null;
+    const id = Number(listingId);
+    if (!Number.isFinite(id)) return null;
+    const client = initSupabase();
+    if (!client) return null;
+    const { data, error } = await client.from('listings').select('id, views_count, likes_count').eq('id', id).maybeSingle();
+    if (error || !data?.id) return null;
+
+    const item = listings.find((l) => l.id === id);
+    if (item) {
+        if (data.views_count !== null && data.views_count !== undefined) item.views_count = Number(data.views_count) || 0;
+        if (data.likes_count !== null && data.likes_count !== undefined) item.likes_count = Number(data.likes_count) || 0;
+    }
+
+    if (currentListingDetailId === id) {
+        const viewsEl = document.getElementById('listingViewsCount');
+        if (viewsEl) viewsEl.textContent = String(Number(data.views_count) || 0);
+        const likesEl = document.getElementById('listingLikesCount');
+        if (likesEl) likesEl.textContent = String(Number(data.likes_count) || 0);
+    }
+
+    renderListings();
+    return data;
+}
+
 async function recordListingView(listingId) {
     if (DEMO_MODE) return;
     const id = Number(listingId);
@@ -1742,12 +1872,15 @@ async function recordListingView(listingId) {
         return;
     }
     const payload = Array.isArray(data) ? data[0] : data;
-    const nextCount = Number(payload?.views_count ?? payload) || 0;
     const item = listings.find((l) => l.id === id);
+    const prevCount = Number(item?.views_count) || 0;
+    const hasServerCount = payload && (payload.views_count !== undefined && payload.views_count !== null);
+    const nextCount = hasServerCount ? Number(payload.views_count) || 0 : prevCount + 1;
     if (item) item.views_count = nextCount;
     const el = document.getElementById('listingViewsCount');
     if (el) el.textContent = String(nextCount);
     renderListings();
+    await refreshListingCountsFromSupabase(id);
 }
 
 function renderListingReviewsListHTML(reviewsData) {
@@ -1938,12 +2071,36 @@ async function refreshUnreadMessageCount() {
 async function refreshLiveChatsFromSupabase() {
     const client = initSupabase();
     if (!client || !currentSupabaseUserId) return;
-    const { data, error } = await client
-        .from('messages')
-        .select('id, created_at, sender_id, receiver_id, body, read_at')
-        .or(`sender_id.eq.${currentSupabaseUserId},receiver_id.eq.${currentSupabaseUserId}`)
-        .order('created_at', { ascending: true })
-        .limit(200);
+    const selectWithMedia = 'id, created_at, sender_id, receiver_id, body, read_at, kind, media_url, media_name, media_mime, media_size';
+    const selectTextOnly = 'id, created_at, sender_id, receiver_id, body, read_at';
+    const query = (select) =>
+        client
+            .from('messages')
+            .select(select)
+            .or(`sender_id.eq.${currentSupabaseUserId},receiver_id.eq.${currentSupabaseUserId}`)
+            .order('created_at', { ascending: true })
+            .limit(200);
+
+    let data = null;
+    let error = null;
+    if (messagesHasMediaColumns !== false) {
+        const res = await query(selectWithMedia);
+        data = res.data;
+        error = res.error;
+        if (error && (isMissingColumnError(error, 'kind') || isMissingColumnError(error, 'media_url'))) {
+            messagesHasMediaColumns = false;
+            const retry = await query(selectTextOnly);
+            data = retry.data;
+            error = retry.error;
+        } else if (!error) {
+            messagesHasMediaColumns = true;
+        }
+    } else {
+        const res = await query(selectTextOnly);
+        data = res.data;
+        error = res.error;
+    }
+
     if (error) {
         if (isMessagingBackendMissing(error)) {
             showToast('Messaging backend is not set up yet', 'alert-circle');
@@ -1982,13 +2139,23 @@ async function refreshLiveChatsFromSupabase() {
         if (!ownerTag) return;
         if (!chats[ownerTag]) return;
         const type = r.sender_id === currentSupabaseUserId ? 'sent' : 'received';
-        chats[ownerTag].messages.push({
+        const kind = r.kind || (r.media_url ? 'file' : 'text');
+        const base = {
             id: r.id,
             type,
-            kind: 'text',
-            text: r.body || '',
+            kind,
             created_at: r.created_at,
             time: formatChatTime(r.created_at)
+        };
+        if (kind === 'text') {
+            chats[ownerTag].messages.push({ ...base, text: r.body || '' });
+            return;
+        }
+        chats[ownerTag].messages.push({
+            ...base,
+            url: r.media_url || '',
+            name: r.media_name || '',
+            mime: r.media_mime || ''
         });
     });
     mockChats = chats;
@@ -2158,14 +2325,7 @@ function renderMessagesList() {
     }
     listEl.innerHTML = entries.map(([tag, chat]) => {
         const last = chat.messages && chat.messages.length ? chat.messages[chat.messages.length - 1] : null;
-        let preview = 'Start the conversation';
-        if (last) {
-            if (last.kind === 'image') preview = 'Photo';
-            else if (last.kind === 'video') preview = 'Video';
-            else if (last.kind === 'audio') preview = 'Audio';
-            else if (last.kind === 'file') preview = last.name || 'File';
-            else preview = last.text || '';
-        }
+        const preview = last ? getChatPreviewText(last) : 'Start the conversation';
 
         const displayTag = chat?.tag || tag;
         return `
@@ -2295,21 +2455,48 @@ async function switchChat(tag, isModal = false) {
     if (!DEMO_MODE && currentSupabaseUserId && chat.userId) {
         const client = initSupabase();
         if (client) {
-            const { data, error } = await client
-                .from('messages')
-                .select('id, created_at, sender_id, receiver_id, body')
-                .or(`and(sender_id.eq.${currentSupabaseUserId},receiver_id.eq.${chat.userId}),and(sender_id.eq.${chat.userId},receiver_id.eq.${currentSupabaseUserId})`)
-                .order('created_at', { ascending: true })
-                .limit(120);
+            const selectWithMedia = 'id, created_at, sender_id, receiver_id, body, kind, media_url, media_name, media_mime, media_size';
+            const selectTextOnly = 'id, created_at, sender_id, receiver_id, body';
+            const query = (select) =>
+                client
+                    .from('messages')
+                    .select(select)
+                    .or(`and(sender_id.eq.${currentSupabaseUserId},receiver_id.eq.${chat.userId}),and(sender_id.eq.${chat.userId},receiver_id.eq.${currentSupabaseUserId})`)
+                    .order('created_at', { ascending: true })
+                    .limit(120);
+
+            let data = null;
+            let error = null;
+            if (messagesHasMediaColumns !== false) {
+                const res = await query(selectWithMedia);
+                data = res.data;
+                error = res.error;
+                if (error && (isMissingColumnError(error, 'kind') || isMissingColumnError(error, 'media_url'))) {
+                    messagesHasMediaColumns = false;
+                    const retry = await query(selectTextOnly);
+                    data = retry.data;
+                    error = retry.error;
+                } else if (!error) {
+                    messagesHasMediaColumns = true;
+                }
+            } else {
+                const res = await query(selectTextOnly);
+                data = res.data;
+                error = res.error;
+            }
             if (!error) {
-                chat.messages = (data || []).map((r) => ({
-                    id: r.id,
-                    type: r.sender_id === currentSupabaseUserId ? 'sent' : 'received',
-                    kind: 'text',
-                    text: r.body || '',
-                    created_at: r.created_at,
-                    time: formatChatTime(r.created_at)
-                }));
+                chat.messages = (Array.isArray(data) ? data : []).map((r) => {
+                    const kind = r.kind || (r.media_url ? 'file' : 'text');
+                    const out = {
+                        id: r.id,
+                        type: r.sender_id === currentSupabaseUserId ? 'sent' : 'received',
+                        kind,
+                        created_at: r.created_at,
+                        time: formatChatTime(r.created_at)
+                    };
+                    if (kind === 'text') return { ...out, text: r.body || '' };
+                    return { ...out, url: r.media_url || '', name: r.media_name || '', mime: r.media_mime || '' };
+                });
             } else if (!isMessagingBackendMissing(error)) {
                 showToast(error.message || 'Failed to load messages', 'alert-circle');
             }
@@ -5332,7 +5519,8 @@ async function toggleFavorite(event, id) {
     }
 
     const payload = Array.isArray(data) ? data[0] : data;
-    const likesCount = Number(payload?.likes_count) || 0;
+    const hasServerCount = payload && (payload.likes_count !== undefined && payload.likes_count !== null);
+    const likesCount = hasServerCount ? (Number(payload.likes_count) || 0) : optimisticLikesCount;
     await refreshFavoritesFromSupabase({ silent: true });
     const likedNow = favorites.includes(listingId);
     if (item) item.likes_count = likesCount;
@@ -5341,6 +5529,7 @@ async function toggleFavorite(event, id) {
     renderListings();
     renderFavorites();
     lucide.createIcons();
+    await refreshListingCountsFromSupabase(listingId);
 }
 
 function getListingImagesForDetail(item) {
@@ -5829,11 +6018,38 @@ async function sendMessage() {
         showToast('Messaging is not ready', 'alert-circle');
         return;
     }
-    const { error } = await client.from('messages').insert({
-        sender_id: currentSupabaseUserId,
-        receiver_id: chat.userId,
-        body: message
-    });
+    let error = null;
+    if (messagesHasMediaColumns !== false) {
+        const res = await client.from('messages').insert({
+            sender_id: currentSupabaseUserId,
+            receiver_id: chat.userId,
+            body: message,
+            kind: 'text',
+            media_url: null,
+            media_name: null,
+            media_mime: null,
+            media_size: null
+        });
+        error = res.error;
+        if (error && (isMissingColumnError(error, 'kind') || isMissingColumnError(error, 'media_url'))) {
+            messagesHasMediaColumns = false;
+            const retry = await client.from('messages').insert({
+                sender_id: currentSupabaseUserId,
+                receiver_id: chat.userId,
+                body: message
+            });
+            error = retry.error;
+        } else if (!error) {
+            messagesHasMediaColumns = true;
+        }
+    } else {
+        const res = await client.from('messages').insert({
+            sender_id: currentSupabaseUserId,
+            receiver_id: chat.userId,
+            body: message
+        });
+        error = res.error;
+    }
     if (error) {
         if (isMessagingBackendMissing(error)) showToast('Messaging backend is not set up yet', 'alert-circle');
         else showToast(error.message || 'Failed to send message', 'alert-circle');
@@ -5868,11 +6084,38 @@ async function sendMessageModal() {
         showToast('Messaging is not ready', 'alert-circle');
         return;
     }
-    const { error } = await client.from('messages').insert({
-        sender_id: currentSupabaseUserId,
-        receiver_id: chat.userId,
-        body: message
-    });
+    let error = null;
+    if (messagesHasMediaColumns !== false) {
+        const res = await client.from('messages').insert({
+            sender_id: currentSupabaseUserId,
+            receiver_id: chat.userId,
+            body: message,
+            kind: 'text',
+            media_url: null,
+            media_name: null,
+            media_mime: null,
+            media_size: null
+        });
+        error = res.error;
+        if (error && (isMissingColumnError(error, 'kind') || isMissingColumnError(error, 'media_url'))) {
+            messagesHasMediaColumns = false;
+            const retry = await client.from('messages').insert({
+                sender_id: currentSupabaseUserId,
+                receiver_id: chat.userId,
+                body: message
+            });
+            error = retry.error;
+        } else if (!error) {
+            messagesHasMediaColumns = true;
+        }
+    } else {
+        const res = await client.from('messages').insert({
+            sender_id: currentSupabaseUserId,
+            receiver_id: chat.userId,
+            body: message
+        });
+        error = res.error;
+    }
     if (error) {
         if (isMessagingBackendMissing(error)) showToast('Messaging backend is not set up yet', 'alert-circle');
         else showToast(error.message || 'Failed to send message', 'alert-circle');
