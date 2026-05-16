@@ -2663,6 +2663,8 @@ main.expanded {
     height: 16px;
     fill: none;
     stroke: currentColor;
+    transform-origin: center;
+    transition: transform 0.15s ease;
 }
 
 .detail-like-btn.active {
@@ -2951,12 +2953,11 @@ footer {
     justify-content: center;
     cursor: pointer;
     z-index: 10;
-    transition: transform 0.2s, background-color 0.2s;
+    transition: background-color 0.2s;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
 .favorite-btn:hover {
-    transform: scale(1.1);
     background-color: white;
 }
 
@@ -2967,11 +2968,29 @@ footer {
 .favorite-btn svg {
     fill: none;
     stroke: currentColor;
+    transform-origin: center;
+    transition: transform 0.15s ease;
+}
+
+.favorite-btn:hover svg,
+.detail-like-btn:hover svg {
+    transform: scale(1.12);
 }
 
 .favorite-btn.active svg {
     fill: currentColor;
     stroke: currentColor;
+}
+
+.favorite-btn.pulse svg,
+.detail-like-btn.pulse svg {
+    animation: heartPop 280ms ease-out 1;
+}
+
+@keyframes heartPop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.25); }
+    100% { transform: scale(1); }
 }
 
 .rating-container {

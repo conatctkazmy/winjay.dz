@@ -988,6 +988,7 @@ if (DEMO_MODE) generateListingReviews();
 
 let myListings = [];
 let favorites = [];
+const pendingHeartPulses = new Set();
 let searchHistory = [];
 let editingListingId = null;
 let confirmCallback = null;
@@ -1846,7 +1847,8 @@ async function refreshListingCountsFromSupabase(listingId) {
         if (likesEl) likesEl.textContent = String(Number(data.likes_count) || 0);
     }
 
-    renderListings();
+    const render = arguments.length > 1 ? arguments[1]?.render !== false : true;
+    if (render) renderListings();
     return data;
 }
 
@@ -4476,6 +4478,7 @@ function getSimilarListings(item) {
 
 function createMyListingCardHTML(item) {
     const isFavorite = favorites.includes(item.id);
+    const pulse = pendingHeartPulses.has(item.id) && isFavorite;
     return `
         <div class="card my-listing-card" onclick="openListingDetail(${item.id})">
             <div class="listing-actions">
@@ -4486,7 +4489,7 @@ function createMyListingCardHTML(item) {
                     <i data-lucide="trash-2"></i>
                 </button>
             </div>
-            <button class="favorite-btn ${isFavorite ? 'active' : ''}" onclick="toggleFavorite(event, ${item.id})">
+            <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
                 <i data-lucide="heart"></i>
             </button>
             <img src="${item.image}" alt="${item.title}" class="card-img">
@@ -4846,9 +4849,10 @@ function renderFavorites() {
 
 function createCardHTML(item) {
     const isFavorite = favorites.includes(item.id);
+    const pulse = pendingHeartPulses.has(item.id) && isFavorite;
     return `
         <div class="card" onclick="openListingDetail(${item.id})">
-            <button class="favorite-btn ${isFavorite ? 'active' : ''}" onclick="toggleFavorite(event, ${item.id})">
+            <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
                 <i data-lucide="heart"></i>
             </button>
             <img src="${item.image}" alt="${item.title}" class="card-img">
@@ -5459,6 +5463,12 @@ async function toggleFavorite(event, id) {
     const listingId = Number(id);
     if (!Number.isFinite(listingId)) return;
 
+    const pulseBtn = () => {
+        if (!btn?.classList) return;
+        btn.classList.add('pulse');
+        window.setTimeout(() => btn.classList.remove('pulse'), 320);
+    };
+
     if (DEMO_MODE) {
         const index = favorites.indexOf(listingId);
         if (index > -1) {
@@ -5468,11 +5478,13 @@ async function toggleFavorite(event, id) {
         } else {
             favorites.push(listingId);
             btn?.classList?.add('active');
+            pulseBtn();
             showToast('Ajouté aux favoris', 'heart');
         }
+        if (favorites.includes(listingId)) pendingHeartPulses.add(listingId);
         renderListings();
         renderFavorites();
-        lucide.createIcons();
+        pendingHeartPulses.delete(listingId);
         return;
     }
 
@@ -5492,9 +5504,13 @@ async function toggleFavorite(event, id) {
     btn?.classList?.toggle('active', optimisticLiked);
     const likesEl = document.getElementById('listingLikesCount');
     if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(optimisticLikesCount);
+    if (optimisticLiked) {
+        pulseBtn();
+        pendingHeartPulses.add(listingId);
+    }
     renderListings();
     renderFavorites();
-    lucide.createIcons();
+    pendingHeartPulses.delete(listingId);
     showToast(optimisticLiked ? 'Liked' : 'Unliked', 'heart');
 
     const { data, error } = await client.rpc('toggle_listing_like', { p_listing_id: listingId });
@@ -5512,9 +5528,9 @@ async function toggleFavorite(event, id) {
         if (item) item.likes_count = prevLikesCount;
         btn?.classList?.toggle('active', wasLiked);
         if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(prevLikesCount);
+        pendingHeartPulses.delete(listingId);
         renderListings();
         renderFavorites();
-        lucide.createIcons();
         return;
     }
 
@@ -5526,10 +5542,9 @@ async function toggleFavorite(event, id) {
     if (item) item.likes_count = likesCount;
     if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(likesCount);
     btn?.classList?.toggle('active', likedNow);
+    await refreshListingCountsFromSupabase(listingId, { render: false });
     renderListings();
     renderFavorites();
-    lucide.createIcons();
-    await refreshListingCountsFromSupabase(listingId);
 }
 
 function getListingImagesForDetail(item) {
@@ -5572,6 +5587,7 @@ function openListingDetail(listingId) {
     const content = document.getElementById('listingDetailContent');
     const seller = item.seller || { name: "Utilisateur Winjay", tag: "@user", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay", verified: false, rating: 0, reviews: 0, reviewsData: [] };
     const isLiked = favorites.includes(listingId);
+    const pulse = pendingHeartPulses.has(listingId) && isLiked;
     const detailImages = getListingImagesForDetail(item);
     const selectedIdxRaw = listingDetailImageIndex[listingId] ?? 0;
     const selectedIdx = Math.max(0, Math.min(detailImages.length - 1, Number(selectedIdxRaw) || 0));
@@ -5618,7 +5634,7 @@ function openListingDetail(listingId) {
                     <span><i data-lucide="tag"></i> ${item.category}</span>
                     <span><i data-lucide="calendar"></i> ${item.date}</span>
                     <span><i data-lucide="eye"></i> <span id="listingViewsCount">${Number(item.views_count) || 0}</span></span>
-                    <button class="detail-like-btn ${isLiked ? 'active' : ''}" type="button" onclick="toggleFavorite(event, ${item.id})" title="Like">
+                    <button class="detail-like-btn ${isLiked ? 'active' : ''} ${pulse ? 'pulse' : ''}" type="button" onclick="toggleFavorite(event, ${item.id})" title="Like">
                         <i data-lucide="heart"></i>
                         <span id="listingLikesCount">${Number(item.likes_count) || 0}</span>
                     </button>
