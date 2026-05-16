@@ -1053,6 +1053,7 @@ let lastUnreadNotificationCount = 0;
 let lastFetchedNotifications = [];
 let notificationsPollTimer = null;
 let messagesPollTimer = null;
+let categoryPickerTargetSelectId = '';
 let profileReviewsTargetColumn = 'profile_id';
 let suppressNextMessagesBootstrap = false;
 let hasShownProfilesReadToast = false;
@@ -3181,6 +3182,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     populateFilterDropdowns();
     populateAllExtraCategories();
     populateWorkCategoriesSelect();
+    setupCategoryPickers();
     loadUserProfileImages();
     setupImageEditorDrag();
     handleIdentityFilePreview('idFrontInput', 'idFrontPreview');
@@ -3351,7 +3353,7 @@ function populateCategories() {
         categorySelect.appendChild(option);
         const li = document.createElement('li');
         if (cat.special === 'other') {
-            li.innerHTML = `<a href="#" onclick="openModal('otherCategoriesModal'); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
+            li.innerHTML = `<a href="#" onclick="openOtherCategoriesModal(); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
         } else {
             const safeName = cat.name.replace(/'/g, "\\'");
             li.innerHTML = `<a href="#" onclick="filterByCategory('${safeName}', this); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
@@ -3360,7 +3362,7 @@ function populateCategories() {
     });
     categorySelect.addEventListener('change', function() {
         if (this.value === "OPEN_OTHER_MODAL") {
-            openModal('otherCategoriesModal');
+            openCategoryPicker('listingCategory');
             this.value = "";
         }
     });
@@ -3374,7 +3376,75 @@ function populateAllExtraCategories() {
     lucide.createIcons();
 }
 
+function openOtherCategoriesModal() {
+    categoryPickerTargetSelectId = '';
+    openModal('otherCategoriesModal');
+    try {
+        const input = document.getElementById('categorySearch');
+        if (input) {
+            input.value = '';
+            filterCategories();
+            setTimeout(() => input.focus(), 0);
+        }
+    } catch (e) {
+        null;
+    }
+}
+
+function openCategoryPicker(selectId) {
+    const id = String(selectId || '').trim();
+    if (!id) return;
+    categoryPickerTargetSelectId = id;
+    openOtherCategoriesModal();
+}
+
+function setupCategoryPickers() {
+    const ids = ['listingCategory', 'editListingCategory', 'editWorkCategory'];
+    ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const open = (e) => {
+            try {
+                e.preventDefault();
+                e.stopPropagation();
+            } catch (err) {
+                null;
+            }
+            openCategoryPicker(id);
+        };
+        el.addEventListener('pointerdown', open);
+        el.addEventListener('mousedown', open);
+        el.addEventListener('click', open);
+        el.addEventListener('keydown', (e) => {
+            const k = String(e.key || '');
+            if (k === 'Enter' || k === ' ' || k === 'ArrowDown') open(e);
+        });
+    });
+}
+
 function selectCategoryFromModal(categoryName) {
+    const targetId = String(categoryPickerTargetSelectId || '').trim();
+    if (targetId) {
+        const select = document.getElementById(targetId);
+        if (select) {
+            const exists = Array.from(select.options).some((opt) => opt.value === categoryName);
+            if (!exists) {
+                const option = document.createElement('option');
+                option.value = categoryName;
+                option.textContent = categoryName;
+                select.appendChild(option);
+            }
+            select.value = categoryName;
+            try {
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+            } catch (e) {
+                null;
+            }
+        }
+        categoryPickerTargetSelectId = '';
+        closeModal('otherCategoriesModal');
+        return;
+    }
     const filterCategory = document.getElementById('filterCategory');
     const existsInFilter = Array.from(filterCategory.options).some(opt => opt.value === categoryName);
     if (!existsInFilter) {
