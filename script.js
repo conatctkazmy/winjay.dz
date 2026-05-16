@@ -6243,7 +6243,14 @@ function syncMessagesContainerHeight() {
     if (!container) return;
     const rect = container.getBoundingClientRect();
     const viewportHeight = window.visualViewport?.height || window.innerHeight || 0;
-    const bottomPadding = 16;
+    let bottomPadding = 16;
+    if (window.innerWidth <= 768) {
+        const footer = document.querySelector('.mobile-footer-bar');
+        if (footer) {
+            const footerRect = footer.getBoundingClientRect();
+            if (footerRect.height > 0) bottomPadding += footerRect.height;
+        }
+    }
     const nextHeight = Math.max(240, Math.floor(viewportHeight - rect.top - bottomPadding));
     container.style.height = `${nextHeight}px`;
 }
