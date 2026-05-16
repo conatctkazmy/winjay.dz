@@ -104,6 +104,7 @@ const supabaseAuthStorage = {
 
 let supabaseClient = null;
 let currentSupabaseUserId = null;
+let currentSupabaseUserEmail = '';
 
 function isLoggedIn() {
     return !!currentSupabaseUserId;
@@ -283,6 +284,7 @@ function initSupabase() {
 function applyAuthSessionToLocalState(session) {
     const user = session?.user || null;
     currentSupabaseUserId = user?.id || null;
+    currentSupabaseUserEmail = user?.email || '';
 
     if (!user) {
         userProfile = createEmptyUserProfile();
@@ -4973,6 +4975,7 @@ function updateProfileUI() {
     updateFreeVerifiedCounterUI();
     renderVerifiedQuestCard();
     updateUpgradeOfferVisibility();
+    updateAdminDashboardButtonVisibility();
     lucide.createIcons();
 }
 
@@ -5001,6 +5004,14 @@ function updateUpgradeOfferVisibility() {
 
     const questCard = document.getElementById('verifiedQuestCard');
     if (questCard && verified) questCard.style.display = 'none';
+}
+
+function updateAdminDashboardButtonVisibility() {
+    const btn = document.getElementById('adminDashboardDropdownItem');
+    if (!btn) return;
+    const emailOk = String(currentSupabaseUserEmail || '').toLowerCase() === 'contactkazmy@gmail.com';
+    const allowed = !!userProfile?.isAdmin || emailOk;
+    btn.style.display = allowed ? '' : 'none';
 }
 
 function showVerifiedPopup(event) {
