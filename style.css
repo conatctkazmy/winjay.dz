@@ -4359,6 +4359,7 @@ footer {
 
     .chat-input input {
         padding: 10px 14px;
+        font-size: 16px;
     }
 
     .chat-actions {
@@ -4434,7 +4435,7 @@ footer {
     }
 
     .chat-input input {
-        font-size: 0.95rem;
+        font-size: 16px;
     }
 }
 

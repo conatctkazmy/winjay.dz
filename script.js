@@ -4635,6 +4635,10 @@ function showSection(sectionId) {
     if (protectedSections.includes(sectionId) && !requireAuthOrPrompt()) {
         sectionId = 'home-section';
     }
+    try {
+        document.activeElement?.blur?.();
+    } catch {}
+    closeMobileSearchExpand();
     document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
     document.getElementById(sectionId).classList.add('active');
     if (window.innerWidth <= 768) {
