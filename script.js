@@ -3748,6 +3748,11 @@ function openModal(modalId) {
     if (modalId === 'notificationsModal') {
         renderNotificationsModal().then(() => markAllNotificationsRead()).then(() => refreshUnreadNotificationCount());
     }
+    try {
+        updateUpgradeOfferVisibility();
+    } catch (e) {
+        null;
+    }
 }
 
 function closeModal(modalId) {
@@ -4325,11 +4330,21 @@ let selectedVipPlan = null;
 let selectedVerifiedPlan = null;
 
 function openVipModal() {
+    if (userProfile?.isVip) {
+        showToast('You are already VIP', 'check-circle');
+        updateUpgradeOfferVisibility();
+        return;
+    }
     openModal('vipModal');
     lucide.createIcons();
 }
 
 function openVerifiedUpgradeModal() {
+    if (userProfile?.verified) {
+        showToast('You are already Verified', 'check-circle');
+        updateUpgradeOfferVisibility();
+        return;
+    }
     openModal('verifiedUpgradeModal');
     lucide.createIcons();
 }
@@ -4957,7 +4972,35 @@ function updateProfileUI() {
     if (workEl) workEl.value = userProfile.workCategory || '';
     updateFreeVerifiedCounterUI();
     renderVerifiedQuestCard();
+    updateUpgradeOfferVisibility();
     lucide.createIcons();
+}
+
+function updateUpgradeOfferVisibility() {
+    const vip = !!userProfile?.isVip;
+    const verified = !!userProfile?.verified;
+
+    const sidebarVip = document.getElementById('sidebarVipCta');
+    if (sidebarVip) sidebarVip.style.display = vip ? 'none' : '';
+
+    const vipBadgeBtn = document.getElementById('vipBadgeBecomeBtn');
+    if (vipBadgeBtn) vipBadgeBtn.style.display = vip ? 'none' : '';
+
+    const verifiedBadgeBtn = document.getElementById('verifiedBadgeBecomeBtn');
+    if (verifiedBadgeBtn) verifiedBadgeBtn.style.display = verified ? 'none' : '';
+
+    const limitVipBtn = document.getElementById('listingLimitVipBtn');
+    if (limitVipBtn) limitVipBtn.style.display = vip ? 'none' : '';
+
+    const limitVerifiedBtn = document.getElementById('listingLimitVerifiedBtn');
+    if (limitVerifiedBtn) limitVerifiedBtn.style.display = verified ? 'none' : '';
+
+    document.querySelectorAll('.free-verified-pill').forEach((el) => {
+        el.style.display = verified ? 'none' : '';
+    });
+
+    const questCard = document.getElementById('verifiedQuestCard');
+    if (questCard && verified) questCard.style.display = 'none';
 }
 
 function showVerifiedPopup(event) {
