@@ -966,6 +966,7 @@ let currentSellerProfileTag = null;
 const listingReviewPanelState = {};
 const listingDetailImageIndex = {};
 const listingReviewsCache = new Map();
+const profileRatingSummaryCache = new Map();
 
 let mockChats = DEMO_MODE ? {
     "@amine_dz": {
@@ -1535,6 +1536,11 @@ function isListingReviewsBackendMissing(error) {
     return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('listing_reviews');
 }
 
+function isPublicProfilesBackendMissing(error) {
+    const msg = String(error?.message || '');
+    return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('public_profiles');
+}
+
 function isProfileReviewsBackendMissing(error) {
     const msg = String(error?.message || '');
     return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('profile_reviews');
@@ -1585,15 +1591,47 @@ async function fetchProfileByTag(tag) {
     const t = String(tag || '').trim().toLowerCase();
     if (!t) return null;
     const normalized = t.startsWith('@') ? t : '@' + t;
+    const viewAttempt = await client.from('public_profiles').select('*').eq('tag', normalized).maybeSingle();
+    if (!viewAttempt.error && viewAttempt.data) return viewAttempt.data;
     const { data, error } = await client.from('profiles').select('*').eq('tag', normalized).maybeSingle();
-    if (error) {
+    if (error || viewAttempt.error) {
         if (!hasShownProfilesReadToast) {
             hasShownProfilesReadToast = true;
-            showToast('Profiles are private. Enable profiles SELECT policy in Supabase to show real name/avatar.', 'alert-circle');
+            showToast('Enable public SELECT on profiles (or create a public profile policy) to show real name/avatar.', 'alert-circle');
         }
         return null;
     }
     return data || null;
+}
+
+async function fetchProfilesByIds(ids) {
+    const client = initSupabase();
+    if (!client) return {};
+    const list = Array.isArray(ids) ? ids.filter(Boolean) : [];
+    if (!list.length) return {};
+
+    const viewAttempt = await client.from('public_profiles').select('*').in('id', list);
+    if (!viewAttempt.error) {
+        const out = {};
+        (viewAttempt.data || []).forEach((p) => {
+            if (p?.id) out[p.id] = p;
+        });
+        return out;
+    }
+
+    const { data, error } = await client.from('profiles').select('*').in('id', list);
+    if (error) {
+        if (!hasShownProfilesReadToast) {
+            hasShownProfilesReadToast = true;
+            showToast('Enable public SELECT on profiles (or create a public profile policy) to show real name/avatar.', 'alert-circle');
+        }
+        return {};
+    }
+    const out = {};
+    (data || []).forEach((p) => {
+        if (p?.id) out[p.id] = p;
+    });
+    return out;
 }
 
 async function fetchListingReviews(listingId) {
@@ -1614,11 +1652,7 @@ async function fetchListingReviews(listingId) {
     }
     const rows = Array.isArray(data) ? data : [];
     const authorIds = Array.from(new Set(rows.map((r) => r.author_id).filter(Boolean)));
-    let profilesById = {};
-    if (authorIds.length) {
-        const { data: profRows } = await client.from('profiles').select('*').in('id', authorIds);
-        (profRows || []).forEach((p) => (profilesById[p.id] = p));
-    }
+    const profilesById = authorIds.length ? await fetchProfilesByIds(authorIds) : {};
     return rows.map((r) => {
         const p = profilesById[r.author_id] || { id: r.author_id };
         const seller = mapProfileRowToSeller(p);
@@ -1842,17 +1876,7 @@ async function refreshLiveChatsFromSupabase() {
         if (otherId) otherIds.add(otherId);
     });
     const ids = Array.from(otherIds);
-    let profilesById = {};
-    if (ids.length) {
-        const { data: profRows, error: profErr } = await client.from('profiles').select('*').in('id', ids);
-        if (profErr && !hasShownProfilesReadToast) {
-            hasShownProfilesReadToast = true;
-            showToast('Profiles are private. Enable profiles SELECT policy in Supabase to show real name/avatar.', 'alert-circle');
-        }
-        (profRows || []).forEach((p) => {
-            profilesById[p.id] = p;
-        });
-    }
+    const profilesById = ids.length ? await fetchProfilesByIds(ids) : {};
     const chats = {};
     ids.forEach((id) => {
         const p = profilesById[id];
@@ -4566,12 +4590,15 @@ function createCardHTML(item) {
 }
 
 function getRatingHTML(rating, reviews) {
-    const fullStars = Math.floor(rating);
+    const reviewCount = Number(reviews) || 0;
+    const safeRating = Number(rating) || 0;
+    if (reviewCount <= 0 || safeRating <= 0) return '';
+    const fullStars = Math.floor(safeRating);
     let starsHTML = '';
     for (let i = 0; i < 5; i++) {
         starsHTML += `<i data-lucide="star" style="${i < fullStars ? 'fill: #ffb400;' : ''} width: 14px; height: 14px;"></i>`;
     }
-    return `<div class="rating-container"><div class="stars">${starsHTML}</div><span class="rating-value">${rating}</span><span class="reviews-count">(${reviews} avis)</span></div>`;
+    return `<div class="rating-container"><div class="stars">${starsHTML}</div><span class="rating-value">${safeRating}</span><span class="reviews-count">(${reviewCount} avis)</span></div>`;
 }
 
 function makeSafeId(value) {
@@ -5110,6 +5137,44 @@ function expandListingReviews(listingId) {
     }, 60);
 }
 
+async function fetchProfileRatingSummary(profileId) {
+    const id = String(profileId || '').trim();
+    if (!id) return { rating: 0, reviews: 0 };
+    if (profileRatingSummaryCache.has(id)) return profileRatingSummaryCache.get(id);
+
+    const client = initSupabase();
+    if (!client) return { rating: 0, reviews: 0 };
+    const baseQuery = (targetColumn) =>
+        client
+            .from('profile_reviews')
+            .select('rating')
+            .eq(targetColumn, id)
+            .limit(500);
+
+    const firstColumn = profileReviewsTargetColumn || 'profile_id';
+    let { data, error } = await baseQuery(firstColumn);
+    if (error && isMissingColumnError(error, firstColumn)) {
+        const fallback = firstColumn === 'profile_id' ? 'target_profile_id' : 'profile_id';
+        const retry = await baseQuery(fallback);
+        data = retry.data;
+        error = retry.error;
+        if (!error) profileReviewsTargetColumn = fallback;
+    } else if (!error) {
+        profileReviewsTargetColumn = firstColumn;
+    }
+    if (error) {
+        if (!isProfileReviewsBackendMissing(error)) showToast(error.message || 'Failed to load reviews', 'alert-circle');
+        return { rating: 0, reviews: 0 };
+    }
+    const rows = Array.isArray(data) ? data : [];
+    const reviews = rows.length;
+    const sum = rows.reduce((acc, r) => acc + (Number(r?.rating) || 0), 0);
+    const rating = reviews ? Math.round((sum / reviews) * 10) / 10 : 0;
+    const out = { rating, reviews };
+    profileRatingSummaryCache.set(id, out);
+    return out;
+}
+
 function toggleFavorite(event, id) {
     event.stopPropagation();
     const btn = event.currentTarget;
@@ -5166,7 +5231,7 @@ function openListingDetail(listingId) {
         item.reviewsData = [];
     }
     const content = document.getElementById('listingDetailContent');
-    const seller = item.seller || { name: "Utilisateur Winjay", tag: "@user", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay", verified: false, rating: 4.5, reviews: 10, reviewsData: [] };
+    const seller = item.seller || { name: "Utilisateur Winjay", tag: "@user", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay", verified: false, rating: 0, reviews: 0, reviewsData: [] };
     const detailImages = getListingImagesForDetail(item);
     const selectedIdxRaw = listingDetailImageIndex[listingId] ?? 0;
     const selectedIdx = Math.max(0, Math.min(detailImages.length - 1, Number(selectedIdxRaw) || 0));
@@ -5220,7 +5285,7 @@ function openListingDetail(listingId) {
                         <div>
                             <div class="seller-name">${seller.name} ${getUserBadgesHTML(seller)}</div>
                             <div class="seller-tag">${seller.tag}</div>
-                            ${getRatingHTML(seller.rating || 4.5, seller.reviews || 10)}
+                            <div id="listingSellerRating">${getRatingHTML(seller.rating || 0, seller.reviews || 0)}</div>
                             <button class="see-reviews-btn" type="button" onclick="event.stopPropagation(); openSellerProfileByOwnerId('${item.owner_id}', 'reviews')">
                                 <i data-lucide="star"></i>
                                 Avis du vendeur
@@ -5286,6 +5351,15 @@ function openListingDetail(listingId) {
     openModal('listingDetailModal');
     lucide.createIcons();
     refreshListingReviewsForListingDetail(listingId, seller?.name || 'Vendeur');
+    if (!DEMO_MODE) {
+        fetchProfileRatingSummary(item.owner_id).then((summary) => {
+            if (currentListingDetailId !== listingId) return;
+            const sellerRatingEl = document.getElementById('listingSellerRating');
+            if (!sellerRatingEl) return;
+            sellerRatingEl.innerHTML = getRatingHTML(summary.rating, summary.reviews);
+            lucide.createIcons();
+        });
+    }
 }
 
 function shareListing(platform, id) {
