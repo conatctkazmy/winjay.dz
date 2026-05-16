@@ -1032,6 +1032,7 @@ let lastUnreadMessageCount = 0;
 let profileReviewsTargetColumn = 'profile_id';
 let suppressNextMessagesBootstrap = false;
 let hasShownProfilesReadToast = false;
+let hasShownViewsBackendToast = false;
 let voiceRecorder = null;
 let voiceChunks = [];
 let voiceStream = null;
@@ -1728,12 +1729,18 @@ async function recordListingView(listingId) {
     const { data, error } = await client.rpc('increment_listing_view', { p_listing_id: id });
     if (error) {
         const msg = String(error?.message || '');
-        if (msg.toLowerCase().includes('increment_listing_view') || msg.toLowerCase().includes('does not exist')) {
-            showToast('Listing views backend is not set up yet', 'alert-circle');
+        if (!hasShownViewsBackendToast) {
+            hasShownViewsBackendToast = true;
+            if (msg.toLowerCase().includes('increment_listing_view') || msg.toLowerCase().includes('does not exist')) {
+                showToast('Listing views backend is not set up yet', 'alert-circle');
+            } else {
+                showToast(msg || 'Failed to record view', 'alert-circle');
+            }
         }
         return;
     }
-    const nextCount = Number(data?.views_count ?? data) || 0;
+    const payload = Array.isArray(data) ? data[0] : data;
+    const nextCount = Number(payload?.views_count ?? payload) || 0;
     const item = listings.find((l) => l.id === id);
     if (item) item.views_count = nextCount;
     const el = document.getElementById('listingViewsCount');
@@ -5297,8 +5304,9 @@ async function toggleFavorite(event, id) {
         return;
     }
 
-    const liked = !!data?.liked;
-    const likesCount = Number(data?.likes_count) || 0;
+    const payload = Array.isArray(data) ? data[0] : data;
+    const liked = !!payload?.liked;
+    const likesCount = Number(payload?.likes_count) || 0;
     const idx = favorites.indexOf(listingId);
     if (liked && idx === -1) favorites.push(listingId);
     if (!liked && idx > -1) favorites.splice(idx, 1);
