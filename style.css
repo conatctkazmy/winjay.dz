@@ -1417,8 +1417,7 @@ main.expanded {
     height: 100%;
     display: block;
     object-fit: contain;
-    transform: scale(1.18);
-    transform-origin: center;
+    transform: none;
 }
 
 .vip-badge {
@@ -1453,8 +1452,7 @@ main.expanded {
 }
 
 .chat-header .verified-badge img {
-    transform: scale(0.6);
-    transform-origin: center;
+    transform: none;
 }
 
 .profile-details p {
@@ -1904,7 +1902,7 @@ main.expanded {
     background-color: var(--light-gray);
 }
 
-.chat-header img {
+.chat-header > img {
     width: 40px;
     height: 40px;
     border-radius: 50%;
@@ -5028,6 +5026,30 @@ footer {
         gap: 6px;
     }
 
+    .chat-header {
+        padding: 12px;
+        gap: 10px;
+    }
+
+    .chat-header > img {
+        width: 36px;
+        height: 36px;
+    }
+
+    .chat-header h4 {
+        font-size: 0.95rem;
+    }
+
+    .chat-header .verified-badge,
+    .chat-header .vip-badge {
+        width: 18px;
+        height: 18px;
+    }
+
+    .chat-header .vip-badge {
+        font-size: 10px;
+    }
+
     .messages-list {
         max-height: 28vh;
     }
@@ -5050,7 +5072,8 @@ footer {
         gap: 10px;
     }
 
-    .message-item img {
+    .message-item > img,
+    .message-item-modal > img {
         width: 44px;
         height: 44px;
     }
