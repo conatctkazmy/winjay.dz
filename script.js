@@ -3353,7 +3353,7 @@ function populateCategories() {
         categorySelect.appendChild(option);
         const li = document.createElement('li');
         if (cat.special === 'other') {
-            li.innerHTML = `<a href="#" onclick="openOtherCategoriesModal(); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
+            li.innerHTML = `<a href="#" onclick="openOtherCategoriesModal(true); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
         } else {
             const safeName = cat.name.replace(/'/g, "\\'");
             li.innerHTML = `<a href="#" onclick="filterByCategory('${safeName}', this); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
@@ -3376,8 +3376,8 @@ function populateAllExtraCategories() {
     lucide.createIcons();
 }
 
-function openOtherCategoriesModal() {
-    categoryPickerTargetSelectId = '';
+function openOtherCategoriesModal(clearTarget = false) {
+    if (clearTarget) categoryPickerTargetSelectId = '';
     openModal('otherCategoriesModal');
     try {
         const input = document.getElementById('categorySearch');
@@ -3395,7 +3395,7 @@ function openCategoryPicker(selectId) {
     const id = String(selectId || '').trim();
     if (!id) return;
     categoryPickerTargetSelectId = id;
-    openOtherCategoriesModal();
+    openOtherCategoriesModal(false);
 }
 
 function setupCategoryPickers() {
@@ -3602,6 +3602,9 @@ function closeModal(modalId) {
             preview.style.display = 'none';
         }
         document.getElementById('listingImagesModal')?.classList?.remove('active');
+    }
+    if (modalId === 'otherCategoriesModal') {
+        categoryPickerTargetSelectId = '';
     }
     if (!document.querySelector('.modal.active')) {
         body.classList.remove('modal-open');
