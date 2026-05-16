@@ -2664,7 +2664,6 @@ main.expanded {
     fill: none;
     stroke: currentColor;
     transform-origin: center;
-    transition: transform 0.15s ease;
 }
 
 .detail-like-btn.active {
@@ -2969,12 +2968,6 @@ footer {
     fill: none;
     stroke: currentColor;
     transform-origin: center;
-    transition: transform 0.15s ease;
-}
-
-.favorite-btn:hover svg,
-.detail-like-btn:hover svg {
-    transform: scale(1.12);
 }
 
 .favorite-btn.active svg {

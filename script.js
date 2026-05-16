@@ -5468,6 +5468,8 @@ async function toggleFavorite(event, id) {
         btn.classList.add('pulse');
         window.setTimeout(() => btn.classList.remove('pulse'), 320);
     };
+    const isCardHeart = !!btn?.classList?.contains('favorite-btn');
+    const isDetailHeart = !!btn?.classList?.contains('detail-like-btn');
 
     if (DEMO_MODE) {
         const index = favorites.indexOf(listingId);
@@ -5478,10 +5480,10 @@ async function toggleFavorite(event, id) {
         } else {
             favorites.push(listingId);
             btn?.classList?.add('active');
-            pulseBtn();
+            if (isDetailHeart) pulseBtn();
             showToast('Ajouté aux favoris', 'heart');
         }
-        if (favorites.includes(listingId)) pendingHeartPulses.add(listingId);
+        if (favorites.includes(listingId) && isCardHeart) pendingHeartPulses.add(listingId);
         renderListings();
         renderFavorites();
         pendingHeartPulses.delete(listingId);
@@ -5505,8 +5507,8 @@ async function toggleFavorite(event, id) {
     const likesEl = document.getElementById('listingLikesCount');
     if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(optimisticLikesCount);
     if (optimisticLiked) {
-        pulseBtn();
-        pendingHeartPulses.add(listingId);
+        if (isDetailHeart) pulseBtn();
+        if (isCardHeart) pendingHeartPulses.add(listingId);
     }
     renderListings();
     renderFavorites();
