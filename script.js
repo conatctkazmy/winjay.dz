@@ -965,6 +965,7 @@ let currentListingDetailId = null;
 let currentSellerProfileTag = null;
 const listingReviewPanelState = {};
 const listingDetailImageIndex = {};
+const listingReviewsCache = new Map();
 
 let mockChats = DEMO_MODE ? {
     "@amine_dz": {
@@ -1529,6 +1530,11 @@ function isMessagingBackendMissing(error) {
     return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('messages');
 }
 
+function isListingReviewsBackendMissing(error) {
+    const msg = String(error?.message || '');
+    return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('listing_reviews');
+}
+
 function isProfileReviewsBackendMissing(error) {
     const msg = String(error?.message || '');
     return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('profile_reviews');
@@ -1588,6 +1594,108 @@ async function fetchProfileByTag(tag) {
         return null;
     }
     return data || null;
+}
+
+async function fetchListingReviews(listingId) {
+    const id = Number(listingId);
+    if (!Number.isFinite(id)) return [];
+    const client = initSupabase();
+    if (!client) return [];
+    const { data, error } = await client
+        .from('listing_reviews')
+        .select('id, created_at, author_id, rating, comment')
+        .eq('listing_id', id)
+        .order('created_at', { ascending: false })
+        .limit(200);
+    if (error) {
+        if (isListingReviewsBackendMissing(error)) return [];
+        showToast(error.message || 'Failed to load reviews', 'alert-circle');
+        return [];
+    }
+    const rows = Array.isArray(data) ? data : [];
+    const authorIds = Array.from(new Set(rows.map((r) => r.author_id).filter(Boolean)));
+    let profilesById = {};
+    if (authorIds.length) {
+        const { data: profRows } = await client.from('profiles').select('*').in('id', authorIds);
+        (profRows || []).forEach((p) => (profilesById[p.id] = p));
+    }
+    return rows.map((r) => {
+        const p = profilesById[r.author_id] || { id: r.author_id };
+        const seller = mapProfileRowToSeller(p);
+        return {
+            user: seller.name,
+            tag: seller.tag,
+            pic: seller.pic || seller.profilePic,
+            rating: Number(r.rating) || 0,
+            date: formatRelativeDate(r.created_at),
+            comment: escapeHtml(r.comment || '')
+        };
+    });
+}
+
+function renderListingReviewsListHTML(reviewsData) {
+    const rows = Array.isArray(reviewsData) ? reviewsData : [];
+    if (!rows.length) return '<p style="color: var(--text-muted);">Aucun avis pour le moment.</p>';
+    return rows
+        .map((r) => {
+            const rating = Math.max(0, Math.min(5, Number(r.rating) || 0));
+            const tag = String(r.tag || '@user');
+            const user = escapeHtml(r.user || 'User');
+            const date = escapeHtml(r.date || '');
+            const pic = String(r.pic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(tag)}`);
+            const comment = String(r.comment || '');
+            return `
+            <div class="review-item">
+                <img src="${pic}" class="review-avatar clickable" alt="${user}" onclick="openSellerProfile('${tag}')">
+                <div class="review-content-wrapper">
+                    <div class="review-header">
+                        <span class="review-user clickable" onclick="openSellerProfile('${tag}')">${user}</span>
+                        <span class="review-date">${date}</span>
+                    </div>
+                    <div class="stars" style="margin-bottom: 8px;">
+                        ${Array(5)
+                            .fill(0)
+                            .map((_, i) => `<i data-lucide="star" style="${i < rating ? 'fill: #ffb400;' : ''} width: 12px; height: 12px;"></i>`)
+                            .join('')}
+                    </div>
+                    <div class="review-comment">${comment}</div>
+                </div>
+            </div>
+        `;
+        })
+        .join('');
+}
+
+async function refreshListingReviewsForListingDetail(listingId, sellerName) {
+    if (DEMO_MODE) return;
+    const id = Number(listingId);
+    if (!Number.isFinite(id)) return;
+    const rows = await fetchListingReviews(id);
+    listingReviewsCache.set(id, rows);
+    const listing = listings.find((l) => l.id === id);
+    if (listing) listing.reviewsData = rows;
+
+    const countEl = document.getElementById('listingReviewsCount');
+    if (countEl) countEl.textContent = String(rows.length);
+
+    const listEl = document.getElementById('listingReviewsList');
+    if (listEl) listEl.innerHTML = renderListingReviewsListHTML(rows);
+
+    const highlightEl = document.getElementById('listingReviewHighlightWrap');
+    if (highlightEl) {
+        const best = rows.length ? rows[0] : null;
+        highlightEl.innerHTML = best
+            ? `
+                <div class="review-highlight clickable" onclick="expandListingReviews(${id})">
+                    <div class="highlight-label"><i data-lucide="message-circle" style="width: 14px; height: 14px;"></i> Avis sur l'annonce</div>
+                    <div class="highlight-content">"${best.comment}"</div>
+                    <div class="highlight-author">— ${escapeHtml(best.user || '')}</div>
+                </div>
+            `
+            : '';
+    }
+
+    lucide.createIcons();
 }
 
 function computeRatingSummaryFromReviews(reviewsData) {
@@ -4839,8 +4947,9 @@ async function addProfileReview(targetTag, source = 'seller-profile') {
     showToast('Avis ajouté avec succès !', 'check-circle');
 }
 
-function addListingReview(listingId) {
-    const listing = listings.find(l => l.id === listingId);
+async function addListingReview(listingId) {
+    const id = Number(listingId);
+    const listing = listings.find((l) => l.id === id);
     if (!listing) return;
     const ratingInput = document.getElementById('listingReviewRating');
     const commentInput = document.getElementById('listingReviewComment');
@@ -4856,23 +4965,51 @@ function addListingReview(listingId) {
         return;
     }
 
-    const reviewer = getCurrentReviewerIdentity();
-    listing.reviewsData = listing.reviewsData || [];
-    listing.reviewsData.unshift({
-        user: reviewer.user,
-        tag: reviewer.tag,
-        pic: reviewer.pic,
-        rating,
-        date: "À l'instant",
-        comment: escapeHtml(comment),
-        reply: null,
-        replyAuthorTag: null,
-        thread: [],
-        likes: 0
-    });
-    listingReviewPanelState[listingId] = true;
-    openListingDetail(listingId);
-    showToast('Avis ajouté à cette annonce.', 'check-circle');
+    if (!requireAuthOrPrompt()) return;
+    if (DEMO_MODE) {
+        const reviewer = getCurrentReviewerIdentity();
+        listing.reviewsData = listing.reviewsData || [];
+        listing.reviewsData.unshift({
+            user: reviewer.user,
+            tag: reviewer.tag,
+            pic: reviewer.pic,
+            rating,
+            date: "À l'instant",
+            comment: escapeHtml(comment)
+        });
+        listingReviewPanelState[id] = true;
+        openListingDetail(id);
+        showToast('Avis ajouté à cette annonce.', 'check-circle');
+        return;
+    }
+
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId) {
+        showToast('Reviews are not ready', 'alert-circle');
+        return;
+    }
+    const { error } = await client
+        .from('listing_reviews')
+        .upsert(
+            {
+                listing_id: id,
+                author_id: currentSupabaseUserId,
+                rating,
+                comment
+            },
+            { onConflict: 'listing_id,author_id' }
+        );
+    if (error) {
+        if (isListingReviewsBackendMissing(error)) showToast('Listing reviews backend is not set up yet', 'alert-circle');
+        else showToast(error.message || "Impossible d'ajouter l'avis", 'alert-circle');
+        return;
+    }
+
+    if (ratingInput) ratingInput.value = '5';
+    if (commentInput) commentInput.value = '';
+    listingReviewPanelState[id] = true;
+    await refreshListingReviewsForListingDetail(id, listing?.seller?.name || 'Vendeur');
+    showToast('Avis ajouté avec succès !', 'check-circle');
 }
 
 function getReviewRecord(contextType, targetId, index) {
@@ -5023,7 +5160,11 @@ function openListingDetail(listingId) {
     const item = listings.find(l => l.id === listingId);
     if (!item) return;
     currentListingDetailId = listingId;
-    if (!Array.isArray(item.reviewsData)) item.reviewsData = [];
+    if (!DEMO_MODE) {
+        item.reviewsData = listingReviewsCache.get(listingId) || [];
+    } else if (!Array.isArray(item.reviewsData)) {
+        item.reviewsData = [];
+    }
     const content = document.getElementById('listingDetailContent');
     const seller = item.seller || { name: "Utilisateur Winjay", tag: "@user", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay", verified: false, rating: 4.5, reviews: 10, reviewsData: [] };
     const detailImages = getListingImagesForDetail(item);
@@ -5094,12 +5235,14 @@ function openListingDetail(listingId) {
                         Message
                     </button>
                 </div>
-                ${bestListingReview ? `
-                <div class="review-highlight clickable" onclick="expandListingReviews(${item.id})">
-                    <div class="highlight-label"><i data-lucide="message-circle" style="width: 14px; height: 14px;"></i> Avis sur l'annonce</div>
-                    <div class="highlight-content">"${bestListingReview.comment}"</div>
-                    <div class="highlight-author">— ${bestListingReview.user}</div>
-                </div>` : ''}
+                <div id="listingReviewHighlightWrap">
+                    ${bestListingReview ? `
+                    <div class="review-highlight clickable" onclick="expandListingReviews(${item.id})">
+                        <div class="highlight-label"><i data-lucide="message-circle" style="width: 14px; height: 14px;"></i> Avis sur l'annonce</div>
+                        <div class="highlight-content">"${bestListingReview.comment}"</div>
+                        <div class="highlight-author">— ${escapeHtml(bestListingReview.user || '')}</div>
+                    </div>` : ''}
+                </div>
                 <div class="share-section">
                     <h3>Partager cette annonce</h3>
                     <div class="share-buttons">
@@ -5116,7 +5259,7 @@ function openListingDetail(listingId) {
                     <button class="listing-reviews-toggle" type="button" onclick="toggleListingReviews(${item.id})">
                         <i data-lucide="message-circle"></i>
                         <span>Avis sur l'annonce</span>
-                        <span class="listing-reviews-count">${reviewsCount}</span>
+                        <span class="listing-reviews-count" id="listingReviewsCount">${reviewsCount}</span>
                         <i class="chev" data-lucide="${reviewsExpanded ? 'chevron-up' : 'chevron-down'}"></i>
                     </button>
                     <div id="listingReviewsPanel" class="listing-reviews-panel ${reviewsExpanded ? 'active' : ''}">
@@ -5134,7 +5277,7 @@ function openListingDetail(listingId) {
                                 <button class="submit-btn" type="button" onclick="addListingReview(${item.id})">Publier l'avis</button>
                             </div>
                             <h3 style="margin-top:18px;">Avis sur l'annonce</h3>
-                            <div class="reviews-list">${getReviewsListHTML(item.reviewsData || [], seller.name, false, 'listing', item.id)}</div>
+                            <div class="reviews-list" id="listingReviewsList">${renderListingReviewsListHTML(item.reviewsData || [])}</div>
                         </div>
                     </div>
                 </div>
@@ -5142,6 +5285,7 @@ function openListingDetail(listingId) {
         </div>${similarHTML}`;
     openModal('listingDetailModal');
     lucide.createIcons();
+    refreshListingReviewsForListingDetail(listingId, seller?.name || 'Vendeur');
 }
 
 function shareListing(platform, id) {
