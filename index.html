@@ -571,6 +571,182 @@
                 </div>
             </section>
 
+            <section id="admin-dashboard-section" class="content-section">
+                <button class="back-btn" onclick="showSection('home-section')">
+                    <i data-lucide="arrow-left"></i> Retour
+                </button>
+                <div class="admin-shell">
+                    <div class="admin-header">
+                        <div class="admin-title">
+                            <h2>Admin Dashboard</h2>
+                            <p class="muted">Owner-only monitoring & approvals</p>
+                        </div>
+                        <button class="submit-btn small" type="button" onclick="renderAdminDashboard(true)">Refresh</button>
+                    </div>
+
+                    <div class="admin-kpis" id="adminKpis"></div>
+
+                    <div class="admin-tabs">
+                        <button class="admin-tab active" id="adminTabOverview" type="button" onclick="switchAdminTab('overview')">Overview</button>
+                        <button class="admin-tab" id="adminTabUsers" type="button" onclick="switchAdminTab('users')">Users</button>
+                        <button class="admin-tab" id="adminTabVip" type="button" onclick="switchAdminTab('vip')">VIP</button>
+                        <button class="admin-tab" id="adminTabVerified" type="button" onclick="switchAdminTab('verified')">Verified</button>
+                        <button class="admin-tab" id="adminTabSubmissions" type="button" onclick="switchAdminTab('submissions')">Submissions</button>
+                        <button class="admin-tab" id="adminTabLive" type="button" onclick="switchAdminTab('live')">Live</button>
+                    </div>
+
+                    <div class="admin-panels">
+                        <div class="admin-panel active" id="adminPanelOverview">
+                            <div class="admin-two-col">
+                                <div class="admin-card">
+                                    <div class="admin-card-head">
+                                        <h3>Pending approvals</h3>
+                                        <span class="muted">Latest requests</span>
+                                    </div>
+                                    <div id="adminPendingList" class="admin-list"></div>
+                                </div>
+                                <div class="admin-card">
+                                    <div class="admin-card-head">
+                                        <h3>Recent activity</h3>
+                                        <span class="muted">Notifications & messages</span>
+                                    </div>
+                                    <div id="adminActivityList" class="admin-list"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="admin-panel" id="adminPanelUsers">
+                            <div class="admin-card">
+                                <div class="admin-card-head">
+                                    <h3>Users</h3>
+                                    <div class="admin-search">
+                                        <i data-lucide="search"></i>
+                                        <input id="adminUserSearch" type="text" placeholder="Search by name / tag" onkeyup="renderAdminUsers()">
+                                    </div>
+                                </div>
+                                <div class="admin-table-wrap">
+                                    <table class="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>User</th>
+                                                <th>Tag</th>
+                                                <th>VIP</th>
+                                                <th>Verified</th>
+                                                <th>Joined</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="adminUsersTbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="admin-panel" id="adminPanelVip">
+                            <div class="admin-card">
+                                <div class="admin-card-head">
+                                    <h3>VIP Applications</h3>
+                                    <span class="muted">Approve or reject</span>
+                                </div>
+                                <div class="admin-table-wrap">
+                                    <table class="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>User</th>
+                                                <th>Plan</th>
+                                                <th>Phone</th>
+                                                <th>Wilaya</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="adminVipTbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="admin-panel" id="adminPanelVerified">
+                            <div class="admin-card">
+                                <div class="admin-card-head">
+                                    <h3>Verified Applications</h3>
+                                    <span class="muted">Approve or reject</span>
+                                </div>
+                                <div class="admin-table-wrap">
+                                    <table class="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>User</th>
+                                                <th>Plan</th>
+                                                <th>Phone</th>
+                                                <th>Wilaya</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="adminVerifiedTbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="admin-card" style="margin-top: 14px;">
+                                <div class="admin-card-head">
+                                    <h3>Identity submissions</h3>
+                                    <span class="muted">Docs uploaded by users</span>
+                                </div>
+                                <div class="admin-table-wrap">
+                                    <table class="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>User</th>
+                                                <th>DOB</th>
+                                                <th>Status</th>
+                                                <th>Submitted</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="adminIdentityTbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="admin-panel" id="adminPanelSubmissions">
+                            <div class="admin-card">
+                                <div class="admin-card-head">
+                                    <h3>Submissions</h3>
+                                    <span class="muted">Messages & reports</span>
+                                </div>
+                                <div class="admin-table-wrap">
+                                    <table class="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Type</th>
+                                                <th>User</th>
+                                                <th>Created</th>
+                                                <th>Status</th>
+                                                <th>Details</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="adminSubmissionsTbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="admin-panel" id="adminPanelLive">
+                            <div class="admin-card">
+                                <div class="admin-card-head">
+                                    <h3>Live visitors</h3>
+                                    <span class="muted">Realtime presence</span>
+                                </div>
+                                <div id="adminLiveList" class="admin-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section id="seller-profile-section" class="content-section">
                 <button class="back-btn" onclick="showSection('home-section')">
                     <i data-lucide="arrow-left"></i> Retour

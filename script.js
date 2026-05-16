@@ -14,6 +14,7 @@ function createEmptyUserProfile() {
         reviews: 0,
         isVip: false,
         verified: false,
+        isAdmin: false,
         reviewsData: []
     };
 }
@@ -29,6 +30,7 @@ const MARKETPLACE_LISTINGS_STORAGE_KEY = 'marketplaceListingsV1';
 const LISTING_IMAGES_BUCKET = 'listing-images';
 const PROFILE_IMAGES_BUCKET = 'profile-images';
 const MESSAGE_MEDIA_BUCKET = 'message-media';
+const IDENTITY_DOCS_BUCKET = 'identity-docs';
 const FREE_LISTING_LIMIT = 4;
 const SELLER_PROFILE_LAST_TAG_STORAGE_KEY = 'winjayLastSellerProfileTagV1';
 
@@ -365,6 +367,7 @@ function applySupabaseProfileRowToLocalState(row, user) {
         workCategory: row.work_category || row.workCategory || row.category || userProfile.workCategory,
         isVip: !!(row.is_vip ?? row.vip ?? row.isVip ?? userProfile.isVip),
         verified: !!(row.verified ?? row.is_verified ?? userProfile.verified),
+        isAdmin: !!(row.is_admin ?? row.isAdmin ?? userProfile.isAdmin),
         joinedDate: user?.created_at
             ? new Date(user.created_at).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })
             : userProfile.joinedDate
@@ -394,6 +397,7 @@ async function handleAuthSessionChange(session) {
                 const client = initSupabase();
                 if (client && messagesRealtimeChannel) client.removeChannel(messagesRealtimeChannel);
                 if (client && notificationsRealtimeChannel) client.removeChannel(notificationsRealtimeChannel);
+                if (client && livePresenceChannel) client.removeChannel(livePresenceChannel);
             } catch (e) {
                 null;
             }
@@ -405,6 +409,15 @@ async function handleAuthSessionChange(session) {
             }
             messagesPollTimer = null;
             notificationsPollTimer = null;
+            if (livePresenceTimer) {
+                try {
+                    clearInterval(livePresenceTimer);
+                } catch (e) {
+                    null;
+                }
+            }
+            livePresenceTimer = null;
+            livePresenceChannel = null;
         }
         return;
     }
@@ -426,6 +439,8 @@ async function handleAuthSessionChange(session) {
     }
     await bootstrapMessages();
     await bootstrapNotifications();
+    bootstrapLivePresence();
+    maybeOpenPendingAdmin();
     await refreshFavoritesFromSupabase({ silent: true });
     try {
         renderListings();
@@ -445,6 +460,8 @@ async function bootstrapSupabaseAuth() {
         if (row) applySupabaseProfileRowToLocalState(row, data.session.user);
         await bootstrapMessages();
         await bootstrapNotifications();
+        bootstrapLivePresence();
+        maybeOpenPendingAdmin();
     }
 }
 
@@ -838,7 +855,7 @@ function handleIdentityFilePreview(inputId, imgId) {
     });
 }
 
-function submitIdentityVerification() {
+async function submitIdentityVerification() {
     const front = document.getElementById('idFrontInput')?.files?.[0];
     const back = document.getElementById('idBackInput')?.files?.[0];
     const dobValue = document.getElementById('idDob')?.value;
@@ -868,6 +885,56 @@ function submitIdentityVerification() {
     if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age -= 1;
     if (age < 18) {
         showToast('You must be 18+ to be verified.', 'alert-circle');
+        return;
+    }
+
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+
+    const { data: userData, error: userErr } = await client.auth.getUser();
+    const userId = userData?.user?.id || null;
+    if (userErr || !userId) {
+        showToast('Please log in again', 'log-in');
+        openModal('loginModal');
+        return;
+    }
+
+    let frontPath = '';
+    let backPath = '';
+    const prefix = `${userId}/${Date.now()}`;
+    const uploadOne = async (file, kind) => {
+        const safe = safeStorageFilename(file?.name || `${kind}.png`);
+        const path = `${prefix}_${kind}_${safe}`;
+        const { error } = await client.storage.from(IDENTITY_DOCS_BUCKET).upload(path, file, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType: file.type || undefined
+        });
+        if (error) throw error;
+        return path;
+    };
+
+    try {
+        frontPath = await uploadOne(front, 'front');
+        backPath = await uploadOne(back, 'back');
+    } catch (e) {
+        showToast(e?.message || 'Upload failed', 'alert-circle');
+        return;
+    }
+
+    const { error: insertErr } = await client.from('identity_applications').insert({
+        user_id: userId,
+        dob: dobValue,
+        front_path: frontPath,
+        back_path: backPath,
+        status: 'pending'
+    });
+    if (insertErr) {
+        showToast(insertErr.message || 'Failed to submit', 'alert-circle');
         return;
     }
 
@@ -1048,12 +1115,17 @@ let mockChats = DEMO_MODE ? {
 let activeChatTag = Object.keys(mockChats)[0] || null;
 let messagesRealtimeChannel = null;
 let notificationsRealtimeChannel = null;
+let livePresenceChannel = null;
+let livePresenceTimer = null;
 let lastUnreadMessageCount = 0;
 let lastUnreadNotificationCount = 0;
 let lastFetchedNotifications = [];
 let notificationsPollTimer = null;
 let messagesPollTimer = null;
 let categoryPickerTargetSelectId = '';
+const ADMIN_DASHBOARD_PARAM = 'admin';
+const ADMIN_DASHBOARD_VALUE = '1';
+const ADMIN_PENDING_OPEN_KEY = 'winjayPendingAdminOpenV1';
 let profileReviewsTargetColumn = 'profile_id';
 let suppressNextMessagesBootstrap = false;
 let hasShownProfilesReadToast = false;
@@ -2667,6 +2739,72 @@ async function bootstrapMessages() {
     if (activeChatTag) await switchChat(activeChatTag);
 }
 
+function getAnonVisitorId() {
+    try {
+        const key = 'winjayAnonVisitorIdV1';
+        const existing = localStorage.getItem(key);
+        if (existing) return existing;
+        const id = crypto?.randomUUID ? crypto.randomUUID() : `anon_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+        localStorage.setItem(key, id);
+        return id;
+    } catch (e) {
+        return `anon_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
+}
+
+function getCurrentSectionId() {
+    const el = document.querySelector('.content-section.active');
+    return el?.id || 'home-section';
+}
+
+function updateLivePresence() {
+    if (DEMO_MODE) return;
+    const client = initSupabase();
+    if (!client) return;
+    if (!livePresenceChannel) return;
+    const payload = {
+        user_id: currentSupabaseUserId || null,
+        section: getCurrentSectionId(),
+        url: window.location.href,
+        last_seen: new Date().toISOString()
+    };
+    try {
+        livePresenceChannel.track(payload);
+    } catch (e) {
+        null;
+    }
+}
+
+function bootstrapLivePresence() {
+    if (DEMO_MODE) return;
+    const client = initSupabase();
+    if (!client) return;
+    const key = currentSupabaseUserId || getAnonVisitorId();
+    try {
+        if (livePresenceChannel) client.removeChannel(livePresenceChannel);
+    } catch (e) {
+        null;
+    }
+    livePresenceChannel = client.channel('live-visitors', { config: { presence: { key } } });
+    livePresenceChannel.on('presence', { event: 'sync' }, () => {
+        const adminOpen = document.getElementById('admin-dashboard-section')?.classList?.contains('active');
+        if (adminOpen && adminActiveTab === 'live') renderAdminLiveVisitors();
+    });
+    livePresenceChannel.subscribe((status) => {
+        if (status !== 'SUBSCRIBED') return;
+        updateLivePresence();
+    });
+    if (livePresenceTimer) {
+        try {
+            clearInterval(livePresenceTimer);
+        } catch (e) {
+            null;
+        }
+        livePresenceTimer = null;
+    }
+    livePresenceTimer = setInterval(updateLivePresence, 15000);
+}
+
 function stopActiveVoicePlayback() {
     if (!activeVoiceAudio) return;
     activeVoiceAudio.pause();
@@ -3173,6 +3311,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setPendingReferralFromUrl();
     initSupabase();
     await bootstrapSupabaseAuth();
+    bootstrapLivePresence();
     if (!supabaseClient) {
         loadUserProfileFromStorage();
     }
@@ -3194,9 +3333,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Restore last viewed section
     const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
-    const blocked = ['profile-section', 'messages-section', 'favorites-section', 'settings-section'];
+    const blocked = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section'];
     const lastSection = (blocked.includes(lastSectionRaw) && !isLoggedIn()) ? 'home-section' : lastSectionRaw;
     const params = new URLSearchParams(window.location.search);
+    const adminParam = params.get(ADMIN_DASHBOARD_PARAM);
+    if (adminParam && String(adminParam).trim() === ADMIN_DASHBOARD_VALUE) {
+        try {
+            sessionStorage.setItem(ADMIN_PENDING_OPEN_KEY, '1');
+        } catch (e) {
+            null;
+        }
+    }
     const profileParam = params.get('profile');
     if (profileParam) {
         const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
@@ -3231,6 +3378,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderFavorites();
     setupChatFeatures();
     await bootstrapMessages();
+    maybeOpenPendingAdmin();
     document.documentElement.classList.remove('app-loading');
 });
 
@@ -4195,11 +4343,36 @@ function populateWilayasSelect(selectId) {
     });
 }
 
-function submitVipSubscription() {
+async function submitVipSubscription() {
     const phone = document.getElementById('codPhone').value.trim();
     const wilaya = document.getElementById('codWilaya').value;
     if (!phone || !wilaya) {
         showToast('Veuillez remplir tous les champs', 'alert-circle');
+        return;
+    }
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    const { data: userData, error: userErr } = await client.auth.getUser();
+    const userId = userData?.user?.id || null;
+    if (userErr || !userId) {
+        showToast('Please log in again', 'log-in');
+        openModal('loginModal');
+        return;
+    }
+    const plan = selectedVipPlan || 'monthly';
+    const { error } = await client.from('vip_applications').insert({
+        user_id: userId,
+        plan,
+        phone,
+        wilaya,
+        status: 'pending'
+    });
+    if (error) {
+        showToast(error.message || 'Failed to submit', 'alert-circle');
         return;
     }
     closeModal('codModal');
@@ -4221,11 +4394,36 @@ function selectVerifiedPlan(plan) {
     lucide.createIcons();
 }
 
-function submitVerifiedSubscription() {
+async function submitVerifiedSubscription() {
     const phone = document.getElementById('verifiedPhone').value.trim();
     const wilaya = document.getElementById('verifiedWilaya').value;
     if (!phone || !wilaya) {
         showToast('Veuillez remplir tous les champs', 'alert-circle');
+        return;
+    }
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    const { data: userData, error: userErr } = await client.auth.getUser();
+    const userId = userData?.user?.id || null;
+    if (userErr || !userId) {
+        showToast('Please log in again', 'log-in');
+        openModal('loginModal');
+        return;
+    }
+    const plan = selectedVerifiedPlan || 'monthly';
+    const { error } = await client.from('verified_applications').insert({
+        user_id: userId,
+        plan,
+        phone,
+        wilaya,
+        status: 'pending'
+    });
+    if (error) {
+        showToast(error.message || 'Failed to submit', 'alert-circle');
         return;
     }
     closeModal('verifiedCodModal');
@@ -4553,8 +4751,24 @@ document.getElementById('editProfileForm').addEventListener('submit', async (e) 
     showToast('Profile updated!', 'check-circle');
 });
 
-document.getElementById('contactForm').addEventListener('submit', (e) => {
+document.getElementById('contactForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const email = document.getElementById('contactEmail')?.value?.trim() || '';
+    const phone = document.getElementById('contactPhone')?.value?.trim() || '';
+    const message = document.getElementById('contactMessage')?.value?.trim() || '';
+    const client = initSupabase();
+    if (client) {
+        try {
+            await client.from('submissions').insert({
+                user_id: currentSupabaseUserId || null,
+                type: 'contact',
+                payload: { email, phone, message },
+                status: 'pending'
+            });
+        } catch (e) {
+            null;
+        }
+    }
     showToast('Message sent successfully!', 'send');
     closeModal('contactModal');
     e.target.reset();
@@ -4975,10 +5189,7 @@ function loginWithGoogle() {
     }
     showToast('Connecting with Google...', 'log-in');
     client.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-            redirectTo: window.location.origin
-        }
+        provider: 'google'
     }).then(({ error }) => {
         if (error) showToast(error.message || 'Google login failed', 'alert-circle');
     });
@@ -4995,7 +5206,7 @@ function openForgotPassword() {
         showToast('Enter your email', 'alert-circle');
         return;
     }
-    client.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin }).then(({ error }) => {
+    client.auth.resetPasswordForEmail(email).then(({ error }) => {
         if (error) {
             showToast(error.message || 'Error', 'alert-circle');
             return;
@@ -5163,9 +5374,614 @@ function switchMyProfileSection(section) {
     if (!showListings) renderMyProfileReviews();
 }
 
+let adminActiveTab = 'overview';
+
+function adminBadge(status) {
+    const s = String(status || '').toLowerCase();
+    if (s === 'approved') return `<span class="admin-badge ok">APPROVED</span>`;
+    if (s === 'rejected') return `<span class="admin-badge no">REJECTED</span>`;
+    if (s === 'pending') return `<span class="admin-badge pending">PENDING</span>`;
+    return `<span class="admin-badge">${escapeHtml(status || '—')}</span>`;
+}
+
+function isAdminAuthorized() {
+    return !!(userProfile && userProfile.isAdmin);
+}
+
+function clearPendingAdminOpen() {
+    try {
+        sessionStorage.removeItem(ADMIN_PENDING_OPEN_KEY);
+    } catch (e) {
+        null;
+    }
+}
+
+function maybeOpenPendingAdmin() {
+    let pending = null;
+    try {
+        pending = sessionStorage.getItem(ADMIN_PENDING_OPEN_KEY);
+    } catch (e) {
+        pending = null;
+    }
+    if (!pending) return;
+    if (!isLoggedIn()) {
+        openModal('loginModal');
+        return;
+    }
+    if (!isAdminAuthorized()) {
+        clearPendingAdminOpen();
+        showToast('Not authorized', 'alert-circle');
+        return;
+    }
+    clearPendingAdminOpen();
+    showSection('admin-dashboard-section');
+}
+
+function setActiveAdminTab(tab) {
+    adminActiveTab = tab;
+    const tabs = [
+        ['overview', 'adminTabOverview', 'adminPanelOverview'],
+        ['users', 'adminTabUsers', 'adminPanelUsers'],
+        ['vip', 'adminTabVip', 'adminPanelVip'],
+        ['verified', 'adminTabVerified', 'adminPanelVerified'],
+        ['submissions', 'adminTabSubmissions', 'adminPanelSubmissions'],
+        ['live', 'adminTabLive', 'adminPanelLive']
+    ];
+    tabs.forEach(([key, tabId, panelId]) => {
+        document.getElementById(tabId)?.classList?.toggle('active', key === tab);
+        document.getElementById(panelId)?.classList?.toggle('active', key === tab);
+    });
+    updateLivePresence();
+}
+
+function switchAdminTab(tab) {
+    if (!isAdminAuthorized()) {
+        showToast('Not authorized', 'alert-circle');
+        showSection('home-section');
+        return;
+    }
+    setActiveAdminTab(tab);
+    renderAdminDashboard();
+}
+
+function relationMissing(err, name) {
+    const msg = String(err?.message || '').toLowerCase();
+    const n = String(name || '').toLowerCase();
+    return msg.includes('relation') && msg.includes(n) && msg.includes('does not exist');
+}
+
+async function adminCount(table, build) {
+    const client = initSupabase();
+    if (!client) return { count: 0, error: new Error('Supabase is not configured') };
+    let q = client.from(table).select('id', { count: 'exact', head: true });
+    if (typeof build === 'function') q = build(q);
+    const { count, error } = await q;
+    return { count: Number(count) || 0, error };
+}
+
+async function renderAdminKpis() {
+    const el = document.getElementById('adminKpis');
+    if (!el) return;
+    if (!isAdminAuthorized()) {
+        el.innerHTML = '';
+        return;
+    }
+    const users = await adminCount('profiles');
+    const listingsCount = await adminCount('listings');
+    const vipPending = await adminCount('vip_applications', (q) => q.eq('status', 'pending'));
+    const verifiedPending = await adminCount('verified_applications', (q) => q.eq('status', 'pending'));
+    const identityPending = await adminCount('identity_applications', (q) => q.eq('status', 'pending'));
+    const submissionsPending = await adminCount('submissions', (q) => q.eq('status', 'pending'));
+    const items = [
+        { icon: 'users', label: 'Users', value: users.error ? '—' : users.count },
+        { icon: 'layout-grid', label: 'Listings', value: listingsCount.error ? '—' : listingsCount.count },
+        { icon: 'crown', label: 'VIP pending', value: vipPending.error ? '—' : vipPending.count },
+        { icon: 'badge-check', label: 'Verified pending', value: verifiedPending.error ? '—' : verifiedPending.count },
+        { icon: 'scan-face', label: 'Identity pending', value: identityPending.error ? '—' : identityPending.count },
+        { icon: 'inbox', label: 'Submissions', value: submissionsPending.error ? '—' : submissionsPending.count }
+    ];
+    el.innerHTML = items
+        .map(
+            (x) => `
+            <div class="admin-kpi">
+                <div class="kpi-label"><i data-lucide="${x.icon}"></i> ${escapeHtml(x.label)}</div>
+                <div class="kpi-value">${escapeHtml(String(x.value))}</div>
+            </div>
+        `
+        )
+        .join('');
+    lucide.createIcons();
+}
+
+async function fetchProfilesForAdmin(userIds) {
+    const client = initSupabase();
+    if (!client) return {};
+    const ids = Array.from(new Set((userIds || []).filter(Boolean)));
+    if (!ids.length) return {};
+    const { data, error } = await client.from('profiles').select('id, display_name, tag, avatar_url, is_vip, verified').in('id', ids).limit(500);
+    if (error) return {};
+    const out = {};
+    (data || []).forEach((p) => {
+        if (p?.id) out[p.id] = p;
+    });
+    return out;
+}
+
+function formatAdminDate(ts) {
+    try {
+        if (!ts) return '';
+        const d = new Date(ts);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleString('fr-FR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+        return '';
+    }
+}
+
+async function renderAdminUsers() {
+    if (!isAdminAuthorized()) return;
+    const tbody = document.getElementById('adminUsersTbody');
+    if (!tbody) return;
+    const client = initSupabase();
+    if (!client) return;
+    const search = document.getElementById('adminUserSearch')?.value?.trim() || '';
+    let q = client.from('profiles').select('id, display_name, tag, is_vip, verified, created_at').order('created_at', { ascending: false }).limit(120);
+    if (search) {
+        const term = `%${search}%`;
+        q = q.or(`display_name.ilike.${term},tag.ilike.${term}`);
+    }
+    const { data, error } = await q;
+    if (error) {
+        tbody.innerHTML = '';
+        showToast(error.message || 'Failed to load users', 'alert-circle');
+        return;
+    }
+    const rows = (data || []).map((u) => {
+        const vip = u.is_vip ? adminBadge('approved') : adminBadge('—');
+        const verified = u.verified ? adminBadge('approved') : adminBadge('—');
+        return `
+            <tr>
+                <td>${escapeHtml(u.display_name || 'User')}</td>
+                <td>${escapeHtml(u.tag || '')}</td>
+                <td>${vip}</td>
+                <td>${verified}</td>
+                <td>${escapeHtml(formatAdminDate(u.created_at))}</td>
+                <td>
+                    <div class="admin-actions">
+                        <button class="admin-action-btn" type="button" onclick="adminToggleVip('${u.id}', ${u.is_vip ? 'false' : 'true'})">${u.is_vip ? 'Remove VIP' : 'Grant VIP'}</button>
+                        <button class="admin-action-btn" type="button" onclick="adminToggleVerified('${u.id}', ${u.verified ? 'false' : 'true'})">${u.verified ? 'Remove Verified' : 'Grant Verified'}</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = rows.join('');
+}
+
+async function adminToggleVip(userId, next) {
+    if (!isAdminAuthorized()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { error } = await client.from('profiles').update({ is_vip: !!next }).eq('id', String(userId));
+    if (error) {
+        showToast(error.message || 'Failed', 'alert-circle');
+        return;
+    }
+    showToast('Saved', 'check-circle');
+    renderAdminUsers();
+    renderAdminKpis();
+}
+
+async function adminToggleVerified(userId, next) {
+    if (!isAdminAuthorized()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { error } = await client.from('profiles').update({ verified: !!next }).eq('id', String(userId));
+    if (error) {
+        showToast(error.message || 'Failed', 'alert-circle');
+        return;
+    }
+    showToast('Saved', 'check-circle');
+    renderAdminUsers();
+    renderAdminKpis();
+}
+
+async function renderVipApplications() {
+    if (!isAdminAuthorized()) return;
+    const tbody = document.getElementById('adminVipTbody');
+    if (!tbody) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { data, error } = await client.from('vip_applications').select('*').order('created_at', { ascending: false }).limit(200);
+    if (error) {
+        tbody.innerHTML = '';
+        if (!relationMissing(error, 'vip_applications')) showToast(error.message || 'Failed to load VIP', 'alert-circle');
+        return;
+    }
+    const ids = (data || []).map((x) => x.user_id).filter(Boolean);
+    const profiles = await fetchProfilesForAdmin(ids);
+    tbody.innerHTML = (data || [])
+        .map((a) => {
+            const p = profiles[a.user_id] || {};
+            const actions =
+                a.status === 'pending'
+                    ? `<div class="admin-actions">
+                        <button class="admin-action-btn primary" type="button" onclick="adminApproveVip('${a.id}','${a.user_id}')">Approve</button>
+                        <button class="admin-action-btn danger" type="button" onclick="adminRejectVip('${a.id}')">Reject</button>
+                    </div>`
+                    : '';
+            return `
+                <tr>
+                    <td>${escapeHtml(p.display_name || 'User')} <span class="muted">${escapeHtml(p.tag || '')}</span></td>
+                    <td>${escapeHtml(a.plan || '')}</td>
+                    <td>${escapeHtml(a.phone || '')}</td>
+                    <td>${escapeHtml(a.wilaya || '')}</td>
+                    <td>${adminBadge(a.status)}</td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        })
+        .join('');
+}
+
+async function adminApproveVip(appId, userId) {
+    if (!isAdminAuthorized()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const now = new Date().toISOString();
+    const { error: appErr } = await client
+        .from('vip_applications')
+        .update({ status: 'approved', decided_by: currentSupabaseUserId, decided_at: now })
+        .eq('id', String(appId));
+    if (appErr) {
+        showToast(appErr.message || 'Failed', 'alert-circle');
+        return;
+    }
+    const { error: profErr } = await client.from('profiles').update({ is_vip: true }).eq('id', String(userId));
+    if (profErr) {
+        showToast(profErr.message || 'Failed', 'alert-circle');
+        return;
+    }
+    client.from('admin_audit_log').insert({ admin_id: currentSupabaseUserId, action: 'vip_approved', target_user_id: userId, meta: { app_id: appId } });
+    showToast('VIP approved', 'check-circle');
+    renderVipApplications();
+    renderAdminKpis();
+}
+
+async function adminRejectVip(appId) {
+    if (!isAdminAuthorized()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const now = new Date().toISOString();
+    const { error } = await client
+        .from('vip_applications')
+        .update({ status: 'rejected', decided_by: currentSupabaseUserId, decided_at: now })
+        .eq('id', String(appId));
+    if (error) {
+        showToast(error.message || 'Failed', 'alert-circle');
+        return;
+    }
+    client.from('admin_audit_log').insert({ admin_id: currentSupabaseUserId, action: 'vip_rejected', target_user_id: null, meta: { app_id: appId } });
+    showToast('Rejected', 'check-circle');
+    renderVipApplications();
+    renderAdminKpis();
+}
+
+async function renderVerifiedApplications() {
+    if (!isAdminAuthorized()) return;
+    const tbody = document.getElementById('adminVerifiedTbody');
+    if (!tbody) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { data, error } = await client.from('verified_applications').select('*').order('created_at', { ascending: false }).limit(200);
+    if (error) {
+        tbody.innerHTML = '';
+        if (!relationMissing(error, 'verified_applications')) showToast(error.message || 'Failed to load Verified', 'alert-circle');
+        return;
+    }
+    const ids = (data || []).map((x) => x.user_id).filter(Boolean);
+    const profiles = await fetchProfilesForAdmin(ids);
+    tbody.innerHTML = (data || [])
+        .map((a) => {
+            const p = profiles[a.user_id] || {};
+            const actions =
+                a.status === 'pending'
+                    ? `<div class="admin-actions">
+                        <button class="admin-action-btn primary" type="button" onclick="adminApproveVerified('${a.id}','${a.user_id}')">Approve</button>
+                        <button class="admin-action-btn danger" type="button" onclick="adminRejectVerified('${a.id}')">Reject</button>
+                    </div>`
+                    : '';
+            return `
+                <tr>
+                    <td>${escapeHtml(p.display_name || 'User')} <span class="muted">${escapeHtml(p.tag || '')}</span></td>
+                    <td>${escapeHtml(a.plan || '')}</td>
+                    <td>${escapeHtml(a.phone || '')}</td>
+                    <td>${escapeHtml(a.wilaya || '')}</td>
+                    <td>${adminBadge(a.status)}</td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        })
+        .join('');
+}
+
+async function adminApproveVerified(appId, userId) {
+    if (!isAdminAuthorized()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const now = new Date().toISOString();
+    const { error: appErr } = await client
+        .from('verified_applications')
+        .update({ status: 'approved', decided_by: currentSupabaseUserId, decided_at: now })
+        .eq('id', String(appId));
+    if (appErr) {
+        showToast(appErr.message || 'Failed', 'alert-circle');
+        return;
+    }
+    const { error: profErr } = await client.from('profiles').update({ verified: true }).eq('id', String(userId));
+    if (profErr) {
+        showToast(profErr.message || 'Failed', 'alert-circle');
+        return;
+    }
+    client.from('admin_audit_log').insert({ admin_id: currentSupabaseUserId, action: 'verified_approved', target_user_id: userId, meta: { app_id: appId } });
+    showToast('Verified approved', 'check-circle');
+    renderVerifiedApplications();
+    renderAdminKpis();
+}
+
+async function adminRejectVerified(appId) {
+    if (!isAdminAuthorized()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const now = new Date().toISOString();
+    const { error } = await client
+        .from('verified_applications')
+        .update({ status: 'rejected', decided_by: currentSupabaseUserId, decided_at: now })
+        .eq('id', String(appId));
+    if (error) {
+        showToast(error.message || 'Failed', 'alert-circle');
+        return;
+    }
+    client.from('admin_audit_log').insert({ admin_id: currentSupabaseUserId, action: 'verified_rejected', target_user_id: null, meta: { app_id: appId } });
+    showToast('Rejected', 'check-circle');
+    renderVerifiedApplications();
+    renderAdminKpis();
+}
+
+async function renderIdentityApplications() {
+    if (!isAdminAuthorized()) return;
+    const tbody = document.getElementById('adminIdentityTbody');
+    if (!tbody) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { data, error } = await client.from('identity_applications').select('*').order('created_at', { ascending: false }).limit(200);
+    if (error) {
+        tbody.innerHTML = '';
+        if (!relationMissing(error, 'identity_applications')) showToast(error.message || 'Failed to load identity submissions', 'alert-circle');
+        return;
+    }
+    const ids = (data || []).map((x) => x.user_id).filter(Boolean);
+    const profiles = await fetchProfilesForAdmin(ids);
+    tbody.innerHTML = (data || [])
+        .map((a) => {
+            const p = profiles[a.user_id] || {};
+            const actions = `
+                <div class="admin-actions">
+                    <button class="admin-action-btn" type="button" onclick="adminOpenIdentityDocs('${a.user_id}', ${JSON.stringify(a.front_path || '')}, ${JSON.stringify(a.back_path || '')})">View</button>
+                    ${a.status === 'pending' ? `<button class="admin-action-btn primary" type="button" onclick="adminApproveIdentity('${a.id}','${a.user_id}')">Approve</button>` : ''}
+                    ${a.status === 'pending' ? `<button class="admin-action-btn danger" type="button" onclick="adminRejectIdentity('${a.id}')">Reject</button>` : ''}
+                </div>
+            `;
+            return `
+                <tr>
+                    <td>${escapeHtml(p.display_name || 'User')} <span class="muted">${escapeHtml(p.tag || '')}</span></td>
+                    <td>${escapeHtml(a.dob || '')}</td>
+                    <td>${adminBadge(a.status)}</td>
+                    <td>${escapeHtml(formatAdminDate(a.created_at))}</td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        })
+        .join('');
+}
+
+async function adminOpenIdentityDocs(userId, frontPath, backPath) {
+    const client = initSupabase();
+    if (!client) return;
+    const base = String(userId || '').trim();
+    if (!base) return;
+    const openSigned = async (path) => {
+        const p = String(path || '').trim();
+        if (!p) return;
+        const { data, error } = await client.storage.from(IDENTITY_DOCS_BUCKET).createSignedUrl(p, 60);
+        if (!error && data?.signedUrl) window.open(data.signedUrl, '_blank');
+    };
+    await openSigned(frontPath);
+    await openSigned(backPath);
+}
+
+async function adminApproveIdentity(appId, userId) {
+    if (!isAdminAuthorized()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const now = new Date().toISOString();
+    const { error: appErr } = await client
+        .from('identity_applications')
+        .update({ status: 'approved', decided_by: currentSupabaseUserId, decided_at: now })
+        .eq('id', String(appId));
+    if (appErr) {
+        showToast(appErr.message || 'Failed', 'alert-circle');
+        return;
+    }
+    const { error: profErr } = await client.from('profiles').update({ verified: true }).eq('id', String(userId));
+    if (profErr) {
+        showToast(profErr.message || 'Failed', 'alert-circle');
+        return;
+    }
+    client.from('admin_audit_log').insert({ admin_id: currentSupabaseUserId, action: 'identity_approved', target_user_id: userId, meta: { app_id: appId } });
+    showToast('Approved', 'check-circle');
+    renderIdentityApplications();
+    renderAdminKpis();
+}
+
+async function adminRejectIdentity(appId) {
+    if (!isAdminAuthorized()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const now = new Date().toISOString();
+    const { error } = await client
+        .from('identity_applications')
+        .update({ status: 'rejected', decided_by: currentSupabaseUserId, decided_at: now })
+        .eq('id', String(appId));
+    if (error) {
+        showToast(error.message || 'Failed', 'alert-circle');
+        return;
+    }
+    client.from('admin_audit_log').insert({ admin_id: currentSupabaseUserId, action: 'identity_rejected', target_user_id: null, meta: { app_id: appId } });
+    showToast('Rejected', 'check-circle');
+    renderIdentityApplications();
+    renderAdminKpis();
+}
+
+async function renderSubmissions() {
+    if (!isAdminAuthorized()) return;
+    const tbody = document.getElementById('adminSubmissionsTbody');
+    if (!tbody) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { data, error } = await client.from('submissions').select('*').order('created_at', { ascending: false }).limit(200);
+    if (error) {
+        tbody.innerHTML = '';
+        if (!relationMissing(error, 'submissions')) showToast(error.message || 'Failed to load submissions', 'alert-circle');
+        return;
+    }
+    const ids = (data || []).map((x) => x.user_id).filter(Boolean);
+    const profiles = await fetchProfilesForAdmin(ids);
+    tbody.innerHTML = (data || [])
+        .map((s) => {
+            const p = s.user_id ? profiles[s.user_id] || {} : {};
+            const userLabel = s.user_id ? `${escapeHtml(p.display_name || 'User')} ${p.tag ? `<span class="muted">${escapeHtml(p.tag)}</span>` : ''}` : '<span class="muted">Guest</span>';
+            const details = escapeHtml(JSON.stringify(s.payload || {}, null, 0)).slice(0, 160);
+            return `
+                <tr>
+                    <td>${escapeHtml(s.type || '')}</td>
+                    <td>${userLabel}</td>
+                    <td>${escapeHtml(formatAdminDate(s.created_at))}</td>
+                    <td>${adminBadge(s.status)}</td>
+                    <td>${details}</td>
+                </tr>
+            `;
+        })
+        .join('');
+}
+
+function flattenPresenceState(state) {
+    const entries = [];
+    Object.keys(state || {}).forEach((k) => {
+        const arr = state[k] || [];
+        arr.forEach((p) => entries.push({ key: k, ...p }));
+    });
+    return entries;
+}
+
+function renderAdminLiveVisitors() {
+    if (!isAdminAuthorized()) return;
+    const el = document.getElementById('adminLiveList');
+    if (!el) return;
+    if (!livePresenceChannel) {
+        el.innerHTML = '<div class="muted">Realtime not connected.</div>';
+        return;
+    }
+    const state = livePresenceChannel.presenceState?.() || {};
+    const entries = flattenPresenceState(state).sort((a, b) => String(b.last_seen || '').localeCompare(String(a.last_seen || '')));
+    if (!entries.length) {
+        el.innerHTML = '<div class="muted">No active visitors.</div>';
+        return;
+    }
+    el.innerHTML = entries
+        .slice(0, 80)
+        .map((v) => {
+            const id = v.user_id ? String(v.user_id).slice(0, 8) : String(v.key || '').slice(0, 8);
+            const label = v.user_id ? `user:${escapeHtml(id)}` : `anon:${escapeHtml(id)}`;
+            const section = escapeHtml(v.section || '');
+            const seen = escapeHtml(formatAdminDate(v.last_seen));
+            return `
+                <div class="admin-list-item">
+                    <div>
+                        <div style="font-weight:800;">${label}</div>
+                        <div class="meta">${section}</div>
+                    </div>
+                    <div class="meta">${seen}</div>
+                </div>
+            `;
+        })
+        .join('');
+}
+
+async function renderAdminOverviewLists() {
+    if (!isAdminAuthorized()) return;
+    const pendingEl = document.getElementById('adminPendingList');
+    const activityEl = document.getElementById('adminActivityList');
+    if (!pendingEl || !activityEl) return;
+    const client = initSupabase();
+    if (!client) return;
+    const vip = await client.from('vip_applications').select('id, created_at, user_id, status').eq('status', 'pending').order('created_at', { ascending: false }).limit(5);
+    const verified = await client.from('verified_applications').select('id, created_at, user_id, status').eq('status', 'pending').order('created_at', { ascending: false }).limit(5);
+    const ids = []
+        .concat((vip.data || []).map((x) => x.user_id))
+        .concat((verified.data || []).map((x) => x.user_id))
+        .filter(Boolean);
+    const profiles = await fetchProfilesForAdmin(ids);
+    const pendingItems = []
+        .concat((vip.data || []).map((x) => ({ kind: 'VIP', ...x })))
+        .concat((verified.data || []).map((x) => ({ kind: 'Verified', ...x })))
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+        .slice(0, 8);
+    pendingEl.innerHTML = pendingItems.length
+        ? pendingItems
+              .map((x) => {
+                  const p = profiles[x.user_id] || {};
+                  return `
+                    <div class="admin-list-item">
+                        <div>
+                            <div style="font-weight:800;">${escapeHtml(x.kind)} · ${escapeHtml(p.display_name || 'User')} <span class="meta">${escapeHtml(p.tag || '')}</span></div>
+                            <div class="meta">${escapeHtml(formatAdminDate(x.created_at))}</div>
+                        </div>
+                        <button class="admin-action-btn" type="button" onclick="switchAdminTab('${x.kind === 'VIP' ? 'vip' : 'verified'}')">Open</button>
+                    </div>
+                `;
+              })
+              .join('')
+        : '<div class="muted">No pending items.</div>';
+    activityEl.innerHTML = '<div class="muted">Use notifications/messages inbox for realtime activity.</div>';
+}
+
+async function renderAdminDashboard(force = false) {
+    if (!isAdminAuthorized()) {
+        showSection('home-section');
+        return;
+    }
+    if (!adminActiveTab) adminActiveTab = 'overview';
+    setActiveAdminTab(adminActiveTab);
+    await renderAdminKpis();
+    if (adminActiveTab === 'overview') await renderAdminOverviewLists();
+    if (adminActiveTab === 'users') await renderAdminUsers();
+    if (adminActiveTab === 'vip') await renderVipApplications();
+    if (adminActiveTab === 'verified') {
+        await renderVerifiedApplications();
+        await renderIdentityApplications();
+    }
+    if (adminActiveTab === 'submissions') await renderSubmissions();
+    if (adminActiveTab === 'live') renderAdminLiveVisitors();
+    if (force) showToast('Updated', 'check-circle');
+}
+
 function showSection(sectionId) {
-    const protectedSections = ['profile-section', 'messages-section', 'favorites-section', 'settings-section'];
+    const protectedSections = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section'];
     if (protectedSections.includes(sectionId) && !requireAuthOrPrompt()) {
+        sectionId = 'home-section';
+    }
+    if (sectionId === 'admin-dashboard-section' && !userProfile?.isAdmin) {
         sectionId = 'home-section';
     }
     try {
@@ -5181,6 +5997,7 @@ function showSection(sectionId) {
 
     // Save current section to localStorage
     localStorage.setItem('winjayLastSection', sectionId);
+    updateLivePresence();
 
     if (sectionId === 'home-section') {
         clearSellerProfileRouteTag();
@@ -5202,6 +6019,9 @@ function showSection(sectionId) {
             bootstrapMessages();
         }
         scheduleSyncMessagesContainerHeight();
+    } else if (sectionId === 'admin-dashboard-section') {
+        clearSellerProfileRouteTag();
+        renderAdminDashboard();
     }
 }
 
