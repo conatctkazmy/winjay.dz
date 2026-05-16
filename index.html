@@ -334,9 +334,42 @@
                 <button class="back-btn" onclick="showSection('home-section')">
                     <i data-lucide="arrow-left"></i> Back
                 </button>
-                <h2><i data-lucide="message-circle" style="width: 24px; height: 24px; color: var(--primary-color);"></i> Messages</h2>
-                <div class="messages-container">
-                    <div class="messages-list" id="messagesList"></div>
+                <div class="messages-container messages-twitter">
+                    <div class="messages-pane">
+                        <div class="messages-pane-header">
+                            <div class="messages-pane-avatar">
+                                <img id="messagesMyAvatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay" alt="">
+                            </div>
+                            <div class="messages-pane-title">Chat</div>
+                            <div class="messages-pane-filter">
+                                <button class="messages-filter-btn" id="messagesFilterBtn" type="button">
+                                    <span id="messagesFilterLabel">All</span>
+                                    <i data-lucide="chevron-down"></i>
+                                </button>
+                                <div class="messages-filter-menu" id="messagesFilterMenu">
+                                    <button class="messages-filter-item active" type="button" data-filter="all">
+                                        <i data-lucide="message-circle"></i>
+                                        <span>All</span>
+                                    </button>
+                                    <button class="messages-filter-item" type="button" data-filter="unread">
+                                        <i data-lucide="circle"></i>
+                                        <span>Unread</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="messages-pane-search">
+                            <i data-lucide="search"></i>
+                            <input type="text" id="messagesSearchInput" placeholder="Search">
+                        </div>
+
+                        <div class="messages-list" id="messagesList"></div>
+                        <button class="messages-compose-btn" id="messagesComposeBtn" type="button" title="New message">
+                            <i data-lucide="square-pen"></i>
+                        </button>
+                    </div>
+
                     <div class="chat-area" id="chatArea">
                         <div class="chat-header"></div>
                         <div class="chat-messages" id="chatMessages"></div>
@@ -1332,6 +1365,18 @@
                 <button class="confirm-cancel-btn" onclick="closeModal('freeVerifiedInfoModal')">Later</button>
                 <button class="confirm-ok-btn" id="freeVerifiedPrimaryBtn" onclick="closeModal('freeVerifiedInfoModal'); openModal('registerModal');">Create account</button>
             </div>
+        </div>
+    </div>
+
+    <div id="newMessageModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <span class="close" onclick="closeModal('newMessageModal')">&times;</span>
+            <h2 style="margin-bottom: 14px;">New message</h2>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="newMessageUsername" placeholder="@username" autocomplete="off">
+            </div>
+            <button class="submit-btn" type="button" onclick="startNewMessageFromModal()">Start chat</button>
         </div>
     </div>
 

@@ -1130,6 +1130,8 @@ let lastUnreadNotificationCount = 0;
 let lastFetchedNotifications = [];
 let notificationsPollTimer = null;
 let messagesPollTimer = null;
+let messagesListFilter = 'all';
+let messagesListQuery = '';
 let categoryPickerTargetSelectId = '';
 const ADMIN_DASHBOARD_PARAM = 'admin';
 const ADMIN_DASHBOARD_VALUE = '1';
@@ -2653,6 +2655,7 @@ async function refreshLiveChatsFromSupabase() {
             type,
             kind,
             created_at: r.created_at,
+            read_at: r.read_at,
             time: formatChatTime(r.created_at)
         };
         if (kind === 'text') {
@@ -2916,6 +2919,24 @@ function renderMessagesList() {
     if (!listEl) return;
 
     const entries = Object.entries(mockChats);
+    const q = String(messagesListQuery || '').trim().toLowerCase();
+    const filter = String(messagesListFilter || 'all');
+    const enriched = entries
+        .map(([tag, chat]) => {
+            const last = chat.messages && chat.messages.length ? chat.messages[chat.messages.length - 1] : null;
+            const preview = last ? getChatPreviewText(last) : 'Start the conversation';
+            const unread = (chat.messages || []).some((m) => m?.type === 'received' && !m?.read_at);
+            const displayTag = chat?.tag || tag;
+            return { tag, chat, last, preview, unread, displayTag };
+        })
+        .filter((x) => {
+            if (filter === 'unread' && !x.unread) return false;
+            if (!q) return true;
+            const hay = `${x.chat?.name || ''} ${x.displayTag || ''} ${x.preview || ''}`.toLowerCase();
+            return hay.includes(q);
+        })
+        .sort((a, b) => String(b.last?.created_at || '').localeCompare(String(a.last?.created_at || '')));
+
     if (entries.length === 0) {
         listEl.innerHTML = `
             <div class="empty-state" style="margin: 20px;">
@@ -2928,29 +2949,106 @@ function renderMessagesList() {
         lucide.createIcons();
         return;
     }
-    listEl.innerHTML = entries.map(([tag, chat]) => {
-        const last = chat.messages && chat.messages.length ? chat.messages[chat.messages.length - 1] : null;
-        const preview = last ? getChatPreviewText(last) : 'Start the conversation';
-
-        const displayTag = chat?.tag || tag;
-        return `
-            <div class="message-item ${tag === activeChatTag ? 'active' : ''}" onclick="switchChat('${tag}')">
-                <img src="${chat.pic}" alt="">
-                <div class="message-info">
-                    <div class="message-header">
-                        <div class="message-title">
-                            <span class="message-name">${escapeHtml(chat.name)}</span>
-                            <span class="message-tag">${escapeHtml(displayTag)}</span>
-                        </div>
-                        <span class="message-time">${escapeHtml(last?.time || '')}</span>
-                    </div>
-                    <p class="message-preview">${escapeHtml(preview)}</p>
-                </div>
+    if (enriched.length === 0) {
+        listEl.innerHTML = `
+            <div class="empty-state" style="margin: 20px;">
+                <i data-lucide="search-x"></i>
+                <h3>No results</h3>
+                <p>Try a different search.</p>
             </div>
         `;
-    }).join('');
+        lucide.createIcons();
+        return;
+    }
+
+    listEl.innerHTML = enriched
+        .map(({ tag, chat, last, preview, unread, displayTag }) => {
+            return `
+                <div class="message-item ${tag === activeChatTag ? 'active' : ''} ${unread ? 'unread' : ''}" onclick="switchChat('${tag}')">
+                    <img src="${chat.pic}" alt="">
+                    <div class="message-info">
+                        <div class="message-header">
+                            <div class="message-title">
+                                <span class="message-name">${escapeHtml(chat.name)}</span>
+                                ${getUserBadgesHTML(chat)}
+                                <span class="message-tag">${escapeHtml(displayTag)}</span>
+                            </div>
+                            <div class="message-right">
+                                <span class="message-time">${escapeHtml(last?.time || '')}</span>
+                                ${unread ? '<span class="unread-dot"></span>' : ''}
+                            </div>
+                        </div>
+                        <p class="message-preview">${escapeHtml(preview)}</p>
+                    </div>
+                </div>
+            `;
+        })
+        .join('');
 
     lucide.createIcons();
+}
+
+function setupMessagesTwitterUI() {
+    const filterBtn = document.getElementById('messagesFilterBtn');
+    const filterMenu = document.getElementById('messagesFilterMenu');
+    const filterLabel = document.getElementById('messagesFilterLabel');
+    const searchInput = document.getElementById('messagesSearchInput');
+    const composeBtn = document.getElementById('messagesComposeBtn');
+
+    if (searchInput && !searchInput.dataset.bound) {
+        searchInput.dataset.bound = '1';
+        searchInput.addEventListener('input', () => {
+            messagesListQuery = String(searchInput.value || '');
+            renderMessagesList();
+        });
+    }
+
+    if (filterBtn && filterMenu && !filterBtn.dataset.bound) {
+        filterBtn.dataset.bound = '1';
+        filterBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const next = !filterMenu.classList.contains('active');
+            filterMenu.classList.toggle('active', next);
+        });
+        filterMenu.querySelectorAll('.messages-filter-item').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const next = btn.getAttribute('data-filter') || 'all';
+                messagesListFilter = next;
+                filterMenu.classList.remove('active');
+                filterMenu.querySelectorAll('.messages-filter-item').forEach((b) => b.classList.remove('active'));
+                btn.classList.add('active');
+                if (filterLabel) filterLabel.textContent = next === 'unread' ? 'Unread' : 'All';
+                renderMessagesList();
+            });
+        });
+        document.addEventListener('click', () => {
+            filterMenu.classList.remove('active');
+        });
+    }
+
+    if (composeBtn && !composeBtn.dataset.bound) {
+        composeBtn.dataset.bound = '1';
+        composeBtn.addEventListener('click', () => {
+            if (!requireAuthOrPrompt()) return;
+            openModal('newMessageModal');
+            setTimeout(() => document.getElementById('newMessageUsername')?.focus?.(), 50);
+        });
+    }
+}
+
+function startNewMessageFromModal() {
+    if (!requireAuthOrPrompt()) return;
+    const input = document.getElementById('newMessageUsername');
+    const raw = String(input?.value || '').trim();
+    if (!raw) {
+        showToast('Enter a username', 'alert-circle');
+        return;
+    }
+    const tag = raw.startsWith('@') ? raw : '@' + raw;
+    closeModal('newMessageModal');
+    startChatWithSeller(tag);
+    if (input) input.value = '';
 }
 
 function renderEmptyChat() {
@@ -3060,8 +3158,8 @@ async function switchChat(tag, isModal = false) {
     if (!DEMO_MODE && currentSupabaseUserId && chat.userId) {
         const client = initSupabase();
         if (client) {
-            const selectWithMedia = 'id, created_at, sender_id, receiver_id, body, kind, media_url, media_name, media_mime, media_size';
-            const selectTextOnly = 'id, created_at, sender_id, receiver_id, body';
+            const selectWithMedia = 'id, created_at, sender_id, receiver_id, body, read_at, kind, media_url, media_name, media_mime, media_size';
+            const selectTextOnly = 'id, created_at, sender_id, receiver_id, body, read_at';
             const query = (select) =>
                 client
                     .from('messages')
@@ -3097,6 +3195,7 @@ async function switchChat(tag, isModal = false) {
                         type: r.sender_id === currentSupabaseUserId ? 'sent' : 'received',
                         kind,
                         created_at: r.created_at,
+                        read_at: r.read_at,
                         time: formatChatTime(r.created_at)
                     };
                     if (kind === 'text') return { ...out, text: r.body || '' };
@@ -3130,6 +3229,9 @@ async function switchChat(tag, isModal = false) {
 
     const displayTag = chat?.tag || tag;
     chatHeader.innerHTML = `
+        <button class="chat-mobile-back" type="button" onclick="event.stopPropagation(); closeChatMobile();">
+            <i data-lucide="arrow-left"></i>
+        </button>
         <img src="${chat.pic}" alt="" id="chatUserPic" onclick="viewChatUserProfile('${tag}')" style="cursor: pointer;">
         <div onclick="viewChatUserProfile('${tag}')" style="cursor: pointer; flex: 1;">
             <h4>${chat.name} ${getUserBadgesHTML(chat)}</h4>
@@ -3150,6 +3252,9 @@ async function switchChat(tag, isModal = false) {
     initVoiceMessagesInChat(chatMessages);
 
     chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (!isModal) {
+        document.querySelector('#messages-section .messages-twitter')?.classList?.add('chat-open');
+    }
     const input = document.getElementById(`chatInput${prefix}`);
     if (input) input.disabled = false;
     const sendBtn = document.getElementById(`chatSendBtn${prefix}`);
@@ -3159,6 +3264,10 @@ async function switchChat(tag, isModal = false) {
     const micBtn = document.getElementById(`chatMicBtn${prefix}`);
     if (micBtn) micBtn.disabled = false;
     lucide.createIcons();
+}
+
+function closeChatMobile() {
+    document.querySelector('#messages-section .messages-twitter')?.classList?.remove('chat-open');
 }
 
 function viewChatUserProfile(tag) {
@@ -3385,6 +3494,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateProfileUI();
     renderFavorites();
     setupChatFeatures();
+    setupMessagesTwitterUI();
     await bootstrapMessages();
     maybeOpenPendingAdmin();
     document.documentElement.classList.remove('app-loading');
