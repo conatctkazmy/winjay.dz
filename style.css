@@ -3453,6 +3453,9 @@ footer {
     display: flex;
     align-items: center;
     gap: 10px;
+    max-width: min(92vw, 560px);
+    white-space: normal;
+    overflow-wrap: anywhere;
     opacity: 0;
     transform: translateY(20px);
     transition: all 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
@@ -3598,6 +3601,17 @@ footer {
     cursor: pointer;
     margin-top: 10px;
     transition: background 0.2s;
+}
+
+.profile-details .message-contact-btn,
+.profile-details .share-profile-btn {
+    margin-top: 0;
+    padding: 8px 14px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
 }
 
 .message-contact-btn:hover {
