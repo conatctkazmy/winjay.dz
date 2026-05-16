@@ -397,6 +397,14 @@ async function handleAuthSessionChange(session) {
             } catch (e) {
                 null;
             }
+            try {
+                if (messagesPollTimer) clearInterval(messagesPollTimer);
+                if (notificationsPollTimer) clearInterval(notificationsPollTimer);
+            } catch (e) {
+                null;
+            }
+            messagesPollTimer = null;
+            notificationsPollTimer = null;
         }
         return;
     }
@@ -1043,6 +1051,8 @@ let notificationsRealtimeChannel = null;
 let lastUnreadMessageCount = 0;
 let lastUnreadNotificationCount = 0;
 let lastFetchedNotifications = [];
+let notificationsPollTimer = null;
+let messagesPollTimer = null;
 let profileReviewsTargetColumn = 'profile_id';
 let suppressNextMessagesBootstrap = false;
 let hasShownProfilesReadToast = false;
@@ -1852,6 +1862,7 @@ async function renderNotificationsModal() {
             else if (r.type === 'profile_review') text = 'left a review on your profile';
             else if (r.type === 'profile_review_comment') text = 'commented on a review on your profile';
             else if (r.type === 'profile_review_reply') text = 'replied to a review on your profile';
+            else if (r.type === 'message_received') text = 'sent you a message';
             else if (r.type === 'listing_view_milestone') {
                 const milestone = Number(meta.milestone) || Number(meta.views) || 0;
                 seller = { name: 'Winjay', tag: '', pic: `https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay` };
@@ -1909,6 +1920,10 @@ async function handleNotificationClick(notificationId) {
         openListingDetail(Number(row.listing_id));
         return;
     }
+    if (row?.type === 'message_received' && row?.actor_id) {
+        await startChatWithSellerByOwnerId(String(row.actor_id));
+        return;
+    }
 }
 
 function setupNotificationsRealtime() {
@@ -1933,6 +1948,26 @@ function setupNotificationsRealtime() {
         .subscribe();
 }
 
+function setupNotificationsPolling() {
+    if (notificationsPollTimer) {
+        try {
+            clearInterval(notificationsPollTimer);
+        } catch (e) {
+            null;
+        }
+        notificationsPollTimer = null;
+    }
+    if (DEMO_MODE) return;
+    if (!currentSupabaseUserId) return;
+    notificationsPollTimer = setInterval(async () => {
+        if (!currentSupabaseUserId) return;
+        const prev = lastUnreadNotificationCount;
+        const next = await refreshUnreadNotificationCount();
+        const modalOpen = document.getElementById('notificationsModal')?.classList?.contains('active');
+        if (modalOpen || next !== prev) await renderNotificationsModal();
+    }, 5000);
+}
+
 async function bootstrapNotifications() {
     if (DEMO_MODE) {
         setNotificationBadge(0);
@@ -1940,10 +1975,19 @@ async function bootstrapNotifications() {
     }
     if (!currentSupabaseUserId) {
         setNotificationBadge(0);
+        if (notificationsPollTimer) {
+            try {
+                clearInterval(notificationsPollTimer);
+            } catch (e) {
+                null;
+            }
+            notificationsPollTimer = null;
+        }
         return;
     }
     await refreshUnreadNotificationCount();
     setupNotificationsRealtime();
+    setupNotificationsPolling();
 }
 
 async function createNotificationFromClient({ recipientId, type, listingId = null, targetProfileId = null, meta = {} } = {}) {
@@ -2572,6 +2616,28 @@ function setupMessagesRealtime() {
         .subscribe();
 }
 
+function setupMessagesPolling() {
+    if (messagesPollTimer) {
+        try {
+            clearInterval(messagesPollTimer);
+        } catch (e) {
+            null;
+        }
+        messagesPollTimer = null;
+    }
+    if (DEMO_MODE) return;
+    if (!currentSupabaseUserId) return;
+    messagesPollTimer = setInterval(async () => {
+        if (!currentSupabaseUserId) return;
+        const prev = lastUnreadMessageCount;
+        const next = await refreshUnreadMessageCount();
+        if (next !== prev) {
+            await refreshLiveChatsFromSupabase();
+            renderMessagesList();
+        }
+    }, 5000);
+}
+
 async function bootstrapMessages() {
     if (DEMO_MODE) {
         renderMessagesList();
@@ -2582,12 +2648,21 @@ async function bootstrapMessages() {
         activeChatTag = null;
         renderMessagesList();
         setMessageBadge(0);
+        if (messagesPollTimer) {
+            try {
+                clearInterval(messagesPollTimer);
+            } catch (e) {
+                null;
+            }
+            messagesPollTimer = null;
+        }
         return;
     }
     await refreshLiveChatsFromSupabase();
     await refreshUnreadMessageCount();
     renderMessagesList();
     setupMessagesRealtime();
+    setupMessagesPolling();
     if (activeChatTag) await switchChat(activeChatTag);
 }
 
@@ -6786,6 +6861,12 @@ async function sendMessage() {
         else showToast(error.message || 'Failed to send message', 'alert-circle');
         return;
     }
+    await createNotificationFromClient({
+        recipientId: chat.userId,
+        type: 'message_received',
+        targetProfileId: chat.userId,
+        meta: { chat: `id:${String(chat.userId)}` }
+    });
     input.value = '';
     await refreshLiveChatsFromSupabase();
     renderMessagesList();
@@ -6852,6 +6933,12 @@ async function sendMessageModal() {
         else showToast(error.message || 'Failed to send message', 'alert-circle');
         return;
     }
+    await createNotificationFromClient({
+        recipientId: chat.userId,
+        type: 'message_received',
+        targetProfileId: chat.userId,
+        meta: { chat: `id:${String(chat.userId)}` }
+    });
     input.value = '';
     await refreshLiveChatsFromSupabase();
     renderMessagesList();
