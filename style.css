@@ -52,7 +52,9 @@ html.app-loading main {
 .navbar {
     position: fixed;
     top: 0;
-    width: 100%;
+    left: 0;
+    right: 0;
+    width: auto;
     height: 60px;
     background-color: var(--bg-main);
     border-bottom: 1px solid var(--border-color);
@@ -1539,6 +1541,8 @@ main.expanded {
     gap: 20px;
     height: calc(100vh - 200px);
     min-height: 500px;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .messages-list {
@@ -1549,6 +1553,7 @@ main.expanded {
     overflow-x: visible;
     padding: 6px;
     background-color: var(--bg-main);
+    min-width: 0;
 }
 
 .message-item, .message-item-modal {
@@ -1562,6 +1567,7 @@ main.expanded {
     cursor: pointer;
     transition: background 0.2s;
     position: relative;
+    max-width: 100%;
 }
 
 .message-item:last-child, .message-item-modal:last-child {
@@ -1645,6 +1651,7 @@ main.expanded {
     flex-direction: column;
     background-color: var(--bg-main);
     position: relative;
+    min-width: 0;
 }
 
 .chat-header {
@@ -4436,6 +4443,20 @@ footer {
 
     .chat-input input {
         font-size: 16px;
+    }
+
+    .message-item, .message-item-modal {
+        padding: 12px;
+        gap: 10px;
+    }
+
+    .message-item img {
+        width: 44px;
+        height: 44px;
+    }
+
+    .message-tag {
+        max-width: 120px;
     }
 }
 
