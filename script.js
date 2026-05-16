@@ -5829,6 +5829,7 @@ async function addProfileReview(targetTag, source = 'seller-profile') {
         }
         return;
     }
+    await createNotificationFromClient({ recipientId: targetProfile.id, type: 'profile_review', targetProfileId: targetProfile.id, meta: { rating } });
     ratingInput.value = '5';
     commentInput.value = '';
     if (targetProfile.id === currentSupabaseUserId) {
@@ -5886,6 +5887,18 @@ async function addListingReview(listingId) {
         showToast('Reviews are not ready', 'alert-circle');
         return;
     }
+    let hadExisting = false;
+    try {
+        const existing = await client
+            .from('listing_reviews')
+            .select('id')
+            .eq('listing_id', id)
+            .eq('author_id', currentSupabaseUserId)
+            .limit(1);
+        hadExisting = !existing.error && Array.isArray(existing.data) && existing.data.length > 0;
+    } catch (e) {
+        null;
+    }
     const { error } = await client
         .from('listing_reviews')
         .upsert(
@@ -5901,6 +5914,9 @@ async function addListingReview(listingId) {
         if (isListingReviewsBackendMissing(error)) showToast('Listing reviews backend is not set up yet', 'alert-circle');
         else showToast(error.message || "Impossible d'ajouter l'avis", 'alert-circle');
         return;
+    }
+    if (!hadExisting && listing?.owner_id) {
+        await createNotificationFromClient({ recipientId: listing.owner_id, type: 'listing_review', listingId: id, meta: { rating } });
     }
 
     if (ratingInput) ratingInput.value = '5';
