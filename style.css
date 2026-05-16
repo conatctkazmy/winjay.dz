@@ -1407,8 +1407,8 @@ main.expanded {
     justify-content: center;
     flex-shrink: 0;
     cursor: pointer;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     vertical-align: middle;
 }
 
@@ -1417,18 +1417,19 @@ main.expanded {
     height: 100%;
     display: block;
     object-fit: contain;
-    transform: none;
+    transform: scale(1.28);
+    transform-origin: center;
 }
 
 .vip-badge {
     display: inline-grid;
     place-items: center;
-    width: 24px;
-    height: 24px;
+    width: 23px;
+    height: 23px;
     background-color: #ffd700;
     color: #000;
     border-radius: 50%;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: bold;
     line-height: 1;
     padding: 0;
@@ -1447,7 +1448,7 @@ main.expanded {
 
 .verified-badge,
 .vip-badge {
-    margin-top: 1px;
+    margin-top: 0;
 }
 
 .chat-header h4 {
@@ -5047,14 +5048,14 @@ footer {
 
     .chat-header .verified-badge,
     .chat-header .vip-badge {
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
     }
 
     .chat-header .vip-badge {
-        width: 22px;
-        height: 22px;
-        font-size: 12px;
+        width: 21px;
+        height: 21px;
+        font-size: 11px;
     }
 
     .messages-list {
