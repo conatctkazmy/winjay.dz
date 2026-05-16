@@ -1733,6 +1733,8 @@ async function recordListingView(listingId) {
             hasShownViewsBackendToast = true;
             if (msg.toLowerCase().includes('increment_listing_view') || msg.toLowerCase().includes('does not exist')) {
                 showToast('Listing views backend is not set up yet', 'alert-circle');
+            } else if (msg.toLowerCase().includes('views_count') && msg.toLowerCase().includes('ambiguous')) {
+                showToast('Update Supabase function increment_listing_view (views_count ambiguity).', 'alert-circle');
             } else {
                 showToast(msg || 'Failed to record view', 'alert-circle');
             }
@@ -5291,6 +5293,23 @@ async function toggleFavorite(event, id) {
     const client = initSupabase();
     if (!client || !currentSupabaseUserId) return;
 
+    const wasLiked = favorites.includes(listingId);
+    const optimisticLiked = !wasLiked;
+    const item = listings.find((l) => l.id === listingId);
+    const prevLikesCount = Number(item?.likes_count) || 0;
+    const optimisticLikesCount = Math.max(0, prevLikesCount + (optimisticLiked ? 1 : -1));
+
+    if (optimisticLiked && !favorites.includes(listingId)) favorites.push(listingId);
+    if (!optimisticLiked && favorites.includes(listingId)) favorites = favorites.filter((x) => x !== listingId);
+    if (item) item.likes_count = optimisticLikesCount;
+    btn?.classList?.toggle('active', optimisticLiked);
+    const likesEl = document.getElementById('listingLikesCount');
+    if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(optimisticLikesCount);
+    renderListings();
+    renderFavorites();
+    lucide.createIcons();
+    showToast(optimisticLiked ? 'Liked' : 'Unliked', 'heart');
+
     const { data, error } = await client.rpc('toggle_listing_like', { p_listing_id: listingId });
     if (error) {
         const msg = String(error?.message || '');
@@ -5301,23 +5320,24 @@ async function toggleFavorite(event, id) {
         } else {
             showToast(error.message || 'Failed to like listing', 'alert-circle');
         }
+        favorites = favorites.filter((x) => x !== listingId);
+        if (wasLiked) favorites.push(listingId);
+        if (item) item.likes_count = prevLikesCount;
+        btn?.classList?.toggle('active', wasLiked);
+        if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(prevLikesCount);
+        renderListings();
+        renderFavorites();
+        lucide.createIcons();
         return;
     }
 
     const payload = Array.isArray(data) ? data[0] : data;
-    const liked = !!payload?.liked;
     const likesCount = Number(payload?.likes_count) || 0;
-    const idx = favorites.indexOf(listingId);
-    if (liked && idx === -1) favorites.push(listingId);
-    if (!liked && idx > -1) favorites.splice(idx, 1);
-
-    const item = listings.find((l) => l.id === listingId);
+    await refreshFavoritesFromSupabase({ silent: true });
+    const likedNow = favorites.includes(listingId);
     if (item) item.likes_count = likesCount;
-    const likesEl = document.getElementById('listingLikesCount');
     if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(likesCount);
-
-    btn?.classList?.toggle('active', liked);
-    showToast(liked ? 'Liked' : 'Unliked', 'heart');
+    btn?.classList?.toggle('active', likedNow);
     renderListings();
     renderFavorites();
     lucide.createIcons();
