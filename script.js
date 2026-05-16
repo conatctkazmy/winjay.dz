@@ -992,7 +992,8 @@ const listingReviewPanelState = {};
 const listingDetailImageIndex = {};
 const listingReviewsCache = new Map();
 const profileRatingSummaryCache = new Map();
-const listingViewSessionSet = new Set();
+let listingDetailViewRecordedListingId = null;
+let listingDetailViewRecorded = false;
 
 let mockChats = DEMO_MODE ? {
     "@amine_dz": {
@@ -1722,18 +1723,22 @@ async function recordListingView(listingId) {
     if (DEMO_MODE) return;
     const id = Number(listingId);
     if (!Number.isFinite(id)) return;
-    if (listingViewSessionSet.has(id)) return;
-    listingViewSessionSet.add(id);
-
     const client = initSupabase();
     if (!client) return;
     const { data, error } = await client.rpc('increment_listing_view', { p_listing_id: id });
-    if (error) return;
+    if (error) {
+        const msg = String(error?.message || '');
+        if (msg.toLowerCase().includes('increment_listing_view') || msg.toLowerCase().includes('does not exist')) {
+            showToast('Listing views backend is not set up yet', 'alert-circle');
+        }
+        return;
+    }
     const nextCount = Number(data?.views_count ?? data) || 0;
     const item = listings.find((l) => l.id === id);
     if (item) item.views_count = nextCount;
     const el = document.getElementById('listingViewsCount');
     if (el) el.textContent = String(nextCount);
+    renderListings();
 }
 
 function renderListingReviewsListHTML(reviewsData) {
@@ -2854,6 +2859,10 @@ function openModal(modalId) {
 
 function closeModal(modalId) {
     document.getElementById(modalId).classList.remove('active');
+    if (modalId === 'listingDetailModal') {
+        listingDetailViewRecordedListingId = null;
+        listingDetailViewRecorded = false;
+    }
     if (modalId === 'addListingModal') {
         selectedListingImages.forEach((_, i) => revokeListingImageUrl(i));
         selectedListingImages = Array.from({ length: MAX_LISTING_IMAGES }, () => null);
@@ -5277,8 +5286,14 @@ async function toggleFavorite(event, id) {
 
     const { data, error } = await client.rpc('toggle_listing_like', { p_listing_id: listingId });
     if (error) {
-        if (isListingLikesBackendMissing(error)) showToast('Listing likes backend is not set up yet', 'alert-circle');
-        else showToast(error.message || 'Failed to like listing', 'alert-circle');
+        const msg = String(error?.message || '');
+        if (isListingLikesBackendMissing(error)) {
+            showToast('Listing likes backend is not set up yet', 'alert-circle');
+        } else if (msg.toLowerCase().includes('likes_count') && msg.toLowerCase().includes('ambiguous')) {
+            showToast('Update Supabase function toggle_listing_like (likes_count ambiguity).', 'alert-circle');
+        } else {
+            showToast(error.message || 'Failed to like listing', 'alert-circle');
+        }
         return;
     }
 
@@ -5464,7 +5479,11 @@ function openListingDetail(listingId) {
     openModal('listingDetailModal');
     lucide.createIcons();
     refreshListingReviewsForListingDetail(listingId, seller?.name || 'Vendeur');
-    recordListingView(listingId);
+    if (!listingDetailViewRecorded || listingDetailViewRecordedListingId !== listingId) {
+        listingDetailViewRecordedListingId = listingId;
+        listingDetailViewRecorded = true;
+        recordListingView(listingId);
+    }
     if (!DEMO_MODE) {
         fetchProfileRatingSummary(item.owner_id).then((summary) => {
             if (currentListingDetailId !== listingId) return;
@@ -5562,10 +5581,9 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
         switchMyProfileSection(section);
         return;
     }
-    const client = initSupabase();
-    if (!client) return;
-    const { data: profileRow, error } = await client.from('profiles').select('*').eq('id', ownerId).maybeSingle();
-    if (error || !profileRow?.id) {
+    const profilesById = await fetchProfilesByIds([ownerId]);
+    const profileRow = profilesById[ownerId] || null;
+    if (!profileRow?.id) {
         showToast('Seller profile not found', 'alert-circle');
         return;
     }
