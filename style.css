@@ -1556,6 +1556,10 @@ main.expanded {
     background-color: var(--bg-main);
 }
 
+#messages-section > .back-btn {
+    display: none;
+}
+
 .messages-twitter .messages-pane {
     flex: 0 0 380px;
     width: 380px;
@@ -1815,7 +1819,8 @@ main.expanded {
     border-left: 4px solid var(--primary-color);
 }
 
-.message-item img {
+.message-item > img,
+.message-item-modal > img {
     width: 50px;
     height: 50px;
     border-radius: 50%;
@@ -1835,7 +1840,7 @@ main.expanded {
 
 .message-title {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 6px;
     min-width: 0;
 }
@@ -1967,7 +1972,13 @@ main.expanded {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+    justify-content: flex-end;
     gap: 15px;
+}
+
+.chat-messages .empty-state {
+    margin-top: auto;
+    margin-bottom: auto;
 }
 
 .chat-message {
