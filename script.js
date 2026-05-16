@@ -1979,7 +1979,7 @@ async function fetchProfileByTag(tag) {
     const viewAttempt = await client.from('public_profiles').select('*').eq('tag', normalized).maybeSingle();
     if (!viewAttempt.error && viewAttempt.data) return viewAttempt.data;
     const { data, error } = await client.from('profiles').select('*').eq('tag', normalized).maybeSingle();
-    if (error || viewAttempt.error) {
+    if (error) {
         if (!hasShownProfilesReadToast) {
             hasShownProfilesReadToast = true;
             showToast('Enable public SELECT on profiles (or create a public profile policy) to show real name/avatar.', 'alert-circle');
@@ -5846,6 +5846,67 @@ async function addProfileReview(targetTag, source = 'seller-profile') {
     showToast('Avis ajouté avec succès !', 'check-circle');
 }
 
+async function addProfileReviewById(targetProfileId, source = 'seller-profile') {
+    const ratingInput = document.getElementById(source === 'my-profile' ? 'myProfileReviewRating' : 'sellerProfileReviewRating');
+    const commentInput = document.getElementById(source === 'my-profile' ? 'myProfileReviewComment' : 'sellerProfileReviewComment');
+    const rating = Number(ratingInput?.value || 0);
+    const comment = commentInput?.value?.trim?.() || '';
+
+    if (!rating || rating < 1 || rating > 5) {
+        showToast('Sélectionnez une note entre 1 et 5.', 'alert-circle');
+        return;
+    }
+    if (!comment) {
+        showToast('Ajoutez un commentaire.', 'alert-circle');
+        return;
+    }
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId) {
+        showToast('Please log in again', 'log-in');
+        return;
+    }
+    const targetId = String(targetProfileId || '').trim();
+    if (!targetId) {
+        showToast('Seller profile not found', 'alert-circle');
+        return;
+    }
+
+    const targetColumn = profileReviewsTargetColumn || 'target_profile_id';
+    let insertPayload = {
+        author_id: currentSupabaseUserId,
+        rating,
+        comment
+    };
+    insertPayload[targetColumn] = targetId;
+
+    let { error } = await client.from('profile_reviews').insert(insertPayload);
+    if (error && isMissingColumnError(error, targetColumn)) {
+        const fallback = targetColumn === 'profile_id' ? 'target_profile_id' : 'profile_id';
+        insertPayload = {
+            author_id: currentSupabaseUserId,
+            rating,
+            comment
+        };
+        insertPayload[fallback] = targetId;
+        const retry = await client.from('profile_reviews').insert(insertPayload);
+        error = retry.error;
+        if (!error) profileReviewsTargetColumn = fallback;
+    } else if (!error) {
+        profileReviewsTargetColumn = targetColumn;
+    }
+    if (error) {
+        if (isProfileReviewsBackendMissing(error)) showToast('Profile reviews backend is not set up yet', 'alert-circle');
+        else showToast(error.message || 'Failed to post review', 'alert-circle');
+        return;
+    }
+    await createNotificationFromClient({ recipientId: targetId, type: 'profile_review', targetProfileId: targetId, meta: { rating } });
+    if (ratingInput) ratingInput.value = '5';
+    if (commentInput) commentInput.value = '';
+    await openSellerProfileByOwnerId(targetId, 'reviews');
+    showToast('Avis ajouté avec succès !', 'check-circle');
+}
+
 async function addListingReview(listingId) {
     const id = Number(listingId);
     const listing = listings.find((l) => l.id === id);
@@ -6493,10 +6554,16 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
                             ${seller.joinedDate ? `<div class="bio-item"><i data-lucide="calendar"></i><span>Inscrit en ${seller.joinedDate}</span></div>` : ''}
                         </div>
                     </div>
-                    <button class="message-contact-btn" onclick="startChatWithSellerByOwnerId('${ownerId}')">
-                        <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
-                        Message
-                    </button>
+                    <div class="profile-actions-row">
+                        <button class="message-contact-btn" type="button" onclick="startChatWithSellerByOwnerId('${ownerId}')">
+                            <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
+                            Message
+                        </button>
+                        <button class="share-profile-btn" type="button" onclick="shareSellerProfile('${ownerId}', '${seller.tag}', '${escapeHtml(seller.name || '')}'); event.stopPropagation();">
+                            <i data-lucide="share-2"></i>
+                            Share
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -6526,7 +6593,7 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
                             <option value="1">1 - Very bad</option>
                         </select>
                         <textarea id="sellerProfileReviewComment" rows="3" placeholder="Your comment..."></textarea>
-                    <button class="submit-btn" type="button" onclick="addProfileReview('${seller.tag}','seller-profile')">Post review</button>
+                    <button class="submit-btn" type="button" onclick="addProfileReviewById('${ownerId}','seller-profile')">Post review</button>
                     </div>
                 <h3 style="margin-top:18px;">Reviews about ${seller.name}</h3>
                 <div class="reviews-list">${getReviewsListHTML(seller.reviewsData, seller.name, false, 'profile', seller.tag)}</div>
@@ -6590,14 +6657,16 @@ async function openSellerProfile(tag, section = 'listings') {
                             <div class="bio-item"><i data-lucide="calendar"></i><span>Inscrit en ${seller.joinedDate}</span></div>
                         </div>
                     </div>
-                    <button class="message-contact-btn" onclick="startChatWithSellerByOwnerId('${profileRow.id}')">
-                        <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
-                        Message
-                    </button>
-                    <button class="share-profile-btn" type="button" onclick="shareSellerProfile('${profileRow.id}', '${seller.tag}', ''); event.stopPropagation();">
-                        <i data-lucide="share-2"></i>
-                        Share
-                    </button>
+                    <div class="profile-actions-row">
+                        <button class="message-contact-btn" type="button" onclick="startChatWithSellerByOwnerId('${profileRow.id}')">
+                            <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
+                            Message
+                        </button>
+                        <button class="share-profile-btn" type="button" onclick="shareSellerProfile('${profileRow.id}', '${seller.tag}', '${escapeHtml(seller.name || '')}'); event.stopPropagation();">
+                            <i data-lucide="share-2"></i>
+                            Share
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -6627,7 +6696,7 @@ async function openSellerProfile(tag, section = 'listings') {
                             <option value="1">1 - Mauvais</option>
                         </select>
                         <textarea id="sellerProfileReviewComment" rows="3" placeholder="Votre commentaire sur ce profil..."></textarea>
-                        <button class="submit-btn" type="button" onclick="addProfileReview('${seller.tag}','seller-profile')">Publier l'avis</button>
+                        <button class="submit-btn" type="button" onclick="addProfileReviewById('${profileRow.id}','seller-profile')">Publier l'avis</button>
                     </div>
                     <h3 style="margin-top:18px;">Avis sur ${seller.name}</h3>
                     <div class="reviews-list">${getReviewsListHTML(seller.reviewsData, seller.name, false, 'profile', seller.tag)}</div>
