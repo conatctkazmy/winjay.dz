@@ -382,6 +382,7 @@ async function handleAuthSessionChange(session) {
             mockChats = {};
             activeChatTag = null;
             setMessageBadge(0);
+            setNotificationBadge(0);
             favorites = [];
             try {
                 renderListings();
@@ -392,6 +393,7 @@ async function handleAuthSessionChange(session) {
             try {
                 const client = initSupabase();
                 if (client && messagesRealtimeChannel) client.removeChannel(messagesRealtimeChannel);
+                if (client && notificationsRealtimeChannel) client.removeChannel(notificationsRealtimeChannel);
             } catch (e) {
                 null;
             }
@@ -415,6 +417,7 @@ async function handleAuthSessionChange(session) {
         }
     }
     await bootstrapMessages();
+    await bootstrapNotifications();
     await refreshFavoritesFromSupabase({ silent: true });
     try {
         renderListings();
@@ -1034,12 +1037,15 @@ let mockChats = DEMO_MODE ? {
 
 let activeChatTag = Object.keys(mockChats)[0] || null;
 let messagesRealtimeChannel = null;
+let notificationsRealtimeChannel = null;
 let lastUnreadMessageCount = 0;
+let lastUnreadNotificationCount = 0;
 let profileReviewsTargetColumn = 'profile_id';
 let suppressNextMessagesBootstrap = false;
 let hasShownProfilesReadToast = false;
 let hasShownViewsBackendToast = false;
 let messagesHasMediaColumns = null;
+const listingTitleCache = new Map();
 let voiceRecorder = null;
 let voiceChunks = [];
 let voiceStream = null;
@@ -1648,6 +1654,14 @@ function setMessageBadge(count) {
     badge.style.display = n > 0 ? 'flex' : 'none';
 }
 
+function setNotificationBadge(count) {
+    const badge = document.getElementById('notificationBadge');
+    if (!badge) return;
+    const n = Number(count) || 0;
+    badge.textContent = String(n);
+    badge.style.display = n > 0 ? 'flex' : 'none';
+}
+
 function formatChatTime(ts) {
     try {
         if (!ts) return '';
@@ -1682,6 +1696,11 @@ function isPublicProfilesBackendMissing(error) {
 function isProfileReviewsBackendMissing(error) {
     const msg = String(error?.message || '');
     return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('profile_reviews');
+}
+
+function isNotificationsBackendMissing(error) {
+    const msg = String(error?.message || '');
+    return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('notifications');
 }
 
 function isMissingColumnError(error, columnName) {
@@ -1721,6 +1740,199 @@ function clearSellerProfileRouteTag() {
     } catch (e) {
         null;
     }
+}
+
+async function refreshUnreadNotificationCount() {
+    if (DEMO_MODE) {
+        setNotificationBadge(0);
+        return 0;
+    }
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId) {
+        setNotificationBadge(0);
+        return 0;
+    }
+    const { count, error } = await client
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('recipient_id', currentSupabaseUserId)
+        .is('read_at', null);
+    if (error) {
+        if (!isNotificationsBackendMissing(error)) showToast(error.message || 'Failed to load notifications', 'alert-circle');
+        setNotificationBadge(0);
+        return 0;
+    }
+    const n = Number(count) || 0;
+    lastUnreadNotificationCount = n;
+    setNotificationBadge(n);
+    return n;
+}
+
+async function fetchNotificationsFromSupabase({ limit = 40 } = {}) {
+    if (DEMO_MODE) return [];
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId) return [];
+    const { data, error } = await client
+        .from('notifications')
+        .select('id, created_at, recipient_id, actor_id, type, listing_id, target_profile_id, meta, read_at')
+        .eq('recipient_id', currentSupabaseUserId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+    if (error) {
+        if (!isNotificationsBackendMissing(error)) showToast(error.message || 'Failed to load notifications', 'alert-circle');
+        return [];
+    }
+    return Array.isArray(data) ? data : [];
+}
+
+async function markAllNotificationsRead() {
+    if (DEMO_MODE) return;
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId) return;
+    const { error } = await client
+        .from('notifications')
+        .update({ read_at: new Date().toISOString() })
+        .eq('recipient_id', currentSupabaseUserId)
+        .is('read_at', null);
+    if (error && !isNotificationsBackendMissing(error)) showToast(error.message || 'Failed to mark notifications read', 'alert-circle');
+}
+
+async function getListingTitleById(listingId) {
+    const id = Number(listingId);
+    if (!Number.isFinite(id)) return '';
+    if (listingTitleCache.has(id)) return listingTitleCache.get(id) || '';
+    const local = listings.find((l) => Number(l?.id) === id);
+    if (local?.title) {
+        listingTitleCache.set(id, String(local.title));
+        return String(local.title);
+    }
+    if (DEMO_MODE) return '';
+    const client = initSupabase();
+    if (!client) return '';
+    const { data } = await client.from('listings').select('title').eq('id', id).maybeSingle();
+    const t = String(data?.title || '');
+    listingTitleCache.set(id, t);
+    return t;
+}
+
+async function renderNotificationsModal() {
+    const listEl = document.getElementById('notificationsList');
+    if (!listEl) return;
+    const rows = await fetchNotificationsFromSupabase({ limit: 60 });
+    if (rows.length === 0) {
+        listEl.innerHTML = `
+            <div class="notification-empty">
+                <i data-lucide="bell-off"></i>
+                <p>No notifications yet.</p>
+            </div>
+        `;
+        lucide.createIcons();
+        return;
+    }
+    const actorIds = Array.from(new Set(rows.map((r) => r.actor_id).filter(Boolean)));
+    const profilesById = actorIds.length ? await fetchProfilesByIds(actorIds) : {};
+    const items = await Promise.all(
+        rows.map(async (r) => {
+            const seller = r.actor_id ? mapProfileRowToSeller(profilesById[r.actor_id] || { id: r.actor_id }) : { name: 'User', tag: '@user', pic: '' };
+            const created = r.created_at ? formatRelativeDate(r.created_at) : '';
+            const unread = !r.read_at;
+            const listingTitle = r.listing_id ? await getListingTitleById(r.listing_id) : '';
+            let text = '';
+            if (r.type === 'listing_like') text = `liked your listing${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`;
+            else if (r.type === 'listing_share') text = `shared your listing${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`;
+            else if (r.type === 'listing_review') text = `left a review on your listing${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`;
+            else if (r.type === 'profile_share') text = 'shared your profile';
+            else if (r.type === 'profile_review') text = 'left a review on your profile';
+            else text = escapeHtml(String(r.type || 'notification'));
+            return `
+                <button class="notification-item ${unread ? 'unread' : ''}" type="button" onclick="handleNotificationClick('${r.id}')">
+                    <img class="notification-avatar" src="${seller.pic || seller.profilePic || ''}" alt="">
+                    <div class="notification-content">
+                        <p><strong>${escapeHtml(seller.name)}</strong> <span class="notification-tag">${escapeHtml(seller.tag || '')}</span> ${text}</p>
+                        <span>${escapeHtml(created)}</span>
+                    </div>
+                </button>
+            `;
+        })
+    );
+    listEl.innerHTML = items.join('');
+    lucide.createIcons();
+}
+
+async function handleNotificationClick(notificationId) {
+    const id = String(notificationId || '').trim();
+    if (!id) return;
+    if (!DEMO_MODE) {
+        const client = initSupabase();
+        if (client && currentSupabaseUserId) {
+            await client
+                .from('notifications')
+                .update({ read_at: new Date().toISOString() })
+                .eq('id', id)
+                .eq('recipient_id', currentSupabaseUserId);
+        }
+        await refreshUnreadNotificationCount();
+    }
+    await renderNotificationsModal();
+}
+
+function setupNotificationsRealtime() {
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId) return;
+    try {
+        if (notificationsRealtimeChannel) client.removeChannel(notificationsRealtimeChannel);
+    } catch (e) {
+        null;
+    }
+    notificationsRealtimeChannel = client
+        .channel('notifications-inbox')
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${currentSupabaseUserId}` },
+            async () => {
+                await refreshUnreadNotificationCount();
+                const modalOpen = document.getElementById('notificationsModal')?.classList?.contains('active');
+                if (modalOpen) await renderNotificationsModal();
+            }
+        )
+        .subscribe();
+}
+
+async function bootstrapNotifications() {
+    if (DEMO_MODE) {
+        setNotificationBadge(0);
+        return;
+    }
+    if (!currentSupabaseUserId) {
+        setNotificationBadge(0);
+        return;
+    }
+    await refreshUnreadNotificationCount();
+    setupNotificationsRealtime();
+}
+
+async function createNotificationFromClient({ recipientId, type, listingId = null, targetProfileId = null, meta = {} } = {}) {
+    if (DEMO_MODE) return true;
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId) return false;
+    const recipient = String(recipientId || '').trim();
+    if (!recipient || recipient === currentSupabaseUserId) return true;
+    const payload = {
+        recipient_id: recipient,
+        actor_id: currentSupabaseUserId,
+        type: String(type || '').trim() || 'notification',
+        meta: meta && typeof meta === 'object' ? meta : {}
+    };
+    if (listingId !== null && listingId !== undefined) payload.listing_id = Number(listingId);
+    if (targetProfileId) payload.target_profile_id = String(targetProfileId);
+    const { error } = await client.from('notifications').insert(payload);
+    if (error) {
+        if (isNotificationsBackendMissing(error)) showToast('Notifications backend is not set up yet', 'alert-circle');
+        else showToast(error.message || 'Failed to create notification', 'alert-circle');
+        return false;
+    }
+    await refreshUnreadNotificationCount();
+    return true;
 }
 
 async function fetchProfileByTag(tag) {
@@ -3048,11 +3260,15 @@ function openModal(modalId) {
         'editProfileModal',
         'changePasswordModal',
         'identityVerificationModal',
-        'verifiedCongratsModal'
+        'verifiedCongratsModal',
+        'notificationsModal'
     ];
     if (protectedModals.includes(modalId) && !requireAuthOrPrompt()) return;
     document.getElementById(modalId).classList.add('active');
     body.classList.add('modal-open');
+    if (modalId === 'notificationsModal') {
+        renderNotificationsModal().then(() => markAllNotificationsRead()).then(() => refreshUnreadNotificationCount());
+    }
 }
 
 function closeModal(modalId) {
@@ -5769,14 +5985,20 @@ function openListingDetail(listingId) {
 
 function shareListing(platform, id) {
     const item = listings.find(l => l.id === id);
+    if (!item) return;
     const url = window.location.href;
     const text = `Regardez cette annonce sur Winjay.dz : ${item.title}`;
     if (platform === 'whatsapp') {
         window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + url)}`);
+        if (currentSupabaseUserId && item.owner_id) createNotificationFromClient({ recipientId: item.owner_id, type: 'listing_share', listingId: item.id, meta: { platform: 'whatsapp' } });
     } else if (platform === 'facebook') {
         window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`);
+        if (currentSupabaseUserId && item.owner_id) createNotificationFromClient({ recipientId: item.owner_id, type: 'listing_share', listingId: item.id, meta: { platform: 'facebook' } });
     } else if (platform === 'copy') {
-        navigator.clipboard.writeText(url).then(() => showToast('Lien copié dans le presse-papier !', 'copy'));
+        navigator.clipboard.writeText(url).then(() => {
+            showToast('Lien copié dans le presse-papier !', 'copy');
+            if (currentSupabaseUserId && item.owner_id) createNotificationFromClient({ recipientId: item.owner_id, type: 'listing_share', listingId: item.id, meta: { platform: 'copy' } });
+        });
     }
 }
 
@@ -5798,6 +6020,32 @@ async function shareMyProfile() {
     }
     const ok = await copyTextToClipboard(url);
     showToast(ok ? 'Link copied!' : 'Unable to copy link', ok ? 'copy' : 'alert-circle');
+}
+
+async function shareSellerProfile(ownerId, tag, name) {
+    if (!isLoggedIn()) {
+        openModal('loginModal');
+        return;
+    }
+    const safeTag = String(tag || '').trim();
+    const label = String(name || '').trim() || safeTag || 'profile';
+    const url = `${window.location.origin}${window.location.pathname}?profile=${encodeURIComponent(safeTag)}`;
+    const text = `Check this profile on winjay.dz: ${label} (${safeTag})`;
+    let shared = false;
+    try {
+        if (navigator.share) {
+            await navigator.share({ title: 'winjay.dz', text, url });
+            shared = true;
+        }
+    } catch (e) {
+        shared = false;
+    }
+    if (!shared) {
+        const ok = await copyTextToClipboard(url);
+        showToast(ok ? 'Link copied!' : 'Unable to copy link', ok ? 'copy' : 'alert-circle');
+        shared = ok;
+    }
+    if (shared && ownerId) await createNotificationFromClient({ recipientId: ownerId, type: 'profile_share', targetProfileId: ownerId, meta: { platform: 'share' } });
 }
 
 function switchSellerProfileSection(section = 'listings') {
