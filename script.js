@@ -2457,20 +2457,9 @@ async function recordListingView(listingId) {
     let data = null;
     let error = null;
     try {
-        const first = await client.rpc('increment_listing_view', { p_listing_id: id });
-        data = first.data;
-        error = first.error;
-        if (error) {
-            const msgLower = String(error?.message || '').toLowerCase();
-            const shouldTryWithKey =
-                (msgLower.includes('increment_listing_view') && msgLower.includes('does not exist')) ||
-                (msgLower.includes('function') && msgLower.includes('increment_listing_view') && msgLower.includes('integer'));
-            if (shouldTryWithKey) {
-                const retry = await client.rpc('increment_listing_view', { p_listing_id: id, p_viewer_key: listingViewsReloadKey });
-                data = retry.data;
-                error = retry.error;
-            }
-        }
+        const res = await client.rpc('increment_listing_view', { p_listing_id: id, p_viewer_key: listingViewsReloadKey });
+        data = res.data;
+        error = res.error;
     } finally {
         listingViewsRecordInFlight.delete(id);
     }
@@ -2482,6 +2471,8 @@ async function recordListingView(listingId) {
             hasShownViewsBackendToast = true;
             if (msgLower.includes('views_count') && msgLower.includes('ambiguous')) {
                 showToast('Supabase: fix increment_listing_view (views_count ambiguous).', 'alert-circle');
+            } else if (msgLower.includes('could not choose the best candidate function')) {
+                showToast('Supabase: remove duplicate increment_listing_view overloads, keep only one.', 'alert-circle');
             } else if (msgLower.includes('permission denied')) {
                 showToast('Supabase: grant EXECUTE for increment_listing_view.', 'alert-circle');
             } else if (msgLower.includes('increment_listing_view') && msgLower.includes('does not exist')) {
