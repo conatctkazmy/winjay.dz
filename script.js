@@ -5444,6 +5444,7 @@ function showToast(message, icon = 'info') {
 
 function updateNavbarAuthUI() {
     const loggedIn = isLoggedIn();
+    const verified = !!userProfile?.verified;
     const loginBtn = document.getElementById('navLoginBtn');
     const notificationsBtn = document.getElementById('navNotificationsBtn');
     const messagesBtn = document.getElementById('navMessagesBtn');
@@ -5455,7 +5456,7 @@ function updateNavbarAuthUI() {
     if (notificationsBtn) notificationsBtn.style.display = loggedIn ? '' : 'none';
     if (messagesBtn) messagesBtn.style.display = loggedIn ? '' : 'none';
     if (addListingBtn) addListingBtn.style.display = loggedIn ? '' : 'none';
-    if (freeVerifiedPill) freeVerifiedPill.style.display = loggedIn ? '' : 'none';
+    if (freeVerifiedPill) freeVerifiedPill.style.display = loggedIn && !verified ? '' : 'none';
     if (profileMenu) profileMenu.style.display = loggedIn ? '' : 'none';
 }
 
