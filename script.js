@@ -2475,13 +2475,20 @@ async function recordListingView(listingId) {
         listingViewsRecordInFlight.delete(id);
     }
     if (error) {
+        if (handleAuthExpired(error)) return;
         const msg = String(error?.message || '');
         const msgLower = msg.toLowerCase();
-        if (msgLower.includes('views_count') && msgLower.includes('ambiguous')) return;
-        if (msgLower.includes('increment_listing_view') || msgLower.includes('does not exist')) return;
         if (!hasShownViewsBackendToast) {
             hasShownViewsBackendToast = true;
-            showToast(msg || 'Failed to record view', 'alert-circle');
+            if (msgLower.includes('views_count') && msgLower.includes('ambiguous')) {
+                showToast('Supabase: fix increment_listing_view (views_count ambiguous).', 'alert-circle');
+            } else if (msgLower.includes('permission denied')) {
+                showToast('Supabase: grant EXECUTE for increment_listing_view.', 'alert-circle');
+            } else if (msgLower.includes('increment_listing_view') && msgLower.includes('does not exist')) {
+                showToast('Supabase: create RPC function increment_listing_view to count views.', 'alert-circle');
+            } else {
+                showToast(msg || 'Failed to record view', 'alert-circle');
+            }
         }
         return;
     }
