@@ -2410,6 +2410,13 @@ async function refreshListingCountsFromSupabase(listingId) {
 const LISTING_VIEW_MILESTONES = [10, 50, 100, 500, 1000];
 const listingViewsRecordedThisReload = new Set();
 const listingViewsRecordInFlight = new Set();
+const listingViewsReloadKey = (() => {
+    try {
+        return crypto?.randomUUID ? crypto.randomUUID() : `reload_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    } catch (e) {
+        return `reload_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
+})();
 
 async function maybeNotifyListingViewMilestone(listingId, prevCount, nextCount) {
     if (DEMO_MODE) return;
@@ -2447,17 +2454,19 @@ async function recordListingView(listingId) {
     if (!client) return;
     if (listingViewsRecordInFlight.has(id)) return;
     listingViewsRecordInFlight.add(id);
-    const viewerKey = getViewTrackingKey();
     let data = null;
     let error = null;
     try {
-        const first = await client.rpc('increment_listing_view', { p_listing_id: id, p_viewer_key: viewerKey });
+        const first = await client.rpc('increment_listing_view', { p_listing_id: id });
         data = first.data;
         error = first.error;
         if (error) {
             const msgLower = String(error?.message || '').toLowerCase();
-            if (msgLower.includes('increment_listing_view') && msgLower.includes('does not exist')) {
-                const retry = await client.rpc('increment_listing_view', { p_listing_id: id });
+            const shouldTryWithKey =
+                (msgLower.includes('increment_listing_view') && msgLower.includes('does not exist')) ||
+                (msgLower.includes('function') && msgLower.includes('increment_listing_view') && msgLower.includes('integer'));
+            if (shouldTryWithKey) {
+                const retry = await client.rpc('increment_listing_view', { p_listing_id: id, p_viewer_key: listingViewsReloadKey });
                 data = retry.data;
                 error = retry.error;
             }
