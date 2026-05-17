@@ -1727,6 +1727,7 @@ main.expanded {
     padding: 6px;
     background: none;
     flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
@@ -1965,8 +1966,32 @@ main.expanded {
     flex-direction: column;
     background-color: var(--bg-main);
     position: relative;
+    min-height: 0;
     min-width: 0;
     max-width: 100%;
+}
+
+.chat-jump-latest {
+    position: absolute;
+    right: 16px;
+    bottom: 76px;
+    border: none;
+    cursor: pointer;
+    padding: 10px 14px;
+    border-radius: 9999px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--primary-color), #ff9e00);
+    color: #fff;
+    box-shadow: 0 14px 30px rgba(255,107,0,0.25);
+    z-index: 10;
+    max-width: calc(100% - 32px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-jump-latest:hover {
+    filter: brightness(0.98);
 }
 
 .chat-header {
@@ -2068,14 +2093,16 @@ main.expanded {
 .chat-messages {
     flex: 1;
     padding: 20px;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 15px;
+    touch-action: pan-y;
 }
 
 .chat-messages .empty-state {
@@ -2367,6 +2394,8 @@ main.expanded {
     max-width: 320px;
     border-radius: 12px;
     margin-top: 6px;
+    display: block;
+    touch-action: pan-y;
 }
 
 .chat-media.image {

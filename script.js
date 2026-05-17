@@ -1785,6 +1785,48 @@ function setupChatFeatures() {
     });
 }
 
+let chatUnseenNewCount = 0;
+const renderedChatMessageCounts = new Map();
+
+function isChatNearBottom(el) {
+    if (!el) return true;
+    const gap = el.scrollHeight - (el.scrollTop + el.clientHeight);
+    return gap < 120;
+}
+
+function updateChatJumpLatestButton() {
+    const btn = document.getElementById('chatJumpLatest');
+    const messagesEl = document.getElementById('chatMessages');
+    if (!btn || !messagesEl) return;
+    const nearBottom = isChatNearBottom(messagesEl);
+    if (nearBottom) chatUnseenNewCount = 0;
+    const shouldShow = !nearBottom || chatUnseenNewCount > 0;
+    btn.style.display = shouldShow ? 'inline-flex' : 'none';
+    if (!shouldShow) return;
+    btn.textContent = chatUnseenNewCount > 0 ? `New messages (${chatUnseenNewCount})` : 'Jump to latest';
+}
+
+function bindChatJumpLatestScroll() {
+    const messagesEl = document.getElementById('chatMessages');
+    if (!messagesEl || messagesEl.dataset.jumpBound) return;
+    messagesEl.dataset.jumpBound = '1';
+    messagesEl.addEventListener(
+        'scroll',
+        () => {
+            updateChatJumpLatestButton();
+        },
+        { passive: true }
+    );
+}
+
+function jumpChatToLatest() {
+    const messagesEl = document.getElementById('chatMessages');
+    if (!messagesEl) return;
+    chatUnseenNewCount = 0;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    updateChatJumpLatestButton();
+}
+
 function setMessageBadge(count) {
     const badge = document.getElementById('messageBadge');
     if (!badge) return;
@@ -3362,6 +3404,8 @@ async function switchChat(tag, isModal = false) {
     const wasNearBottom =
         !!chatMessages &&
         (!isSameChat || (chatMessages.scrollHeight - (chatMessages.scrollTop + chatMessages.clientHeight) < 120));
+    if (!isSameChat) chatUnseenNewCount = 0;
+    const prevRenderedCount = renderedChatMessageCounts.get(tag) || 0;
 
     if (chat.messages) {
         chat.messages.forEach(m => {
@@ -3398,6 +3442,13 @@ async function switchChat(tag, isModal = false) {
     } else {
         chatMessages.scrollTop = prevScrollTop;
     }
+    renderedChatMessageCounts.set(tag, Array.isArray(chat.messages) ? chat.messages.length : 0);
+    if (isSameChat) {
+        const nextCount = renderedChatMessageCounts.get(tag) || 0;
+        const delta = Math.max(0, nextCount - prevRenderedCount);
+        if (delta > 0 && !wasNearBottom) chatUnseenNewCount += delta;
+    }
+    if (!isModal) updateChatJumpLatestButton();
     if (!isModal) {
         document.querySelector('#messages-section .messages-twitter')?.classList?.add('chat-open');
     }
@@ -3651,6 +3702,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderFavorites();
     setupChatFeatures();
     setupMessagesTwitterUI();
+    bindChatJumpLatestScroll();
     await bootstrapMessages();
     maybeOpenPendingAdmin();
     document.documentElement.classList.remove('app-loading');
