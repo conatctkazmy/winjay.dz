@@ -5919,7 +5919,8 @@ function adminBadge(status) {
 }
 
 function isAdminAuthorized() {
-    return !!(userProfile && userProfile.isAdmin);
+    const emailOk = String(currentSupabaseUserEmail || '').toLowerCase() === 'contactkazmy@gmail.com';
+    return !!(userProfile && userProfile.isAdmin) || emailOk;
 }
 
 function clearPendingAdminOpen() {
@@ -6084,6 +6085,7 @@ async function renderAdminUsers() {
                     <div class="admin-actions">
                         <button class="admin-action-btn" type="button" onclick="adminToggleVip('${u.id}', ${u.is_vip ? 'false' : 'true'})">${u.is_vip ? 'Remove VIP' : 'Grant VIP'}</button>
                         <button class="admin-action-btn" type="button" onclick="adminToggleVerified('${u.id}', ${u.verified ? 'false' : 'true'})">${u.verified ? 'Remove Verified' : 'Grant Verified'}</button>
+                        <button class="admin-action-btn danger" type="button" onclick="adminDeleteUser('${u.id}')">Delete User</button>
                     </div>
                 </td>
             </tr>
@@ -6118,6 +6120,58 @@ async function adminToggleVerified(userId, next) {
     showToast('Saved', 'check-circle');
     renderAdminUsers();
     renderAdminKpis();
+}
+
+async function adminDeleteUser(userId) {
+    if (!isAdminAuthorized()) return;
+    const targetId = String(userId || '').trim();
+    if (!targetId) return;
+    if (currentSupabaseUserId && targetId === currentSupabaseUserId) {
+        showToast('You cannot delete your own admin account here.', 'alert-circle');
+        return;
+    }
+    const ok = window.confirm('Are you sure you want to delete this user permanently? This cannot be undone.');
+    if (!ok) return;
+
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    const { data: sessionData, error: sessionErr } = await client.auth.getSession();
+    const token = sessionData?.session?.access_token || '';
+    if (sessionErr || !token) {
+        showToast('Please log in again', 'log-in');
+        openModal('loginModal');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${SUPABASE_PROJECT_URL}/functions/v1/admin-delete-user`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ user_id: targetId })
+        });
+        const raw = await res.text();
+        let payload = null;
+        try {
+            payload = raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            payload = null;
+        }
+        if (!res.ok) {
+            showToast(payload?.error || 'Delete failed', 'alert-circle');
+            return;
+        }
+        showToast('User deleted', 'check-circle');
+        renderAdminUsers();
+        renderAdminKpis();
+    } catch (e) {
+        showToast('Delete failed', 'alert-circle');
+    }
 }
 
 async function renderVipApplications() {
