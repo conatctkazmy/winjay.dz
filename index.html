@@ -1351,6 +1351,20 @@
         </div>
     </div>
 
+    <div id="authGateModal" class="modal">
+        <div class="modal-content confirm-modal-content">
+            <div class="auth-gate-header">
+                <i data-lucide="user"></i>
+                <h2>Account</h2>
+            </div>
+            <p>Log in or create an account to access your profile.</p>
+            <div class="confirm-actions">
+                <button class="confirm-cancel-btn" type="button" onclick="openAuthGateRegister()">Create account</button>
+                <button class="confirm-ok-btn" type="button" onclick="openAuthGateLogin()">Log in</button>
+            </div>
+        </div>
+    </div>
+
     <div id="freeVerifiedInfoModal" class="modal">
         <div class="modal-content free-verified-modal">
             <span class="close" onclick="closeModal('freeVerifiedInfoModal')">&times;</span>

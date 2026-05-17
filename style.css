@@ -4137,6 +4137,23 @@ footer {
     font-size: 1.3rem;
 }
 
+.auth-gate-header {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.auth-gate-header h2 {
+    margin: 0;
+}
+
+.auth-gate-header i {
+    width: 22px;
+    height: 22px;
+}
+
 .confirm-modal-content p {
     color: var(--text-muted);
     margin-bottom: 25px;
