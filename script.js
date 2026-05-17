@@ -2366,6 +2366,7 @@ async function refreshListingCountsFromSupabase(listingId) {
 }
 
 const LISTING_VIEW_MILESTONES = [10, 50, 100, 500, 1000];
+const listingViewsRecordedThisReload = new Set();
 
 async function maybeNotifyListingViewMilestone(listingId, prevCount, nextCount) {
     if (DEMO_MODE) return;
@@ -2398,6 +2399,8 @@ async function recordListingView(listingId) {
     if (DEMO_MODE) return;
     const id = Number(listingId);
     if (!Number.isFinite(id)) return;
+    if (listingViewsRecordedThisReload.has(id)) return;
+    listingViewsRecordedThisReload.add(id);
     const client = initSupabase();
     if (!client) return;
     const viewerKey = getViewTrackingKey();
@@ -2416,15 +2419,12 @@ async function recordListingView(listingId) {
     }
     if (error) {
         const msg = String(error?.message || '');
+        const msgLower = msg.toLowerCase();
+        if (msgLower.includes('views_count') && msgLower.includes('ambiguous')) return;
+        if (msgLower.includes('increment_listing_view') || msgLower.includes('does not exist')) return;
         if (!hasShownViewsBackendToast) {
             hasShownViewsBackendToast = true;
-            if (msg.toLowerCase().includes('increment_listing_view') || msg.toLowerCase().includes('does not exist')) {
-                showToast('Listing views backend is not set up yet', 'alert-circle');
-            } else if (msg.toLowerCase().includes('views_count') && msg.toLowerCase().includes('ambiguous')) {
-                showToast('Update Supabase function increment_listing_view (views_count ambiguity).', 'alert-circle');
-            } else {
-                showToast(msg || 'Failed to record view', 'alert-circle');
-            }
+            showToast(msg || 'Failed to record view', 'alert-circle');
         }
         return;
     }
@@ -6342,7 +6342,9 @@ function showSection(sectionId) {
     if (window.innerWidth <= 768) {
         setSidebarMobileOpen(false);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const lockChatScroll = sectionId === 'messages-section' && window.innerWidth <= 900;
+    window.scrollTo({ top: 0, behavior: lockChatScroll ? 'auto' : 'smooth' });
+    syncMessagesScrollLock();
 
     // Save current section to localStorage
     localStorage.setItem('winjayLastSection', sectionId);
@@ -6377,9 +6379,51 @@ function showSection(sectionId) {
 let syncMessagesHeightTimer = null;
 let messagesViewportHooked = false;
 
+let bodyScrollLocked = false;
+let bodyScrollLockedY = 0;
+
+function lockBodyScroll() {
+    if (bodyScrollLocked) return;
+    bodyScrollLocked = true;
+    bodyScrollLockedY = window.scrollY || window.pageYOffset || 0;
+    document.documentElement.classList.add('messages-scroll-lock');
+    document.body.classList.add('messages-scroll-lock');
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${bodyScrollLockedY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+}
+
+function unlockBodyScroll() {
+    if (!bodyScrollLocked) return;
+    document.documentElement.classList.remove('messages-scroll-lock');
+    document.body.classList.remove('messages-scroll-lock');
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    const y = bodyScrollLockedY;
+    bodyScrollLocked = false;
+    bodyScrollLockedY = 0;
+    window.scrollTo(0, y);
+}
+
+function shouldLockMessagesScroll() {
+    const section = document.getElementById('messages-section');
+    return !!section && section.classList.contains('active') && window.innerWidth <= 900;
+}
+
+function syncMessagesScrollLock() {
+    if (shouldLockMessagesScroll()) lockBodyScroll();
+    else unlockBodyScroll();
+}
+
 function syncMessagesContainerHeight() {
     const section = document.getElementById('messages-section');
     if (!section || !section.classList.contains('active')) return;
+    syncMessagesScrollLock();
     const container = section.querySelector('.messages-container');
     if (!container) return;
     const rect = container.getBoundingClientRect();

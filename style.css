@@ -37,6 +37,13 @@ body {
     overflow-x: hidden;
 }
 
+html.messages-scroll-lock,
+body.messages-scroll-lock {
+    overflow: hidden;
+    overscroll-behavior: none;
+    height: 100%;
+}
+
 html, body {
     max-width: 100%;
 }
@@ -1722,6 +1729,8 @@ main.expanded {
     flex: 1 1 auto;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding-bottom: 78px;
 }
 
@@ -2061,6 +2070,8 @@ main.expanded {
     padding: 20px;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
