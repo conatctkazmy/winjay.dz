@@ -1955,6 +1955,7 @@ main.expanded {
     background-color: var(--bg-main);
     position: relative;
     min-width: 0;
+    max-width: 100%;
 }
 
 .chat-header {
@@ -2057,6 +2058,7 @@ main.expanded {
     flex: 1;
     padding: 20px;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -2073,6 +2075,8 @@ main.expanded {
     padding: 12px 16px;
     border-radius: 16px;
     position: relative;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .chat-message p {
@@ -2107,6 +2111,8 @@ main.expanded {
     border-top: 1px solid var(--border-color);
     flex-wrap: nowrap;
     min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 .chat-input input {
@@ -5170,6 +5176,17 @@ footer {
     #messages-section .messages-container.messages-twitter * {
         max-width: 100%;
         box-sizing: border-box;
+    }
+
+    #messages-section {
+        overflow-x: hidden;
+    }
+
+    #messages-section .messages-twitter.chat-open,
+    #messages-section .messages-twitter.chat-open .chat-area {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
     }
 
     .chat-area {
