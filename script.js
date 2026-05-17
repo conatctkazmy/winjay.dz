@@ -2409,6 +2409,7 @@ async function refreshListingCountsFromSupabase(listingId) {
 
 const LISTING_VIEW_MILESTONES = [10, 50, 100, 500, 1000];
 const listingViewsRecordedThisReload = new Set();
+const listingViewsRecordInFlight = new Set();
 
 async function maybeNotifyListingViewMilestone(listingId, prevCount, nextCount) {
     if (DEMO_MODE) return;
@@ -2442,22 +2443,27 @@ async function recordListingView(listingId) {
     const id = Number(listingId);
     if (!Number.isFinite(id)) return;
     if (listingViewsRecordedThisReload.has(id)) return;
-    listingViewsRecordedThisReload.add(id);
     const client = initSupabase();
     if (!client) return;
+    if (listingViewsRecordInFlight.has(id)) return;
+    listingViewsRecordInFlight.add(id);
     const viewerKey = getViewTrackingKey();
     let data = null;
     let error = null;
-    const first = await client.rpc('increment_listing_view', { p_listing_id: id, p_viewer_key: viewerKey });
-    data = first.data;
-    error = first.error;
-    if (error) {
-        const msgLower = String(error?.message || '').toLowerCase();
-        if (msgLower.includes('increment_listing_view') && msgLower.includes('does not exist')) {
-            const retry = await client.rpc('increment_listing_view', { p_listing_id: id });
-            data = retry.data;
-            error = retry.error;
+    try {
+        const first = await client.rpc('increment_listing_view', { p_listing_id: id, p_viewer_key: viewerKey });
+        data = first.data;
+        error = first.error;
+        if (error) {
+            const msgLower = String(error?.message || '').toLowerCase();
+            if (msgLower.includes('increment_listing_view') && msgLower.includes('does not exist')) {
+                const retry = await client.rpc('increment_listing_view', { p_listing_id: id });
+                data = retry.data;
+                error = retry.error;
+            }
         }
+    } finally {
+        listingViewsRecordInFlight.delete(id);
     }
     if (error) {
         const msg = String(error?.message || '');
@@ -2470,6 +2476,7 @@ async function recordListingView(listingId) {
         }
         return;
     }
+    listingViewsRecordedThisReload.add(id);
     const payload = Array.isArray(data) ? data[0] : data;
     const item = listings.find((l) => l.id === id);
     const prevCount = Number(item?.views_count) || 0;
