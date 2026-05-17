@@ -320,13 +320,25 @@ function applyAuthSessionToLocalState(session) {
 async function ensureSupabaseProfileRow(client, user) {
     if (!client || !user?.id) return null;
     const { data: existing, error: existingErr } = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
-    if (!existingErr && existing?.id) return existing;
     const meta = user.user_metadata || {};
     const email = user.email || '';
     const baseName = meta.full_name || meta.name || meta.fullName || (email ? email.split('@')[0] : '');
     const baseTagRaw = meta.tag || meta.username || meta.handle || '';
     const safeTag = (baseTagRaw || `@${user.id.slice(0, 8)}`).toLowerCase().replace(/\s+/g, '');
     const avatar = meta.avatar_url || meta.picture || '';
+
+    if (!existingErr && existing?.id) {
+        const currentAvatar =
+            pickFirstValue(existing, ['avatar_url', 'profile_pic', 'profilePic', 'picture', 'photo_url']) || '';
+        if (!currentAvatar && avatar) {
+            const { error } = await client.from('profiles').update({ avatar_url: avatar }).eq('id', user.id);
+            if (!error) {
+                const { data } = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
+                return data || existing;
+            }
+        }
+        return existing;
+    }
 
     const payload = {
         id: user.id,
