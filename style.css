@@ -2010,6 +2010,7 @@ main.expanded {
     .messages-twitter .messages-pane {
         width: 100%;
         flex: 1 1 auto;
+        min-width: 0;
         border-right: none;
     }
 
@@ -5131,13 +5132,36 @@ footer {
         max-height: none;
     }
 
+    .chat-area {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .chat-messages {
+        padding: 12px 10px;
+        gap: 12px;
+    }
+
+    .chat-message {
+        max-width: 88%;
+    }
+
+    .chat-input {
+        padding: 10px;
+        gap: 6px;
+    }
+
     .chat-input button {
-        width: 36px;
-        height: 36px;
+        width: 34px;
+        height: 34px;
+        flex: 0 0 auto;
     }
 
     .chat-input input {
+        min-width: 0;
+        flex: 1 1 auto;
         font-size: 16px;
+        padding: 10px 12px;
     }
 
     .message-item, .message-item-modal {
