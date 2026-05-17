@@ -4259,11 +4259,14 @@ function toggleProfileDropdown(e) {
     if (next) lucide.createIcons();
 }
 
-function showConfirmModal(title, message, callback, isDanger = false) {
+function showConfirmModal(title, message, callback, isDanger = false, okText = 'Confirmer', cancelText = 'Annuler') {
     document.getElementById('confirmTitle').textContent = title;
     document.getElementById('confirmMessage').textContent = message;
     confirmCallback = callback;
     const okBtn = document.getElementById('confirmOkBtn');
+    okBtn.textContent = okText;
+    const cancelBtn = document.querySelector('#confirmModal .confirm-cancel-btn');
+    if (cancelBtn) cancelBtn.textContent = cancelText;
     if (isDanger) {
         okBtn.classList.add('danger');
     } else {
@@ -6130,9 +6133,19 @@ async function adminDeleteUser(userId) {
         showToast('You cannot delete your own admin account here.', 'alert-circle');
         return;
     }
-    const ok = window.confirm('Are you sure you want to delete this user permanently? This cannot be undone.');
-    if (!ok) return;
+    showConfirmModal(
+        'Delete user',
+        'Are you sure you want to delete this user permanently? This cannot be undone.',
+        () => adminPerformUserDeletion(targetId),
+        true,
+        'Delete',
+        'Cancel'
+    );
+}
 
+async function adminPerformUserDeletion(targetId) {
+    const userId = String(targetId || '').trim();
+    if (!userId) return;
     const client = initSupabase();
     if (!client) {
         showToast('Supabase is not configured', 'alert-circle');
