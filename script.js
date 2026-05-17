@@ -386,6 +386,7 @@ async function refreshAdminFlagFromSupabase(client) {
 async function handleAuthSessionChange(session) {
     applyAuthSessionToLocalState(session);
     const user = session?.user || null;
+    lastAuthExpiredHandledAt = 0;
     if (!user) {
         if (!DEMO_MODE) {
             mockChats = {};
@@ -1132,6 +1133,7 @@ let notificationsPollTimer = null;
 let messagesPollTimer = null;
 let messagesListFilter = 'all';
 let messagesListQuery = '';
+let messagesIsLoading = false;
 let categoryPickerTargetSelectId = '';
 const ADMIN_DASHBOARD_PARAM = 'admin';
 const ADMIN_DASHBOARD_VALUE = '1';
@@ -1157,6 +1159,7 @@ let voiceTimerInterval = null;
 let voiceRecordingStart = 0;
 let cameraTimerInterval = null;
 let cameraRecordingStart = 0;
+let lastAuthExpiredHandledAt = 0;
 
 function escapeHtml(str) {
     return String(str)
@@ -1806,6 +1809,39 @@ function isMissingColumnError(error, columnName) {
     return msg.includes('column') && msg.includes(col) && msg.includes('does not exist');
 }
 
+function isAuthExpiredError(error) {
+    const msg = String(error?.message || '').toLowerCase();
+    const status = Number(error?.status) || 0;
+    if (msg.includes('jwt expired')) return true;
+    if (msg.includes('invalid jwt')) return true;
+    if (msg.includes('token has expired')) return true;
+    return status === 401;
+}
+
+function handleAuthExpired(error) {
+    if (!isAuthExpiredError(error)) return false;
+    const now = Date.now();
+    if (now - (lastAuthExpiredHandledAt || 0) < 5000) return true;
+    lastAuthExpiredHandledAt = now;
+    showToast('Session expired. Please log in again.', 'alert-circle');
+    try {
+        handleAuthSessionChange(null);
+    } catch (e) {
+        null;
+    }
+    try {
+        openModal('loginModal');
+    } catch (e) {
+        null;
+    }
+    try {
+        supabaseClient?.auth?.signOut?.();
+    } catch (e) {
+        null;
+    }
+    return true;
+}
+
 function setSellerProfileRouteTag(tag) {
     const t = String(tag || '').trim().toLowerCase();
     if (!t) return;
@@ -1854,6 +1890,7 @@ async function refreshUnreadNotificationCount() {
         .eq('recipient_id', currentSupabaseUserId)
         .is('read_at', null);
     if (error) {
+        if (handleAuthExpired(error)) return 0;
         if (!isNotificationsBackendMissing(error)) showToast(error.message || 'Failed to load notifications', 'alert-circle');
         setNotificationBadge(0);
         return 0;
@@ -1875,6 +1912,7 @@ async function fetchNotificationsFromSupabase({ limit = 40 } = {}) {
         .order('created_at', { ascending: false })
         .limit(limit);
     if (error) {
+        if (handleAuthExpired(error)) return [];
         if (!isNotificationsBackendMissing(error)) showToast(error.message || 'Failed to load notifications', 'alert-circle');
         return [];
     }
@@ -1890,7 +1928,10 @@ async function markAllNotificationsRead() {
         .update({ read_at: new Date().toISOString() })
         .eq('recipient_id', currentSupabaseUserId)
         .is('read_at', null);
-    if (error && !isNotificationsBackendMissing(error)) showToast(error.message || 'Failed to mark notifications read', 'alert-circle');
+    if (error) {
+        if (handleAuthExpired(error)) return;
+        if (!isNotificationsBackendMissing(error)) showToast(error.message || 'Failed to mark notifications read', 'alert-circle');
+    }
 }
 
 async function getListingTitleById(listingId) {
@@ -2319,7 +2360,20 @@ async function recordListingView(listingId) {
     if (!Number.isFinite(id)) return;
     const client = initSupabase();
     if (!client) return;
-    const { data, error } = await client.rpc('increment_listing_view', { p_listing_id: id });
+    const viewerKey = getViewTrackingKey();
+    let data = null;
+    let error = null;
+    const first = await client.rpc('increment_listing_view', { p_listing_id: id, p_viewer_key: viewerKey });
+    data = first.data;
+    error = first.error;
+    if (error) {
+        const msgLower = String(error?.message || '').toLowerCase();
+        if (msgLower.includes('increment_listing_view') && msgLower.includes('does not exist')) {
+            const retry = await client.rpc('increment_listing_view', { p_listing_id: id });
+            data = retry.data;
+            error = retry.error;
+        }
+    }
     if (error) {
         const msg = String(error?.message || '');
         if (!hasShownViewsBackendToast) {
@@ -2338,11 +2392,12 @@ async function recordListingView(listingId) {
     const item = listings.find((l) => l.id === id);
     const prevCount = Number(item?.views_count) || 0;
     const hasServerCount = payload && (payload.views_count !== undefined && payload.views_count !== null);
-    const nextCount = hasServerCount ? Number(payload.views_count) || 0 : prevCount + 1;
+    const didIncrement = payload && payload.did_increment !== undefined && payload.did_increment !== null ? !!payload.did_increment : true;
+    const nextCount = hasServerCount ? Number(payload.views_count) || 0 : (didIncrement ? prevCount + 1 : prevCount);
     if (item) item.views_count = nextCount;
     const el = document.getElementById('listingViewsCount');
     if (el) el.textContent = String(nextCount);
-    await maybeNotifyListingViewMilestone(id, prevCount, nextCount);
+    if (didIncrement) await maybeNotifyListingViewMilestone(id, prevCount, nextCount);
     renderListings();
     await refreshListingCountsFromSupabase(id);
 }
@@ -2568,6 +2623,7 @@ async function refreshUnreadMessageCount() {
         .eq('receiver_id', currentSupabaseUserId)
         .is('read_at', null);
     if (error) {
+        if (handleAuthExpired(error)) return 0;
         if (!isMessagingBackendMissing(error)) showToast(error.message || 'Failed to load messages', 'alert-circle');
         setMessageBadge(0);
         return 0;
@@ -2612,6 +2668,7 @@ async function refreshLiveChatsFromSupabase() {
     }
 
     if (error) {
+        if (handleAuthExpired(error)) return;
         if (isMessagingBackendMissing(error)) {
             showToast('Messaging backend is not set up yet', 'alert-circle');
         } else {
@@ -2742,8 +2799,14 @@ async function bootstrapMessages() {
         }
         return;
     }
-    await refreshLiveChatsFromSupabase();
-    await refreshUnreadMessageCount();
+    messagesIsLoading = true;
+    renderMessagesList();
+    try {
+        await refreshLiveChatsFromSupabase();
+        await refreshUnreadMessageCount();
+    } finally {
+        messagesIsLoading = false;
+    }
     renderMessagesList();
     setupMessagesRealtime();
     setupMessagesPolling();
@@ -2761,6 +2824,11 @@ function getAnonVisitorId() {
     } catch (e) {
         return `anon_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     }
+}
+
+function getViewTrackingKey() {
+    if (currentSupabaseUserId) return String(currentSupabaseUserId);
+    return `anon:${getAnonVisitorId()}`;
 }
 
 function getCurrentSectionId() {
@@ -2918,6 +2986,31 @@ function renderMessagesList() {
     const listEl = document.getElementById('messagesList');
     if (!listEl) return;
 
+    if (messagesIsLoading && Object.keys(mockChats || {}).length === 0) {
+        const items = Array.from({ length: 7 }).map(() => {
+            return `
+                <div class="message-item message-skeleton">
+                    <div class="message-skeleton-avatar shimmer"></div>
+                    <div class="message-info">
+                        <div class="message-header">
+                            <div class="message-title">
+                                <div class="message-skeleton-line shimmer" style="width: 56%;"></div>
+                                <div class="message-skeleton-line shimmer" style="width: 22%;"></div>
+                            </div>
+                            <div class="message-right">
+                                <div class="message-skeleton-line shimmer" style="width: 42px;"></div>
+                            </div>
+                        </div>
+                        <div class="message-skeleton-line shimmer" style="width: 82%; margin-top: 8px;"></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        listEl.innerHTML = `<div class="messages-skeleton-list">${items}</div>`;
+        renderEmptyChat();
+        return;
+    }
+
     const entries = Object.entries(mockChats);
     const q = String(messagesListQuery || '').trim().toLowerCase();
     const filter = String(messagesListFilter || 'all');
@@ -2969,8 +3062,10 @@ function renderMessagesList() {
                     <div class="message-info">
                         <div class="message-header">
                             <div class="message-title">
-                                <span class="message-name">${escapeHtml(chat.name)}</span>
-                                ${getUserBadgesHTML(chat)}
+                                <span class="message-namewrap">
+                                    <span class="message-name">${escapeHtml(chat.name)}</span>
+                                    ${getUserBadgesHTML(chat)}
+                                </span>
                                 <span class="message-tag">${escapeHtml(displayTag)}</span>
                             </div>
                             <div class="message-right">
@@ -3201,8 +3296,9 @@ async function switchChat(tag, isModal = false) {
                     if (kind === 'text') return { ...out, text: r.body || '' };
                     return { ...out, url: r.media_url || '', name: r.media_name || '', mime: r.media_mime || '' };
                 });
-            } else if (!isMessagingBackendMissing(error)) {
-                showToast(error.message || 'Failed to load messages', 'alert-circle');
+            } else {
+                if (handleAuthExpired(error)) return;
+                if (!isMessagingBackendMissing(error)) showToast(error.message || 'Failed to load messages', 'alert-circle');
             }
             await client
                 .from('messages')
