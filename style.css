@@ -515,6 +515,10 @@ body.modal-open .mobile-footer-bar {
 }
 
 @media (max-width: 520px) {
+    .cover-photo-container {
+        height: 170px;
+    }
+
     .mobile-search-container {
         max-width: 100%;
     }
@@ -4929,6 +4933,12 @@ footer {
 }
 
 @media (max-width: 768px) {
+    .main-container {
+        display: block;
+        width: 100%;
+        overflow-x: hidden;
+    }
+
     .sidebar {
         transform: translateX(-100%);
         top: 0;
@@ -4946,6 +4956,15 @@ footer {
     main {
         margin-left: 0 !important;
         padding: 15px;
+    }
+
+    .cover-photo-container {
+        height: 200px;
+    }
+
+    .profile-info-container {
+        margin-top: -50px;
+        padding: 0 20px 22px;
     }
 
     .image-editor-container {
