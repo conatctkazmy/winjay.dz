@@ -5430,6 +5430,23 @@ function showToast(message, icon = 'info') {
     }, 3000);
 }
 
+function updateNavbarAuthUI() {
+    const loggedIn = isLoggedIn();
+    const loginBtn = document.getElementById('navLoginBtn');
+    const notificationsBtn = document.getElementById('navNotificationsBtn');
+    const messagesBtn = document.getElementById('navMessagesBtn');
+    const addListingBtn = document.getElementById('navAddListingBtn');
+    const freeVerifiedPill = document.getElementById('navFreeVerifiedPill');
+    const profileMenu = document.getElementById('navProfileMenu');
+
+    if (loginBtn) loginBtn.style.display = loggedIn ? 'none' : 'inline-flex';
+    if (notificationsBtn) notificationsBtn.style.display = loggedIn ? '' : 'none';
+    if (messagesBtn) messagesBtn.style.display = loggedIn ? '' : 'none';
+    if (addListingBtn) addListingBtn.style.display = loggedIn ? '' : 'none';
+    if (freeVerifiedPill) freeVerifiedPill.style.display = loggedIn ? '' : 'none';
+    if (profileMenu) profileMenu.style.display = loggedIn ? '' : 'none';
+}
+
 function updateProfileUI() {
     const nameEl = document.getElementById('profileName');
     nameEl.innerHTML = `${userProfile.name} ${getUserBadgesHTML(userProfile)}`;
@@ -5459,6 +5476,7 @@ function updateProfileUI() {
     updateUpgradeOfferVisibility();
     updateFreeVerifiedPrimaryAction();
     updateAdminDashboardButtonVisibility();
+    updateNavbarAuthUI();
     lucide.createIcons();
 }
 

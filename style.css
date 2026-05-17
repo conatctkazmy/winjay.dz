@@ -110,6 +110,29 @@ html.app-loading main {
     overflow: visible;
 }
 
+.nav-login-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 9999px;
+    border: 1px solid transparent;
+    background: var(--primary-color);
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.nav-login-btn:hover {
+    background: var(--primary-hover);
+}
+
+.nav-login-btn i {
+    width: 18px;
+    height: 18px;
+}
+
 .nav-left {
     display: flex;
     align-items: center;

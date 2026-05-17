@@ -37,25 +37,29 @@
             </div>
         </div>
         <div class="nav-right">
-            <button class="icon-btn notification-btn" onclick="openModal('notificationsModal')" title="Notifications">
+            <button class="icon-btn notification-btn" id="navNotificationsBtn" onclick="openModal('notificationsModal')" title="Notifications">
                 <i data-lucide="bell"></i>
                 <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
             </button>
             <button class="icon-btn mobile-search-btn" onclick="toggleMobileSearchExpand(event)" title="Search">
                 <i data-lucide="search"></i>
             </button>
-            <button class="icon-btn messages-btn" onclick="showSection('messages-section')" title="Messages">
+            <button class="icon-btn messages-btn" id="navMessagesBtn" onclick="showSection('messages-section')" title="Messages">
                 <i data-lucide="message-circle"></i>
                 <span class="message-badge" id="messageBadge" style="display: none;">0</span>
             </button>
-            <button class="free-verified-pill" onclick="openModal('freeVerifiedInfoModal')" title="Free verified badge program">
+            <button class="free-verified-pill" id="navFreeVerifiedPill" onclick="openModal('freeVerifiedInfoModal')" title="Free verified badge program">
                 <i data-lucide="badge-check"></i>
                 <span><span id="freeVerifiedRemainingNav">1000</span> free verified left</span>
             </button>
-            <button class="add-listing-btn" onclick="openModal('addListingModal')" title="Ajouter une annonce">
+            <button class="add-listing-btn" id="navAddListingBtn" onclick="openModal('addListingModal')" title="Ajouter une annonce">
                 <i data-lucide="plus-circle"></i>
             </button>
-            <div class="profile-menu-wrapper">
+            <button class="nav-login-btn" id="navLoginBtn" type="button" onclick="openModal('loginModal')" title="Log in">
+                <i data-lucide="user"></i>
+                <span>Log in</span>
+            </button>
+            <div class="profile-menu-wrapper" id="navProfileMenu">
                 <button id="profileBtn" class="profile-btn" onclick="toggleProfileDropdown(event)" aria-haspopup="true" aria-expanded="false">
                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="Profil" id="navProfilePic">
                 </button>
