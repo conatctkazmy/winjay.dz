@@ -24,6 +24,7 @@ let userProfile = createEmptyUserProfile();
 const USER_PROFILE_STORAGE_KEY = 'winjayUserProfileV1';
 const FREE_VERIFIED_PROGRAM_STORAGE_KEY = 'winjayFreeVerifiedProgramV1';
 const VERIFIED_QUEST_STORAGE_KEY = 'winjayVerifiedQuestV1';
+const THEME_STORAGE_KEY = 'winjayThemeV1';
 const FREE_VERIFIED_TOTAL = 1000;
 const REFERRALS_REQUIRED = 10;
 const MARKETPLACE_LISTINGS_STORAGE_KEY = 'marketplaceListingsV1';
@@ -1297,6 +1298,45 @@ function applyWinjayLogoTheme() {
         if (!body.classList.contains('dark-mode')) return;
         getWinjayLogoImgs().forEach((img) => img.setAttribute('src', dataUrl));
     });
+}
+
+function setThemeMode(nextIsDark, { persist = true } = {}) {
+    isDarkMode = !!nextIsDark;
+    body.classList.toggle('dark-mode', isDarkMode);
+    document.documentElement.classList.toggle('dark-mode', isDarkMode);
+    if (persist) {
+        try {
+            localStorage.setItem(THEME_STORAGE_KEY, isDarkMode ? 'dark' : 'light');
+        } catch (e) {
+            null;
+        }
+    }
+
+    const icon = document.getElementById('themeIcon');
+    if (icon) icon.setAttribute('data-lucide', isDarkMode ? 'sun' : 'moon');
+    const toggle = document.getElementById('themeToggle');
+    const label = toggle?.querySelector?.('span') || null;
+    if (label) label.textContent = isDarkMode ? 'Light mode' : 'Dark mode';
+    const settingsToggle = document.getElementById('defaultDarkMode');
+    if (settingsToggle) settingsToggle.checked = isDarkMode;
+
+    applyWinjayLogoTheme();
+    lucide.createIcons();
+}
+
+function loadThemeModeFromStorage() {
+    let saved = '';
+    try {
+        saved = localStorage.getItem(THEME_STORAGE_KEY) || '';
+    } catch (e) {
+        saved = '';
+    }
+    if (saved !== 'dark' && saved !== 'light') {
+        const htmlDark = document.documentElement.classList.contains('dark-mode');
+        setThemeMode(htmlDark, { persist: false });
+        return;
+    }
+    setThemeMode(saved === 'dark', { persist: false });
 }
 
 function togglePasswordVisibility(inputId, btnEl) {
@@ -3520,6 +3560,8 @@ const pagination = document.getElementById('pagination');
 const myListingsGrid = document.getElementById('myListingsGrid');
 const toastContainer = document.getElementById('toastContainer');
 
+loadThemeModeFromStorage();
+
 document.addEventListener('DOMContentLoaded', async () => {
     setPendingReferralFromUrl();
     initSupabase();
@@ -3542,6 +3584,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateFreeVerifiedCounterUI();
     setupMobileFooterDocking();
     setupPasswordNoSpaceInputs();
+    loadThemeModeFromStorage();
+    const settingsToggle = document.getElementById('defaultDarkMode');
+    if (settingsToggle && !settingsToggle.dataset.bound) {
+        settingsToggle.dataset.bound = '1';
+        settingsToggle.addEventListener('change', () => {
+            setThemeMode(!!settingsToggle.checked);
+        });
+    }
     applyWinjayLogoTheme();
 
     // Restore last viewed section
@@ -3932,12 +3982,7 @@ sidebarToggle.addEventListener('click', () => {
 });
 
 themeToggle.addEventListener('click', () => {
-    isDarkMode = !isDarkMode;
-    body.classList.toggle('dark-mode', isDarkMode);
-    themeIcon.setAttribute('data-lucide', isDarkMode ? 'sun' : 'moon');
-    themeToggle.querySelector('span').textContent = isDarkMode ? 'Light mode' : 'Dark mode';
-    applyWinjayLogoTheme();
-    lucide.createIcons();
+    setThemeMode(!isDarkMode);
 });
 
 function openModal(modalId) {
