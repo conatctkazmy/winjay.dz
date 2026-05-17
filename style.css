@@ -5186,6 +5186,38 @@ footer {
     }
 }
 
+@media (max-width: 532px) and (min-width: 421px) {
+    #messages-section .message-item,
+    #messages-section .message-item-modal {
+        padding: 12px;
+        gap: 10px;
+    }
+
+    #messages-section .message-item > img,
+    #messages-section .message-item-modal > img {
+        width: 44px;
+        height: 44px;
+    }
+
+    #messages-section .message-header {
+        align-items: flex-start;
+    }
+
+    #messages-section .message-title {
+        flex-wrap: wrap;
+        row-gap: 2px;
+    }
+
+    #messages-section .message-tag {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    #messages-section .message-preview {
+        font-size: 0.78rem;
+    }
+}
+
 @media (max-width: 420px) {
     .logo img {
         display: none;
