@@ -1964,6 +1964,9 @@ main.expanded {
     padding: 15px;
     border-bottom: 1px solid var(--border-color);
     position: relative;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
 }
 
 .chat-header:hover {
@@ -1976,9 +1979,26 @@ main.expanded {
     border-radius: 50%;
 }
 
+.chat-header > div {
+    min-width: 0;
+    overflow: hidden;
+}
+
 .chat-header h4 {
     font-size: 1rem;
     margin-bottom: 2px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#chatUserTag {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .chat-more-btn {
@@ -2085,6 +2105,8 @@ main.expanded {
     gap: 10px;
     padding: 15px;
     border-top: 1px solid var(--border-color);
+    flex-wrap: nowrap;
+    min-width: 0;
 }
 
 .chat-input input {
@@ -2095,6 +2117,7 @@ main.expanded {
     background-color: var(--light-gray);
     color: var(--text-main);
     outline: none;
+    min-width: 0;
 }
 
 .chat-input input:focus {
@@ -5109,6 +5132,10 @@ footer {
         font-size: 0.95rem;
     }
 
+    #chatUserTag {
+        max-width: calc(100vw - 160px);
+    }
+
     .chat-header .verified-badge,
     .chat-header .vip-badge {
         width: 18px;
@@ -5132,6 +5159,19 @@ footer {
         max-height: none;
     }
 
+    #messages-section .messages-container.messages-twitter {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+        box-sizing: border-box;
+    }
+
+    #messages-section .messages-container.messages-twitter,
+    #messages-section .messages-container.messages-twitter * {
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
     .chat-area {
         width: 100%;
         min-width: 0;
@@ -5149,6 +5189,8 @@ footer {
     .chat-input {
         padding: 10px;
         gap: 6px;
+        width: 100%;
+        max-width: 100%;
     }
 
     .chat-input button {
@@ -5160,6 +5202,7 @@ footer {
     .chat-input input {
         min-width: 0;
         flex: 1 1 auto;
+        width: 1%;
         font-size: 16px;
         padding: 10px 12px;
     }
