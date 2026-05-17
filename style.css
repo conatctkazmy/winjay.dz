@@ -1721,6 +1721,7 @@ main.expanded {
     background: none;
     flex: 1 1 auto;
     overflow-y: auto;
+    overflow-x: hidden;
     padding-bottom: 78px;
 }
 
@@ -1807,6 +1808,7 @@ main.expanded {
     transition: background 0.2s;
     position: relative;
     max-width: 100%;
+    overflow: hidden;
 }
 
 .message-item:last-child, .message-item-modal:last-child {
@@ -5236,7 +5238,11 @@ footer {
     }
 
     .message-tag {
-        max-width: 120px;
+        display: none;
+    }
+
+    .message-right {
+        margin-left: auto;
     }
 }
 
