@@ -5039,6 +5039,7 @@ footer {
     }
 
     .mobile-search-btn { order: 1; }
+    .nav-login-btn { order: 2; }
     .notification-btn { order: 2; }
     .messages-btn { order: 3; }
     .add-listing-btn { order: 4; }
