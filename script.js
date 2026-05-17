@@ -3288,6 +3288,7 @@ async function switchChat(tag, isModal = false) {
     }
 
     closeChatActions();
+    const previousActiveChatTag = activeChatTag;
     activeChatTag = tag;
 
     if (!DEMO_MODE && currentSupabaseUserId && chat.userId) {
@@ -3356,6 +3357,11 @@ async function switchChat(tag, isModal = false) {
     const chatHeader = chatArea.querySelector('.chat-header');
     const chatMessages = document.getElementById(`chatMessages${prefix}`);
     const messageItems = document.querySelectorAll(`.message-item${isModal ? '-modal' : ''}`);
+    const isSameChat = previousActiveChatTag === tag;
+    const prevScrollTop = chatMessages ? chatMessages.scrollTop : 0;
+    const wasNearBottom =
+        !!chatMessages &&
+        (!isSameChat || (chatMessages.scrollHeight - (chatMessages.scrollTop + chatMessages.clientHeight) < 120));
 
     if (chat.messages) {
         chat.messages.forEach(m => {
@@ -3387,7 +3393,11 @@ async function switchChat(tag, isModal = false) {
     if (!isModal) renderMessagesList();
     initVoiceMessagesInChat(chatMessages);
 
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (wasNearBottom) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    } else {
+        chatMessages.scrollTop = prevScrollTop;
+    }
     if (!isModal) {
         document.querySelector('#messages-section .messages-twitter')?.classList?.add('chat-open');
     }
