@@ -181,6 +181,7 @@ function mapSupabaseListingRow(row, profilesById = {}) {
         owner_id: ownerId,
         title: row.title,
         description: row.description || '',
+        subcategory: row.subcategory || '',
         price: Number(row.price) || 0,
         category: row.category || '',
         image: firstUrl || 'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?w=500',
@@ -203,7 +204,7 @@ async function fetchListingsFromSupabase({ silent = false } = {}) {
     const { data, error } = await client
         .from('listings')
         .select(
-            'id, created_at, owner_id, title, description, price, category, wilaya, status, views_count, likes_count, listing_images(url, sort_order)'
+            'id, created_at, owner_id, title, description, subcategory, price, category, wilaya, status, views_count, likes_count, listing_images(url, sort_order)'
         )
         .order('created_at', { ascending: false });
     if (error) {
@@ -3803,8 +3804,22 @@ const categories = [
     { name: "Véhicules", icon: "car" }, { name: "Immobilier", icon: "home" }, { name: "Électronique", icon: "smartphone" },
     { name: "Emploi & Services", icon: "briefcase" }, { name: "Maison & Jardin", icon: "armchair" }, { name: "Mode & Beauté", icon: "shopping-bag" },
     { name: "Loisirs & Divertissement", icon: "palmtree" }, { name: "Informatique", icon: "monitor" }, { name: "Téléphonie", icon: "phone" },
-    { name: "Sport & Santé", icon: "heart-pulse" }, { name: "Matériel Professionnel", icon: "wrench" }, { name: "Autres", icon: "more-horizontal", special: "other" }
+    { name: "Sport & Santé", icon: "heart-pulse" }, { name: "Matériel Professionnel", icon: "wrench" }
 ];
+
+const listingSubcategoriesByCategory = {
+    "Véhicules": ["Voitures", "Motos & Scooters", "Camions & Utilitaires", "Pièces & Accessoires", "Location de voitures"],
+    "Immobilier": ["Appartements", "Maisons", "Studios", "Terrains", "Locaux commerciaux", "Bureaux", "Colocation", "Locations vacances"],
+    "Électronique": ["TV & Audio", "Caméras", "Consoles & Jeux", "Électroménager", "Accessoires", "Imprimantes"],
+    "Informatique": ["PC Portables", "PC Bureau", "Composants (GPU/CPU/RAM)", "Écrans", "Réseaux", "Stockage (SSD/HDD)", "Logiciels"],
+    "Téléphonie": ["Smartphones", "Téléphones simples", "Tablettes", "Accessoires (chargeur/écouteurs)", "Réparation"],
+    "Emploi & Services": ["Offres d’emploi", "Recherche d’emploi", "Services à domicile", "Cours & formations", "Transport", "Événementiel", "Freelance"],
+    "Maison & Jardin": ["Meubles", "Décoration", "Jardinage", "Bricolage/Outillage", "Linge maison", "Cuisine"],
+    "Mode & Beauté": ["Vêtements", "Chaussures", "Sacs", "Montres", "Bijoux", "Parfums & Cosmétiques"],
+    "Loisirs & Divertissement": ["Sports & fitness", "Musique & instruments", "Livres", "Jeux & jouets", "Voyage & loisirs", "Billetterie"],
+    "Sport & Santé": ["Matériel sport", "Vélos", "Compléments", "Bien-être", "Équipement salle de sport"],
+    "Matériel Professionnel": ["Restauration (café/hôtel)", "Industrie", "Construction/BTP", "Agriculture", "Matériel bureau", "Outillage pro"]
+};
 
 const allExtraCategories = [
     { name: "Pièces de rechange", icon: "settings" }, { name: "Motos & Vélos", icon: "bike" }, { name: "Nautisme", icon: "ship" },
@@ -3934,6 +3949,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     fetchListingsFromSupabase({ silent: false });
     populateWilayas();
     populateCategories();
+    setupListingSubcategorySelects();
     populateFilterDropdowns();
     populateAllExtraCategories();
     populateWorkCategoriesSelect();
@@ -4147,6 +4163,39 @@ function populateCategories() {
     lucide.createIcons();
 }
 
+function populateListingSubcategorySelect(selectEl, mainCategory, selectedValue = '') {
+    if (!selectEl) return;
+    const main = String(mainCategory || '').trim();
+    const list = Array.isArray(listingSubcategoriesByCategory[main]) ? listingSubcategoriesByCategory[main] : [];
+    selectEl.innerHTML = '<option value="" disabled selected>Sélectionnez une sous-catégorie</option>';
+    list.forEach((name) => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        selectEl.appendChild(opt);
+    });
+    selectEl.disabled = list.length === 0;
+    if (selectedValue && list.includes(selectedValue)) selectEl.value = selectedValue;
+}
+
+function setupListingSubcategorySelects() {
+    const mainAdd = document.getElementById('listingCategory');
+    const subAdd = document.getElementById('listingSubcategory');
+    const mainEdit = document.getElementById('editListingCategory');
+    const subEdit = document.getElementById('editListingSubcategory');
+
+    if (mainAdd && subAdd) {
+        const refresh = () => populateListingSubcategorySelect(subAdd, mainAdd.value, '');
+        mainAdd.addEventListener('change', refresh);
+        refresh();
+    }
+    if (mainEdit && subEdit) {
+        const refresh = () => populateListingSubcategorySelect(subEdit, mainEdit.value, subEdit.value || '');
+        mainEdit.addEventListener('change', refresh);
+        refresh();
+    }
+}
+
 function populateAllExtraCategories() {
     const grid = document.getElementById('allCategoriesGrid');
     const combined = [...categories.filter(c => c.special !== 'other'), ...allExtraCategories];
@@ -4177,7 +4226,7 @@ function openCategoryPicker(selectId) {
 }
 
 function setupCategoryPickers() {
-    const ids = ['listingCategory', 'editListingCategory', 'editWorkCategory'];
+    const ids = ['editWorkCategory'];
     ids.forEach((id) => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -5230,11 +5279,16 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         const description = document.getElementById('listingDescription')?.value?.trim?.() || '';
         const price = Number(document.getElementById('listingPrice').value) || 0;
         const category = document.getElementById('listingCategory').value;
+        const subcategory = document.getElementById('listingSubcategory')?.value || '';
         const wilaya = document.getElementById('listingWilaya').value;
         const files = selectedListingImages.filter(Boolean);
 
         if (!title) {
             showToast('Title is required', 'alert-circle');
+            return;
+        }
+        if (!subcategory && Array.isArray(listingSubcategoriesByCategory[category]) && listingSubcategoriesByCategory[category].length) {
+            showToast('Subcategory is required', 'alert-circle');
             return;
         }
         if (!wilaya) {
@@ -5269,6 +5323,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                     owner_id: userId,
                     title,
                     description: description || null,
+                    subcategory: subcategory || null,
                     price,
                     category: category || null,
                     wilaya: wilaya || null,
@@ -6083,6 +6138,8 @@ function openEditListingModal(event, id) {
     if (descEl) descEl.value = item.description || '';
     document.getElementById('editListingPrice').value = item.price;
     document.getElementById('editListingCategory').value = item.category;
+    const subSelect = document.getElementById('editListingSubcategory');
+    populateListingSubcategorySelect(subSelect, item.category, item.subcategory || '');
     document.getElementById('editListingWilaya').value = item.location;
     openModal('editListingModal');
     lucide.createIcons();
@@ -6101,12 +6158,18 @@ async function saveEditedListing() {
     const nextDescription = document.getElementById('editListingDescription')?.value?.trim?.() || '';
     const nextPrice = Number(document.getElementById('editListingPrice').value) || 0;
     const nextCategory = document.getElementById('editListingCategory').value || null;
+    const nextSubcategory = document.getElementById('editListingSubcategory')?.value || '';
     const nextWilaya = document.getElementById('editListingWilaya').value || null;
+    if (!nextSubcategory && nextCategory && Array.isArray(listingSubcategoriesByCategory[nextCategory]) && listingSubcategoriesByCategory[nextCategory].length) {
+        showToast('Subcategory is required', 'alert-circle');
+        return;
+    }
     const { error } = await client
         .from('listings')
         .update({
             title: nextTitle,
             description: nextDescription || null,
+            subcategory: nextSubcategory || null,
             price: nextPrice,
             category: nextCategory,
             wilaya: nextWilaya
@@ -8464,7 +8527,7 @@ function openListingDetail(listingId) {
                 <div class="detail-price">${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD</div>
                 <div class="detail-meta">
                     <span><i data-lucide="map-pin"></i> ${item.location}</span>
-                    <span><i data-lucide="tag"></i> ${item.category}</span>
+                    <span><i data-lucide="tag"></i> ${item.subcategory ? `${item.category} · ${item.subcategory}` : item.category}</span>
                     <span><i data-lucide="calendar"></i> ${item.date}</span>
                     <span><i data-lucide="eye"></i> <span id="listingViewsCount">${Number(item.views_count) || 0}</span></span>
                     <button class="detail-like-btn ${isLiked ? 'active' : ''} ${pulse ? 'pulse' : ''}" type="button" onclick="toggleFavorite(event, ${item.id})" title="Like">
