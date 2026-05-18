@@ -1430,6 +1430,14 @@ function escapeHtml(str) {
         .replaceAll("'", '&#039;');
 }
 
+function escapeJsString(str) {
+    return String(str || '')
+        .replaceAll('\\', '\\\\')
+        .replaceAll("'", "\\'")
+        .replaceAll('\n', '\\n')
+        .replaceAll('\r', '\\r');
+}
+
 function unescapeHtml(str) {
     return String(str)
         .replaceAll('&#039;', "'")
@@ -6741,9 +6749,12 @@ async function renderIdentityApplications() {
     tbody.innerHTML = (data || [])
         .map((a) => {
             const p = profiles[a.user_id] || {};
+            const safeUserId = escapeJsString(a.user_id || '');
+            const safeFront = escapeJsString(a.front_path || '');
+            const safeBack = escapeJsString(a.back_path || '');
             const actions = `
                 <div class="admin-actions">
-                    <button class="admin-action-btn" type="button" onclick="adminOpenIdentityDocs('${a.user_id}', ${JSON.stringify(a.front_path || '')}, ${JSON.stringify(a.back_path || '')})">View</button>
+                    <button class="admin-action-btn" type="button" onclick="adminOpenIdentityDocs('${safeUserId}','${safeFront}','${safeBack}')">View</button>
                     ${a.status === 'pending' ? `<button class="admin-action-btn primary" type="button" onclick="adminApproveIdentity('${a.id}','${a.user_id}')">Approve</button>` : ''}
                     ${a.status === 'pending' ? `<button class="admin-action-btn danger" type="button" onclick="adminRejectIdentity('${a.id}','${a.user_id}')">Reject</button>` : ''}
                 </div>
