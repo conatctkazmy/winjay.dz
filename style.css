@@ -1133,6 +1133,13 @@ body.sidebar-open .mobile-footer-bar {
     transition: background 0.2s;
 }
 
+.sidebar-section ul li a i,
+.sidebar-section ul li a svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
 .sidebar-section ul li a:hover,
 .sidebar-section ul li a.active {
     background-color: var(--light-gray);

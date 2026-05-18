@@ -4110,11 +4110,13 @@ function populateCategories() {
     const categorySelect = document.getElementById('listingCategory');
     const sidebarList = document.getElementById('categoryList');
     categorySelect.innerHTML = '<option value="" disabled selected>Sélectionnez une catégorie</option>';
-    sidebarList.innerHTML = '';
-
-    const allLi = document.createElement('li');
-    allLi.innerHTML = `<a href="#" onclick="filterByCategory('all', this); return false;"><i data-lucide="layout-grid"></i> Tous</a>`;
-    sidebarList.appendChild(allLi);
+    const shouldBuildSidebar = !!sidebarList && sidebarList.children.length === 0;
+    if (shouldBuildSidebar) {
+        sidebarList.innerHTML = '';
+        const allLi = document.createElement('li');
+        allLi.innerHTML = `<a href="#" onclick="filterByCategory('all', this); return false;"><i data-lucide="layout-grid"></i> Tous</a>`;
+        sidebarList.appendChild(allLi);
+    }
 
     categories.forEach(cat => {
         const option = document.createElement('option');
@@ -4125,14 +4127,16 @@ function populateCategories() {
             option.value = "OPEN_OTHER_MODAL";
         }
         categorySelect.appendChild(option);
-        const li = document.createElement('li');
-        if (cat.special === 'other') {
-            li.innerHTML = `<a href="#" onclick="openOtherCategoriesModal(true); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
-        } else {
-            const safeName = cat.name.replace(/'/g, "\\'");
-            li.innerHTML = `<a href="#" onclick="filterByCategory('${safeName}', this); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
+        if (shouldBuildSidebar) {
+            const li = document.createElement('li');
+            if (cat.special === 'other') {
+                li.innerHTML = `<a href="#" onclick="openOtherCategoriesModal(true); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
+            } else {
+                const safeName = cat.name.replace(/'/g, "\\'");
+                li.innerHTML = `<a href="#" onclick="filterByCategory('${safeName}', this); return false;"><i data-lucide="${cat.icon}"></i> ${cat.name}</a>`;
+            }
+            sidebarList.appendChild(li);
         }
-        sidebarList.appendChild(li);
     });
     categorySelect.addEventListener('change', function() {
         if (this.value === "OPEN_OTHER_MODAL") {
