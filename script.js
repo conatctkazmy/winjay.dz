@@ -107,6 +107,7 @@ let supabaseClient = null;
 let currentSupabaseUserId = null;
 let currentSupabaseUserEmail = '';
 let myReferralCount = 0;
+let hasLoadedSupabaseProfile = false;
 
 function isLoggedIn() {
     return !!currentSupabaseUserId;
@@ -279,6 +280,7 @@ function applyAuthSessionToLocalState(session) {
 
     if (!user) {
         myReferralCount = 0;
+        hasLoadedSupabaseProfile = false;
         userProfile = createEmptyUserProfile();
         favorites = [];
         try {
@@ -296,6 +298,7 @@ function applyAuthSessionToLocalState(session) {
         return;
     }
 
+    hasLoadedSupabaseProfile = false;
     const meta = user.user_metadata || {};
     const fullName = meta.full_name || meta.name || meta.fullName || '';
     const tag = meta.tag || meta.username || meta.handle || '';
@@ -378,6 +381,7 @@ function applySupabaseProfileRowToLocalState(row, user) {
             ? new Date(user.created_at).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })
             : userProfile.joinedDate
     };
+    hasLoadedSupabaseProfile = true;
     saveUserProfileToStorage();
     syncMyListingsFromListings();
     updateProfileUI();
@@ -5445,6 +5449,7 @@ function showToast(message, icon = 'info') {
 function updateNavbarAuthUI() {
     const loggedIn = isLoggedIn();
     const verified = !!userProfile?.verified;
+    const profileReady = loggedIn && hasLoadedSupabaseProfile;
     const loginBtn = document.getElementById('navLoginBtn');
     const notificationsBtn = document.getElementById('navNotificationsBtn');
     const messagesBtn = document.getElementById('navMessagesBtn');
@@ -5456,7 +5461,7 @@ function updateNavbarAuthUI() {
     if (notificationsBtn) notificationsBtn.style.display = loggedIn ? '' : 'none';
     if (messagesBtn) messagesBtn.style.display = loggedIn ? '' : 'none';
     if (addListingBtn) addListingBtn.style.display = loggedIn ? '' : 'none';
-    if (freeVerifiedPill) freeVerifiedPill.style.display = loggedIn && !verified ? '' : 'none';
+    if (freeVerifiedPill) freeVerifiedPill.style.display = profileReady && !verified ? '' : 'none';
     if (profileMenu) profileMenu.style.display = loggedIn ? '' : 'none';
 }
 
@@ -5496,7 +5501,7 @@ function updateProfileUI() {
 function updateUpgradeOfferVisibility() {
     const vip = !!userProfile?.isVip;
     const verified = !!userProfile?.verified;
-    const showFreeVerified = isLoggedIn() && !verified;
+    const showFreeVerified = isLoggedIn() && hasLoadedSupabaseProfile && !verified;
 
     const sidebarVip = document.getElementById('sidebarVipCta');
     if (sidebarVip) sidebarVip.style.display = vip ? 'none' : '';
