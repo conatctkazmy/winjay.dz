@@ -452,6 +452,14 @@ body.modal-open .mobile-footer-bar {
     display: none !important;
 }
 
+body.sidebar-open {
+    overflow: hidden;
+}
+
+body.sidebar-open .mobile-footer-bar {
+    display: none !important;
+}
+
 .free-verified-modal {
     max-width: 520px !important;
     width: 95%;

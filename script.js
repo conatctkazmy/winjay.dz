@@ -4328,6 +4328,11 @@ function setSidebarMobileOpen(isOpen) {
     sidebar.classList.toggle('active', !!isOpen);
     const overlay = document.getElementById('sidebarOverlay');
     overlay?.classList?.toggle('active', !!isOpen);
+    try {
+        document.body.classList.toggle('sidebar-open', !!isOpen);
+    } catch (e) {
+        null;
+    }
 }
 
 function closeSidebarOverlay() {
