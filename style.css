@@ -752,6 +752,60 @@ body.modal-open .mobile-footer-bar {
     word-break: break-all;
 }
 
+@media (max-width: 520px) {
+    .verified-quest-card {
+        padding: 14px;
+        margin: 14px 0 12px;
+        border-radius: 16px;
+    }
+
+    .quest-item {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 12px;
+    }
+
+    .quest-left {
+        width: 100%;
+        gap: 10px;
+    }
+
+    .quest-meta {
+        min-width: 0;
+    }
+
+    .quest-meta div:first-child {
+        font-size: 0.95rem;
+        line-height: 1.25;
+    }
+
+    .quest-meta .small {
+        font-size: 0.85rem;
+        line-height: 1.3;
+    }
+
+    .quest-actions {
+        width: 100%;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .quest-status {
+        font-size: 0.9rem;
+    }
+
+    .copy-ref-btn {
+        padding: 9px 10px;
+        border-radius: 12px;
+        font-size: 0.95rem;
+    }
+
+    .copy-ref-btn span {
+        white-space: nowrap;
+    }
+}
+
 .identity-modal {
     max-width: 620px !important;
     width: 95%;
