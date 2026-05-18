@@ -5367,6 +5367,60 @@ footer {
         overflow-x: hidden;
     }
 
+    .navbar .free-verified-pill {
+        display: none;
+    }
+
+    .nav-center {
+        display: none;
+    }
+
+    .mobile-search-btn {
+        display: inline-flex;
+    }
+
+    .mobile-search-expand {
+        display: block;
+        inset: auto;
+        left: 0;
+        right: 0;
+        top: 60px;
+        bottom: auto;
+        padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+        background-color: transparent;
+    }
+
+    .navbar {
+        padding: 0 12px;
+    }
+
+    .nav-right {
+        gap: 8px;
+    }
+
+    .nav-left {
+        min-width: 0;
+        gap: 10px;
+    }
+
+    .logo {
+        min-width: 0;
+        gap: 6px;
+    }
+
+    .logo img {
+        height: 34px !important;
+    }
+
+    .logo .text-xl {
+        font-size: 1rem;
+        white-space: nowrap;
+    }
+
+    .icon-btn {
+        padding: 7px;
+    }
+
     .sidebar {
         transform: translateX(-100%);
         top: 0;
