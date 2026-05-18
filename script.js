@@ -3808,7 +3808,8 @@ const categories = [
     { name: "Véhicules", icon: "car" }, { name: "Immobilier", icon: "home" }, { name: "Électronique", icon: "smartphone" },
     { name: "Emploi & Services", icon: "briefcase" }, { name: "Maison & Jardin", icon: "armchair" }, { name: "Mode & Beauté", icon: "shopping-bag" },
     { name: "Loisirs & Divertissement", icon: "palmtree" }, { name: "Informatique", icon: "monitor" }, { name: "Téléphonie", icon: "phone" },
-    { name: "Sport & Santé", icon: "heart-pulse" }, { name: "Matériel Professionnel", icon: "wrench" }
+    { name: "Sport & Santé", icon: "heart-pulse" }, { name: "Matériel Professionnel", icon: "wrench" },
+    { name: "Autres", icon: "more-horizontal", special: "other" }
 ];
 
 const listingSubcategoriesByCategory = {
