@@ -3767,6 +3767,7 @@ loadThemeModeFromStorage();
 
 document.addEventListener('DOMContentLoaded', async () => {
     setPendingReferralFromUrl();
+    updateNavbarAuthUI();
     initSupabase();
     await bootstrapSupabaseAuth();
     bootstrapLivePresence();
@@ -5446,10 +5447,27 @@ function showToast(message, icon = 'info') {
     }, 3000);
 }
 
+function hasSupabaseAuthTokenLikely() {
+    if (!SUPABASE_PROJECT_REF) return false;
+    const key = `sb-${SUPABASE_PROJECT_REF}-auth-token`;
+    try {
+        if (localStorage.getItem(key)) return true;
+    } catch (e) {
+        null;
+    }
+    try {
+        if (sessionStorage.getItem(key)) return true;
+    } catch (e) {
+        null;
+    }
+    return false;
+}
+
 function updateNavbarAuthUI() {
     const loggedIn = isLoggedIn();
     const verified = !!userProfile?.verified;
     const profileReady = loggedIn && hasLoadedSupabaseProfile;
+    const likelyLoggedIn = loggedIn || hasSupabaseAuthTokenLikely();
     const loginBtn = document.getElementById('navLoginBtn');
     const notificationsBtn = document.getElementById('navNotificationsBtn');
     const messagesBtn = document.getElementById('navMessagesBtn');
@@ -5457,7 +5475,7 @@ function updateNavbarAuthUI() {
     const freeVerifiedPill = document.getElementById('navFreeVerifiedPill');
     const profileMenu = document.getElementById('navProfileMenu');
 
-    if (loginBtn) loginBtn.style.display = loggedIn ? 'none' : 'inline-flex';
+    if (loginBtn) loginBtn.style.display = likelyLoggedIn ? 'none' : 'inline-flex';
     if (notificationsBtn) notificationsBtn.style.display = loggedIn ? '' : 'none';
     if (messagesBtn) messagesBtn.style.display = loggedIn ? '' : 'none';
     if (addListingBtn) addListingBtn.style.display = loggedIn ? '' : 'none';
