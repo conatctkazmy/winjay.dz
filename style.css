@@ -2959,13 +2959,35 @@ main.expanded {
     font-weight: 600;
 }
 
-.form-group input, .form-group select {
+.form-group input, .form-group select, .form-group textarea {
     width: 100%;
     padding: 12px;
     border-radius: 12px;
     border: 1px solid var(--border-color);
     background-color: var(--bg-main);
     color: var(--text-main);
+    font: inherit;
+    box-sizing: border-box;
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 110px;
+}
+
+.detail-description {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-main);
+}
+
+.detail-description p {
+    margin-top: 8px;
+    color: var(--text-muted);
+    line-height: 1.55;
+    white-space: pre-wrap;
 }
 
 .password-input-wrapper {

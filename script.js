@@ -5223,6 +5223,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             !!(ensuredProfile?.verified ?? ensuredProfile?.is_verified ?? userProfile?.verified);
 
         const title = document.getElementById('listingTitle').value.trim();
+        const description = document.getElementById('listingDescription')?.value?.trim?.() || '';
         const price = Number(document.getElementById('listingPrice').value) || 0;
         const category = document.getElementById('listingCategory').value;
         const wilaya = document.getElementById('listingWilaya').value;
@@ -5263,7 +5264,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 .insert({
                     owner_id: userId,
                     title,
-                    description: null,
+                    description: description || null,
                     price,
                     category: category || null,
                     wilaya: wilaya || null,
@@ -5684,9 +5685,11 @@ function updateUpgradeOfferVisibility() {
     const vip = !!userProfile?.isVip;
     const verified = !!userProfile?.verified;
     const showFreeVerified = isLoggedIn() && hasLoadedSupabaseProfile && !verified;
+    const profileReady = isLoggedIn() && hasLoadedSupabaseProfile;
+    const likelyLoggedIn = isLoggedIn() || hasSupabaseAuthTokenLikely();
 
     const sidebarVip = document.getElementById('sidebarVipCta');
-    if (sidebarVip) sidebarVip.style.display = vip ? 'none' : '';
+    if (sidebarVip) sidebarVip.style.display = likelyLoggedIn && !profileReady ? 'none' : vip ? 'none' : '';
 
     const vipBadgeBtn = document.getElementById('vipBadgeBecomeBtn');
     if (vipBadgeBtn) vipBadgeBtn.style.display = vip ? 'none' : '';
@@ -6072,6 +6075,8 @@ function openEditListingModal(event, id) {
         });
     }
     document.getElementById('editListingTitle').value = item.title;
+    const descEl = document.getElementById('editListingDescription');
+    if (descEl) descEl.value = item.description || '';
     document.getElementById('editListingPrice').value = item.price;
     document.getElementById('editListingCategory').value = item.category;
     document.getElementById('editListingWilaya').value = item.location;
@@ -6089,6 +6094,7 @@ async function saveEditedListing() {
         return;
     }
     const nextTitle = document.getElementById('editListingTitle').value.trim();
+    const nextDescription = document.getElementById('editListingDescription')?.value?.trim?.() || '';
     const nextPrice = Number(document.getElementById('editListingPrice').value) || 0;
     const nextCategory = document.getElementById('editListingCategory').value || null;
     const nextWilaya = document.getElementById('editListingWilaya').value || null;
@@ -6096,6 +6102,7 @@ async function saveEditedListing() {
         .from('listings')
         .update({
             title: nextTitle,
+            description: nextDescription || null,
             price: nextPrice,
             category: nextCategory,
             wilaya: nextWilaya
@@ -8461,6 +8468,7 @@ function openListingDetail(listingId) {
                         <span id="listingLikesCount">${Number(item.likes_count) || 0}</span>
                     </button>
                 </div>
+                ${item.description ? `<div class="detail-description"><h3>Description</h3><p>${escapeHtml(item.description)}</p></div>` : ''}
                 <h3>Vendeur</h3>
                 <div class="seller-card" onclick="openSellerProfileByOwnerId('${item.owner_id}')">
                     <div class="seller-info">
