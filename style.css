@@ -70,6 +70,13 @@ select:focus {
     }
 }
 
+@media (max-width: 600px) {
+    .page-card {
+        padding: 18px;
+        border-radius: 18px;
+    }
+}
+
 html.messages-scroll-lock,
 body.messages-scroll-lock {
     overflow: hidden;
@@ -1224,6 +1231,28 @@ main.expanded {
 #profile-section,
 #seller-profile-section {
     max-width: 980px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.page-card {
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 12px 30px rgba(15, 20, 25, 0.06);
+}
+
+.page-card-head {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 18px;
+}
+
+#create-listing-section,
+#listing-detail-section {
+    max-width: 920px;
     margin-left: auto;
     margin-right: auto;
 }
@@ -3068,6 +3097,10 @@ body.dark-mode .listing-status-badge {
     color: var(--text-main);
     font: inherit;
     box-sizing: border-box;
+}
+
+.form-group select {
+    padding-right: 44px;
 }
 
 .form-group textarea {
