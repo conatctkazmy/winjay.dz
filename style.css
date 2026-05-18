@@ -4509,6 +4509,14 @@ footer {
     margin-bottom: 12px;
 }
 
+.admin-head-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
 .admin-card-head h3 {
     margin: 0;
     font-size: 1.05rem;

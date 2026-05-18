@@ -665,9 +665,12 @@
                             <div class="admin-card">
                                 <div class="admin-card-head">
                                     <h3>Users</h3>
-                                    <div class="admin-search">
-                                        <i data-lucide="search"></i>
-                                        <input id="adminUserSearch" type="text" placeholder="Search by name / tag" onkeyup="renderAdminUsers()">
+                                    <div class="admin-head-actions">
+                                        <button class="submit-btn small" type="button" onclick="adminDownloadUsersPdf()">Download PDF</button>
+                                        <div class="admin-search">
+                                            <i data-lucide="search"></i>
+                                            <input id="adminUserSearch" type="text" placeholder="Search by name / tag" onkeyup="renderAdminUsers()">
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="admin-table-wrap">
@@ -676,6 +679,8 @@
                                             <tr>
                                                 <th>User</th>
                                                 <th>Tag</th>
+                                                <th>Email</th>
+                                                <th>Phone</th>
                                                 <th>VIP</th>
                                                 <th>Verified</th>
                                                 <th>Joined</th>

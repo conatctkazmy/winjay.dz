@@ -6153,6 +6153,33 @@ function formatAdminDate(ts) {
     }
 }
 
+let lastAdminUsers = [];
+
+async function adminFetchUsersWithEmailPhone(search) {
+    const client = initSupabase();
+    if (!client) return null;
+    const { data: sessionData } = await client.auth.getSession();
+    const token = sessionData?.session?.access_token || '';
+    if (!token) return null;
+    try {
+        const res = await fetch(`${SUPABASE_PROJECT_URL}/functions/v1/admin-list-users`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                apikey: SUPABASE_ANON_KEY,
+                authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ search: String(search || '').trim() })
+        });
+        if (!res.ok) return null;
+        const payload = await res.json();
+        if (!payload || !Array.isArray(payload.users)) return null;
+        return payload.users;
+    } catch (e) {
+        return null;
+    }
+}
+
 async function renderAdminUsers() {
     if (!isAdminAuthorized()) return;
     const tbody = document.getElementById('adminUsersTbody');
@@ -6160,24 +6187,38 @@ async function renderAdminUsers() {
     const client = initSupabase();
     if (!client) return;
     const search = document.getElementById('adminUserSearch')?.value?.trim() || '';
-    let q = client.from('profiles').select('id, display_name, tag, is_vip, verified, created_at').order('created_at', { ascending: false }).limit(120);
-    if (search) {
-        const term = `%${search}%`;
-        q = q.or(`display_name.ilike.${term},tag.ilike.${term}`);
+
+    let users = await adminFetchUsersWithEmailPhone(search);
+    if (!users) {
+        let q = client
+            .from('profiles')
+            .select('id, display_name, tag, phone, is_vip, verified, created_at')
+            .order('created_at', { ascending: false })
+            .limit(120);
+        if (search) {
+            const term = `%${search}%`;
+            q = q.or(`display_name.ilike.${term},tag.ilike.${term}`);
+        }
+        const { data, error } = await q;
+        if (error) {
+            tbody.innerHTML = '';
+            showToast(error.message || 'Failed to load users', 'alert-circle');
+            return;
+        }
+        users = (data || []).map((u) => ({ ...u, email: '' }));
     }
-    const { data, error } = await q;
-    if (error) {
-        tbody.innerHTML = '';
-        showToast(error.message || 'Failed to load users', 'alert-circle');
-        return;
-    }
-    const rows = (data || []).map((u) => {
+
+    lastAdminUsers = Array.isArray(users) ? users.slice() : [];
+
+    const rows = (users || []).map((u) => {
         const vip = u.is_vip ? adminBadge('approved') : adminBadge('—');
         const verified = u.verified ? adminBadge('approved') : adminBadge('—');
         return `
             <tr>
                 <td>${escapeHtml(u.display_name || 'User')}</td>
                 <td>${escapeHtml(u.tag || '')}</td>
+                <td>${escapeHtml(u.email || '')}</td>
+                <td>${escapeHtml(u.phone || '')}</td>
                 <td>${vip}</td>
                 <td>${verified}</td>
                 <td>${escapeHtml(formatAdminDate(u.created_at))}</td>
@@ -6192,6 +6233,91 @@ async function renderAdminUsers() {
         `;
     });
     tbody.innerHTML = rows.join('');
+}
+
+function adminDownloadUsersPdf() {
+    if (!isAdminAuthorized()) return;
+    if (!Array.isArray(lastAdminUsers) || lastAdminUsers.length === 0) {
+        showToast('No users to export', 'alert-circle');
+        return;
+    }
+
+    const now = new Date();
+    const title = `winjay.dz - Users Export`;
+    const subtitle = `Generated: ${now.toLocaleString('fr-FR')}`;
+    const rows = lastAdminUsers
+        .map((u) => {
+            const vip = u.is_vip ? 'YES' : 'NO';
+            const verified = u.verified ? 'YES' : 'NO';
+            return `
+                <tr>
+                    <td>${escapeHtml(u.display_name || 'User')}</td>
+                    <td>${escapeHtml(u.tag || '')}</td>
+                    <td>${escapeHtml(u.email || '')}</td>
+                    <td>${escapeHtml(u.phone || '')}</td>
+                    <td>${escapeHtml(vip)}</td>
+                    <td>${escapeHtml(verified)}</td>
+                    <td>${escapeHtml(formatAdminDate(u.created_at))}</td>
+                </tr>
+            `;
+        })
+        .join('');
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#0f1419}
+    h1{margin:0 0 6px;font-size:20px}
+    .sub{margin:0 0 18px;color:#536471;font-size:12px}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th,td{border:1px solid #e1e8ed;padding:8px;vertical-align:top}
+    th{background:#f5f8fa;text-align:left}
+    .muted{color:#536471}
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(title)}</h1>
+  <p class="sub">${escapeHtml(subtitle)}</p>
+  <table>
+    <thead>
+      <tr>
+        <th>User</th>
+        <th>Tag</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>VIP</th>
+        <th>Verified</th>
+        <th>Joined</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>
+  <p class="sub muted" style="margin-top:14px;">Use your browser print dialog and choose "Save as PDF".</p>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank', 'noopener,noreferrer');
+    if (!w) {
+        showToast('Popup blocked. Allow popups to export PDF.', 'alert-circle');
+        return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => {
+        try {
+            w.print();
+        } catch (e) {
+            null;
+        }
+    }, 250);
 }
 
 async function adminToggleVip(userId, next) {
