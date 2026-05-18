@@ -3335,6 +3335,38 @@ body.dark-mode .listing-status-badge {
     }
 }
 
+@media (max-device-width: 768px) {
+    #selectPickerModal.active,
+    #otherCategoriesModal.active {
+        display: flex !important;
+        align-items: flex-end;
+        justify-content: center;
+    }
+
+    #selectPickerModal .modal-content,
+    #otherCategoriesModal .modal-content {
+        position: relative;
+        left: auto;
+        right: auto;
+        bottom: auto;
+        top: auto;
+        transform: none;
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        border-radius: 22px 22px 0 0;
+        padding: 18px 16px calc(16px + env(safe-area-inset-bottom));
+        max-height: 88svh;
+        overflow: hidden;
+    }
+
+    #selectPickerModal .select-picker-list,
+    #otherCategoriesModal .categories-grid {
+        max-height: 62svh;
+        overflow-y: auto;
+    }
+}
+
 @media (max-width: 768px) {
     #selectPickerModal .modal-content,
     #otherCategoriesModal .modal-content {
@@ -5438,6 +5470,66 @@ footer {
 
     .sidebar-content {
         padding-bottom: calc(20px + 92px + env(safe-area-inset-bottom));
+    }
+
+    main {
+        margin-left: 0 !important;
+        padding: 15px;
+    }
+
+    #create-listing-section,
+    #listing-detail-section {
+        max-width: none;
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    .page-card {
+        width: 100%;
+    }
+}
+
+@media (max-device-width: 768px) {
+    .main-container {
+        display: block;
+        width: 100%;
+        overflow-x: hidden;
+    }
+
+    .navbar .free-verified-pill {
+        display: none;
+    }
+
+    .nav-center {
+        display: none;
+    }
+
+    .mobile-search-btn {
+        display: inline-flex;
+    }
+
+    .mobile-search-expand {
+        display: block;
+        inset: auto;
+        left: 0;
+        right: 0;
+        top: 60px;
+        bottom: auto;
+        padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+        background-color: transparent;
+    }
+
+    .navbar {
+        padding: 0 12px;
+    }
+
+    .nav-right {
+        gap: 8px;
+    }
+
+    .nav-left {
+        min-width: 0;
+        gap: 10px;
     }
 
     main {
