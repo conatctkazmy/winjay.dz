@@ -377,8 +377,8 @@ function applySupabaseProfileRowToLocalState(row, user) {
         isVip: !!(row.is_vip ?? row.vip ?? row.isVip ?? userProfile.isVip),
         verified: !!(row.verified ?? row.is_verified ?? userProfile.verified),
         isAdmin: !!(row.is_admin ?? row.isAdmin ?? userProfile.isAdmin),
-        joinedDate: user?.created_at
-            ? new Date(user.created_at).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })
+        joinedDate: (row?.created_at || user?.created_at)
+            ? new Date(row?.created_at || user.created_at).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })
             : userProfile.joinedDate
     };
     hasLoadedSupabaseProfile = true;
@@ -5514,6 +5514,8 @@ function updateProfileUI() {
     document.getElementById('profileCover').src = userProfile.coverPic;
     document.getElementById('profileLocation').textContent = userProfile.location;
     document.getElementById('profileBusiness').textContent = userProfile.businessType;
+    const joinedEl = document.getElementById('profileJoined');
+    if (joinedEl) joinedEl.textContent = userProfile.joinedDate || '—';
     const phoneText = userProfile.phone ? String(userProfile.phone) : '—';
     const phoneDisplay = document.getElementById('profilePhone');
     if (phoneDisplay) phoneDisplay.textContent = phoneText;
