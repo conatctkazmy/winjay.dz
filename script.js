@@ -6670,18 +6670,121 @@ async function renderIdentityApplications() {
 }
 
 async function adminOpenIdentityDocs(userId, frontPath, backPath) {
+    if (!isAdminAuthorized()) return;
     const client = initSupabase();
     if (!client) return;
     const base = String(userId || '').trim();
     if (!base) return;
-    const openSigned = async (path) => {
-        const p = String(path || '').trim();
-        if (!p) return;
-        const { data, error } = await client.storage.from(IDENTITY_DOCS_BUCKET).createSignedUrl(p, 60);
-        if (!error && data?.signedUrl) window.open(data.signedUrl, '_blank');
+
+    const modalId = 'identityDocsPreviewModal';
+    const frontImg = document.getElementById('identityDocFrontImg');
+    const backImg = document.getElementById('identityDocBackImg');
+    const frontLoading = document.getElementById('identityDocFrontLoading');
+    const backLoading = document.getElementById('identityDocBackLoading');
+    const frontError = document.getElementById('identityDocFrontError');
+    const backError = document.getElementById('identityDocBackError');
+    const frontOpen = document.getElementById('identityDocFrontOpen');
+    const backOpen = document.getElementById('identityDocBackOpen');
+    const frontDownload = document.getElementById('identityDocFrontDownload');
+    const backDownload = document.getElementById('identityDocBackDownload');
+
+    const resetSide = (img, loading, err, openEl, dlEl) => {
+        if (img) {
+            img.src = '';
+            img.style.display = 'none';
+            img.onclick = null;
+        }
+        if (loading) loading.style.display = 'block';
+        if (err) {
+            err.textContent = '';
+            err.style.display = 'none';
+        }
+        if (openEl) openEl.style.display = 'none';
+        if (dlEl) dlEl.style.display = 'none';
     };
-    await openSigned(frontPath);
-    await openSigned(backPath);
+
+    resetSide(frontImg, frontLoading, frontError, frontOpen, frontDownload);
+    resetSide(backImg, backLoading, backError, backOpen, backDownload);
+    openModal(modalId);
+    lucide.createIcons();
+
+    const loadOne = async (path, img, loading, err, openEl, dlEl, label) => {
+        const p = String(path || '').trim();
+        if (!p) {
+            if (loading) loading.style.display = 'none';
+            if (err) {
+                err.textContent = 'No document uploaded.';
+                err.style.display = 'block';
+            }
+            return;
+        }
+        const { data, error } = await client.storage.from(IDENTITY_DOCS_BUCKET).createSignedUrl(p, 300);
+        if (loading) loading.style.display = 'none';
+        if (error || !data?.signedUrl) {
+            if (err) {
+                err.textContent = String(error?.message || 'Document not accessible.');
+                err.style.display = 'block';
+            }
+            return;
+        }
+        const url = data.signedUrl;
+        if (img) {
+            img.src = url;
+            img.style.display = 'block';
+            img.onclick = () => openLightbox(url);
+        }
+        if (openEl) {
+            openEl.href = url;
+            openEl.style.display = 'inline-flex';
+        }
+        if (dlEl) {
+            dlEl.href = url;
+            dlEl.download = `${base}_${label}.jpg`;
+            dlEl.style.display = 'inline-flex';
+        }
+        lucide.createIcons();
+    };
+
+    await Promise.all([
+        loadOne(frontPath, frontImg, frontLoading, frontError, frontOpen, frontDownload, 'front'),
+        loadOne(backPath, backImg, backLoading, backError, backOpen, backDownload, 'back')
+    ]);
+}
+
+function closeIdentityDocsPreviewModal() {
+    closeModal('identityDocsPreviewModal');
+    const ids = [
+        'identityDocFrontImg',
+        'identityDocBackImg',
+        'identityDocFrontOpen',
+        'identityDocBackOpen',
+        'identityDocFrontDownload',
+        'identityDocBackDownload'
+    ];
+    ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.tagName === 'IMG') {
+            el.src = '';
+            el.style.display = 'none';
+        } else {
+            el.style.display = 'none';
+            el.removeAttribute('href');
+        }
+    });
+    const loaders = ['identityDocFrontLoading', 'identityDocBackLoading'];
+    loaders.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'block';
+    });
+    const errors = ['identityDocFrontError', 'identityDocBackError'];
+    errors.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.textContent = '';
+            el.style.display = 'none';
+        }
+    });
 }
 
 async function adminApproveIdentity(appId, userId) {

@@ -1501,6 +1501,55 @@
         </div>
     </div>
 
+    <div id="identityDocsPreviewModal" class="modal">
+        <div class="modal-content identity-docs-preview-modal">
+            <span class="close" onclick="closeIdentityDocsPreviewModal()">&times;</span>
+            <h2>Identity documents</h2>
+            <p class="muted" id="identityDocsPreviewHint">Front & back submitted by the user.</p>
+            <div class="identity-docs-preview-grid">
+                <div class="identity-docs-preview-card">
+                    <div class="identity-docs-preview-card-header">
+                        <div class="identity-docs-preview-title">Front</div>
+                        <div class="identity-docs-preview-actions">
+                            <a id="identityDocFrontOpen" class="admin-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">
+                                <i data-lucide="external-link"></i> Open
+                            </a>
+                            <a id="identityDocFrontDownload" class="admin-action-btn" href="#" download style="display:none;">
+                                <i data-lucide="download"></i> Download
+                            </a>
+                        </div>
+                    </div>
+                    <div class="identity-docs-preview-body">
+                        <div class="identity-docs-preview-loading" id="identityDocFrontLoading">Loading…</div>
+                        <img id="identityDocFrontImg" class="identity-docs-preview-img" alt="" style="display:none;">
+                        <div class="identity-docs-preview-error" id="identityDocFrontError" style="display:none;"></div>
+                    </div>
+                </div>
+                <div class="identity-docs-preview-card">
+                    <div class="identity-docs-preview-card-header">
+                        <div class="identity-docs-preview-title">Back</div>
+                        <div class="identity-docs-preview-actions">
+                            <a id="identityDocBackOpen" class="admin-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">
+                                <i data-lucide="external-link"></i> Open
+                            </a>
+                            <a id="identityDocBackDownload" class="admin-action-btn" href="#" download style="display:none;">
+                                <i data-lucide="download"></i> Download
+                            </a>
+                        </div>
+                    </div>
+                    <div class="identity-docs-preview-body">
+                        <div class="identity-docs-preview-loading" id="identityDocBackLoading">Loading…</div>
+                        <img id="identityDocBackImg" class="identity-docs-preview-img" alt="" style="display:none;">
+                        <div class="identity-docs-preview-error" id="identityDocBackError" style="display:none;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="identity-docs-preview-footer">
+                <button class="confirm-cancel-btn" type="button" onclick="closeIdentityDocsPreviewModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <div id="verifiedCongratsModal" class="modal">
         <div class="modal-content congrats-modal">
             <div class="congrats-badge">
