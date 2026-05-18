@@ -3303,6 +3303,28 @@ body.dark-mode .listing-status-badge {
     overflow-y: auto;
 }
 
+@media (max-width: 768px) {
+    #selectPickerModal .modal-content,
+    #otherCategoriesModal .modal-content {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: auto;
+        transform: none;
+        width: 100%;
+        max-width: none;
+        border-radius: 22px 22px 0 0;
+        padding: 18px 16px 16px;
+        max-height: 88svh;
+    }
+
+    #selectPickerModal .select-picker-list,
+    #otherCategoriesModal .categories-grid {
+        max-height: 62svh;
+    }
+}
+
 .modal-search {
     margin-bottom: 20px;
     background-color: var(--light-gray);
