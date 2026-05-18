@@ -5360,6 +5360,49 @@ footer {
     height: 20px;
 }
 
+@media (hover: none) and (pointer: coarse) {
+    .main-container {
+        display: block;
+        width: 100%;
+        overflow-x: hidden;
+    }
+
+    .sidebar {
+        transform: translateX(-100%);
+        top: 0;
+        height: 100vh;
+        height: 100svh;
+    }
+
+    .sidebar.active {
+        transform: translateX(0);
+    }
+
+    .sidebar-mobile-header {
+        display: flex;
+    }
+
+    .sidebar-content {
+        padding-bottom: calc(20px + 92px + env(safe-area-inset-bottom));
+    }
+
+    main {
+        margin-left: 0 !important;
+        padding: 15px;
+    }
+
+    #create-listing-section,
+    #listing-detail-section {
+        max-width: none;
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    .page-card {
+        width: 100%;
+    }
+}
+
 @media (max-width: 768px) {
     .main-container {
         display: block;
