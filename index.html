@@ -52,7 +52,7 @@
                 <i data-lucide="badge-check"></i>
                 <span><span id="freeVerifiedRemainingNav">1000</span> free verified left</span>
             </button>
-            <button class="add-listing-btn" id="navAddListingBtn" onclick="openModal('addListingModal')" title="Ajouter une annonce">
+            <button class="add-listing-btn" id="navAddListingBtn" onclick="openCreateListingPage()" title="Ajouter une annonce">
                 <i data-lucide="plus-circle"></i>
             </button>
             <button class="nav-login-btn" id="navLoginBtn" style="display: none;" type="button" onclick="openModal('loginModal')" title="Log in">
@@ -151,7 +151,7 @@
                 </div>
                 <div class="sidebar-divider"></div>
                 <div class="sidebar-actions">
-                    <button class="add-listing-btn sidebar-only" onclick="openModal('addListingModal')" title="Add listing">
+                    <button class="add-listing-btn sidebar-only" onclick="openCreateListingPage()" title="Add listing">
                         <i data-lucide="plus-circle"></i>
                     </button>
                     <button id="themeToggle" class="theme-toggle">
@@ -797,6 +797,106 @@
                 </div>
             </section>
 
+            <section id="create-listing-section" class="content-section">
+                <button class="back-btn" onclick="navigateBackFromListingFlow()">
+                    <i data-lucide="arrow-left"></i> Retour
+                </button>
+                <div class="page-card">
+                    <div class="page-card-head">
+                        <h2>Créer une annonce</h2>
+                        <span class="muted">Remplissez les détails et ajoutez des photos</span>
+                    </div>
+                    <form id="addListingForm" novalidate>
+                        <div class="form-group">
+                            <label>Titre</label>
+                            <input type="text" id="listingTitle" required placeholder="Que vendez-vous ?">
+                        </div>
+                        <div class="form-group">
+                            <label>Description</label>
+                            <textarea id="listingDescription" rows="5" placeholder="Décrivez votre annonce (état, détails, livraison, etc.)"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Condition</label>
+                            <select id="listingCondition" required>
+                                <option value="" disabled selected>Sélectionnez</option>
+                                <option value="New">New</option>
+                                <option value="Like new">Like new</option>
+                                <option value="Used">Used</option>
+                                <option value="For parts">For parts</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Type de prix</label>
+                            <select id="listingPriceType" required>
+                                <option value="" disabled selected>Sélectionnez</option>
+                                <option value="Fixed">Fixed</option>
+                                <option value="Negotiable">Negotiable</option>
+                                <option value="Free">Free</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Prix (DA)</label>
+                            <input type="number" id="listingPrice" required placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label>Catégorie</label>
+                            <select id="listingCategory"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Sous-catégorie</label>
+                            <select id="listingSubcategory" disabled></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Wilaya</label>
+                            <select id="listingWilaya" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label>City / Commune</label>
+                            <select id="listingCity" disabled required></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Livraison</label>
+                            <select id="listingDelivery" required>
+                                <option value="" disabled selected>Sélectionnez</option>
+                                <option value="Pickup only">Pickup only</option>
+                                <option value="Delivery available">Delivery available</option>
+                                <option value="Both">Both</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Numéro de téléphone</label>
+                            <input type="tel" id="listingContactPhone" required placeholder="+213 ..." autocomplete="tel">
+                        </div>
+                        <div class="form-group">
+                            <label>Disponibilité</label>
+                            <select id="listingAvailability" required>
+                                <option value="Available" selected>Available</option>
+                                <option value="Reserved">Reserved</option>
+                                <option value="Sold">Sold</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Tags (max 5)</label>
+                            <input type="text" id="listingTags" placeholder="ex: iphone, apple, 128gb">
+                        </div>
+                        <div class="form-group">
+                            <label>Photos</label>
+                            <p class="muted" style="margin-top: 6px;">Ajoutez jusqu’à 10 photos. Touchez un emplacement pour ajouter une photo.</p>
+                            <div id="listingImagesSlots" class="listing-images-grid"></div>
+                            <input type="file" id="listingImageSlotInput" hidden accept="image/*">
+                        </div>
+                        <button type="submit" class="submit-btn">Publier l'annonce</button>
+                    </form>
+                </div>
+            </section>
+
+            <section id="listing-detail-section" class="content-section">
+                <button class="back-btn" onclick="navigateBackFromListingFlow()">
+                    <i data-lucide="arrow-left"></i> Retour
+                </button>
+                <div id="listingDetailPage" class="page-card"></div>
+            </section>
+
             <section id="seller-profile-section" class="content-section">
                 <button class="back-btn" onclick="showSection('home-section')">
                     <i data-lucide="arrow-left"></i> Retour
@@ -944,62 +1044,6 @@
         </div>
     </div>
 
-    <div id="addListingModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeModal('addListingModal')">&times;</span>
-            <h2>Créer une nouvelle annonce</h2>
-            <form id="addListingForm" novalidate>
-                <div class="form-group">
-                    <label>Titre</label>
-                    <input type="text" id="listingTitle" required placeholder="Que vendez-vous ?">
-                </div>
-                <div class="form-group">
-                    <label>Description</label>
-                    <textarea id="listingDescription" rows="4" placeholder="Décrivez votre annonce (état, détails, livraison, etc.)"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>Prix (DA)</label>
-                    <input type="number" id="listingPrice" required placeholder="0.00">
-                </div>
-                <div class="form-group">
-                    <label>Catégorie</label>
-                    <select id="listingCategory"></select>
-                </div>
-                <div class="form-group">
-                    <label>Sous-catégorie</label>
-                    <select id="listingSubcategory" disabled></select>
-                </div>
-                <div class="form-group">
-                    <label>Wilaya</label>
-                    <select id="listingWilaya" required></select>
-                </div>
-                <div class="form-group">
-                    <label>Image de l'article</label>
-                    <div class="file-input-container">
-                        <button type="button" class="file-btn" onclick="openListingImagesModal()">
-                            <i data-lucide="image"></i> Ajouter des photos
-                        </button>
-                        <div id="imagePreviewContainer" class="image-preview-mini"></div>
-                    </div>
-                </div>
-                <button type="submit" class="submit-btn">Publier l'annonce</button>
-            </form>
-        </div>
-    </div>
-
-    <div id="listingImagesModal" class="modal">
-        <div class="modal-content modal-large">
-            <span class="close" onclick="closeListingImagesModal()">&times;</span>
-            <h2>Photos du produit</h2>
-            <p class="muted" style="margin-top: 6px;">Ajoutez jusqu’à 10 photos. Touchez un emplacement pour ajouter une photo.</p>
-            <div id="listingImagesSlots" class="listing-images-grid"></div>
-            <input type="file" id="listingImageSlotInput" hidden accept="image/*">
-            <div class="confirm-actions" style="margin-top: 16px;">
-                <button class="confirm-ok-btn" onclick="closeListingImagesModal()">Done</button>
-            </div>
-        </div>
-    </div>
-
     <div id="editProfileModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('editProfileModal')">&times;</span>
@@ -1055,6 +1099,25 @@
                     <textarea id="editListingDescription" rows="4" placeholder="Décrivez votre annonce (état, détails, livraison, etc.)"></textarea>
                 </div>
                 <div class="form-group">
+                    <label>Condition</label>
+                    <select id="editListingCondition" required>
+                        <option value="" disabled selected>Sélectionnez</option>
+                        <option value="New">New</option>
+                        <option value="Like new">Like new</option>
+                        <option value="Used">Used</option>
+                        <option value="For parts">For parts</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Type de prix</label>
+                    <select id="editListingPriceType" required>
+                        <option value="" disabled selected>Sélectionnez</option>
+                        <option value="Fixed">Fixed</option>
+                        <option value="Negotiable">Negotiable</option>
+                        <option value="Free">Free</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Prix (DA)</label>
                     <input type="number" id="editListingPrice" required>
                 </div>
@@ -1069,6 +1132,35 @@
                 <div class="form-group">
                     <label>Wilaya</label>
                     <select id="editListingWilaya"></select>
+                </div>
+                <div class="form-group">
+                    <label>City / Commune</label>
+                    <select id="editListingCity" disabled required></select>
+                </div>
+                <div class="form-group">
+                    <label>Livraison</label>
+                    <select id="editListingDelivery" required>
+                        <option value="" disabled selected>Sélectionnez</option>
+                        <option value="Pickup only">Pickup only</option>
+                        <option value="Delivery available">Delivery available</option>
+                        <option value="Both">Both</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Numéro de téléphone</label>
+                    <input type="tel" id="editListingContactPhone" required placeholder="+213 ..." autocomplete="tel">
+                </div>
+                <div class="form-group">
+                    <label>Disponibilité</label>
+                    <select id="editListingAvailability" required>
+                        <option value="Available">Available</option>
+                        <option value="Reserved">Reserved</option>
+                        <option value="Sold">Sold</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tags (max 5)</label>
+                    <input type="text" id="editListingTags" placeholder="ex: iphone, apple, 128gb">
                 </div>
                 <button type="button" class="submit-btn" onclick="saveEditedListing()">Enregistrer</button>
             </form>
@@ -1106,17 +1198,6 @@
                 </div>
                 <button type="submit" class="submit-btn">Envoyer le message</button>
             </form>
-        </div>
-    </div>
-
-    <div id="listingDetailModal" class="modal">
-        <div class="modal-content modal-large listing-detail-modal">
-            <div class="listing-modal-header">
-                <span class="close listing-modal-close" onclick="closeModal('listingDetailModal')">&times;</span>
-            </div>
-            <div class="listing-modal-body">
-                <div id="listingDetailContent"></div>
-            </div>
         </div>
     </div>
 

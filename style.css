@@ -1443,6 +1443,7 @@ main.expanded {
     overflow: hidden;
     transition: transform 0.2s, box-shadow 0.2s;
     cursor: pointer;
+    position: relative;
 }
 
 .card:hover {
@@ -1455,6 +1456,70 @@ main.expanded {
     height: 200px;
     object-fit: cover;
     cursor: zoom-in;
+}
+
+.card-status-badge {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    z-index: 3;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--text-main);
+    backdrop-filter: blur(6px);
+}
+
+body.dark-mode .card-status-badge {
+    background: rgba(20, 20, 20, 0.85);
+}
+
+.card-status-badge.sold {
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.card-status-badge.reserved {
+    border-color: #f6c445;
+    color: #b88300;
+}
+
+.listing-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 10px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--text-main);
+    vertical-align: middle;
+    backdrop-filter: blur(6px);
+}
+
+body.dark-mode .listing-status-badge {
+    background: rgba(20, 20, 20, 0.85);
+}
+
+.listing-status-badge.ok {
+    border-color: #28a745;
+    color: #1f8a38;
+}
+
+.listing-status-badge.pending {
+    border-color: #f6c445;
+    color: #b88300;
+}
+
+.listing-status-badge.sold {
+    border-color: #dc3545;
+    color: #dc3545;
 }
 
 .card-content {
@@ -3175,48 +3240,6 @@ main.expanded {
     width: 95%;
     max-height: 90vh;
     overflow-y: auto;
-}
-
-.modal-content.modal-large.listing-detail-modal {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    padding: 18px;
-}
-
-.listing-modal-header {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    flex: 0 0 auto;
-    padding-bottom: 8px;
-}
-
-.listing-modal-body {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    padding-right: 4px;
-}
-
-.listing-modal-close {
-    position: static;
-    width: 40px;
-    height: 40px;
-    border-radius: 14px;
-    border: 1px solid var(--border-color);
-    background-color: var(--light-gray);
-    display: grid;
-    place-items: center;
-    font-size: 26px;
-    line-height: 1;
-    color: var(--primary-color);
-    transition: background 0.2s, border-color 0.2s, transform 0.2s;
-}
-
-.listing-modal-close:hover {
-    border-color: var(--primary-color);
-    transform: scale(1.04);
 }
 
 .modal-search {

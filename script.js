@@ -183,10 +183,17 @@ function mapSupabaseListingRow(row, profilesById = {}) {
         description: row.description || '',
         subcategory: row.subcategory || '',
         price: Number(row.price) || 0,
+        price_type: row.price_type || '',
+        condition: row.condition || '',
+        delivery: row.delivery || '',
+        availability: row.availability || 'Available',
         category: row.category || '',
         image: firstUrl || 'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?w=500',
         images: images.map((x) => x.url).filter(Boolean),
-        location: row.wilaya || '',
+        city: row.city || '',
+        contact_phone: row.contact_phone || '',
+        tags: Array.isArray(row.tags) ? row.tags.filter(Boolean) : [],
+        location: row.city ? `${row.city}, ${row.wilaya || ''}`.replace(/,\s*$/, '') : (row.wilaya || ''),
         wilaya: row.wilaya || '',
         status: row.status || 'active',
         created_at: row.created_at,
@@ -204,7 +211,7 @@ async function fetchListingsFromSupabase({ silent = false } = {}) {
     const { data, error } = await client
         .from('listings')
         .select(
-            'id, created_at, owner_id, title, description, subcategory, price, category, wilaya, status, views_count, likes_count, listing_images(url, sort_order)'
+            'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, listing_images(url, sort_order)'
         )
         .order('created_at', { ascending: false });
     if (error) {
@@ -2972,7 +2979,6 @@ async function startChatWithSellerByOwnerId(ownerId) {
     const seller = mapProfileRowToSeller(profileRow?.id ? profileRow : { id: ownerId });
     const chatKey = `id:${ownerId}`;
     const chatTag = seller.tag || `@${String(ownerId).slice(0, 8)}`;
-    closeModal('listingDetailModal');
     suppressNextMessagesBootstrap = true;
     showSection('messages-section');
     await bootstrapMessages();
@@ -3577,7 +3583,6 @@ async function startChatWithSeller(tag) {
         const seller = mapProfileRowToSeller(profileRow);
         const normalizedTag = seller.tag || (String(tag).startsWith('@') ? tag : '@' + tag);
         const chatKey = `id:${profileRow.id}`;
-        closeModal('listingDetailModal');
         suppressNextMessagesBootstrap = true;
         showSection('messages-section');
         await bootstrapMessages();
@@ -3613,7 +3618,6 @@ async function startChatWithSeller(tag) {
         };
     }
 
-    closeModal('listingDetailModal');
     activeChatTag = tag;
     showSection('messages-section');
     renderMessagesList();
@@ -3946,10 +3950,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!supabaseClient) {
         loadUserProfileFromStorage();
     }
-    fetchListingsFromSupabase({ silent: false });
+    await fetchListingsFromSupabase({ silent: false });
     populateWilayas();
     populateCategories();
     setupListingSubcategorySelects();
+    setupListingCitySelects();
+    setupListingCoreFieldBindings();
     populateFilterDropdowns();
     populateAllExtraCategories();
     populateWorkCategoriesSelect();
@@ -3985,6 +3991,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     const profileParam = params.get('profile');
+    const listingParam = params.get('listing');
+    const newListingParam = params.get('new');
     if (profileParam) {
         const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
         showSection('seller-profile-section');
@@ -3994,6 +4002,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             lucide.createIcons();
         }
         await openSellerProfile(tag.toLowerCase());
+    } else if (listingParam) {
+        const id = Number(listingParam);
+        if (Number.isFinite(id) && id > 0) {
+            openListingDetail(id, { pushState: false });
+        } else {
+            showSection('home-section');
+        }
+    } else if (newListingParam) {
+        openCreateListingPage({ pushState: false });
     } else {
         if (lastSection === 'seller-profile-section') {
             const storedTag = (localStorage.getItem(SELLER_PROFILE_LAST_TAG_STORAGE_KEY) || '').trim();
@@ -4021,6 +4038,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindChatJumpLatestScroll();
     await bootstrapMessages();
     maybeOpenPendingAdmin();
+    if (!window.__winjayRouteHooked) {
+        window.__winjayRouteHooked = true;
+        window.addEventListener('popstate', () => {
+            try {
+                handleListingRoutesFromUrl();
+            } catch (e) {
+                null;
+            }
+        });
+    }
     document.documentElement.classList.remove('app-loading');
 });
 
@@ -4096,13 +4123,94 @@ function setupMobileFooterDocking() {
 }
 
 function populateWilayas() {
-    const wilayaSelect = document.getElementById('listingWilaya');
-    wilayas.forEach(wilaya => {
-        const option = document.createElement('option');
-        option.value = wilaya;
-        option.textContent = wilaya;
-        wilayaSelect.appendChild(option);
+    const selects = [
+        document.getElementById('listingWilaya'),
+        document.getElementById('editListingWilaya')
+    ].filter(Boolean);
+    selects.forEach((select) => {
+        select.innerHTML = '<option value="" disabled selected>Sélectionnez une wilaya</option>';
+        wilayas.forEach((wilaya) => {
+            const option = document.createElement('option');
+            option.value = wilaya;
+            option.textContent = wilaya;
+            select.appendChild(option);
+        });
     });
+}
+
+const wilayaCitiesOverrides = {
+    "16 Alger": ["Alger Centre", "Bab Ezzouar", "Bir Mourad Raïs", "Kouba", "Hydra", "Draria", "Chéraga", "Dar El Beïda"],
+    "31 Oran": ["Oran", "Es Sénia", "Bir El Djir", "Akid Lotfi", "Aïn El Turk", "Arzew"],
+    "25 Constantine": ["Constantine", "El Khroub", "Aïn Smara", "Didouche Mourad", "Hamma Bouziane"]
+};
+
+function getWilayaDisplayName(wilayaLabel) {
+    return String(wilayaLabel || '').replace(/^\d+\s*/, '').trim();
+}
+
+function getCitiesForWilaya(wilayaLabel) {
+    const key = String(wilayaLabel || '').trim();
+    const override = wilayaCitiesOverrides[key];
+    if (Array.isArray(override) && override.length) return override;
+    const name = getWilayaDisplayName(key);
+    return name ? [name] : [];
+}
+
+function populateCitySelect(selectEl, wilayaLabel, selectedValue = '') {
+    if (!selectEl) return;
+    const cities = getCitiesForWilaya(wilayaLabel);
+    selectEl.innerHTML = '<option value="" disabled selected>Sélectionnez une ville / commune</option>';
+    cities.forEach((city) => {
+        const opt = document.createElement('option');
+        opt.value = city;
+        opt.textContent = city;
+        selectEl.appendChild(opt);
+    });
+    selectEl.disabled = cities.length === 0;
+    if (selectedValue && cities.includes(selectedValue)) selectEl.value = selectedValue;
+}
+
+function setupListingCitySelects() {
+    const addWilaya = document.getElementById('listingWilaya');
+    const addCity = document.getElementById('listingCity');
+    const editWilaya = document.getElementById('editListingWilaya');
+    const editCity = document.getElementById('editListingCity');
+
+    if (addWilaya && addCity) {
+        const refresh = () => populateCitySelect(addCity, addWilaya.value, '');
+        addWilaya.addEventListener('change', refresh);
+        refresh();
+    }
+    if (editWilaya && editCity) {
+        const refresh = () => populateCitySelect(editCity, editWilaya.value, editCity.value || '');
+        editWilaya.addEventListener('change', refresh);
+        refresh();
+    }
+}
+
+function setupListingCoreFieldBindings() {
+    const addPriceType = document.getElementById('listingPriceType');
+    const addPrice = document.getElementById('listingPrice');
+    if (addPriceType && addPrice) {
+        const apply = () => {
+            const isFree = addPriceType.value === 'Free';
+            addPrice.disabled = isFree;
+            if (isFree) addPrice.value = '0';
+        };
+        addPriceType.addEventListener('change', apply);
+        apply();
+    }
+    const editPriceType = document.getElementById('editListingPriceType');
+    const editPrice = document.getElementById('editListingPrice');
+    if (editPriceType && editPrice) {
+        const apply = () => {
+            const isFree = editPriceType.value === 'Free';
+            editPrice.disabled = isFree;
+            if (isFree) editPrice.value = '0';
+        };
+        editPriceType.addEventListener('change', apply);
+        apply();
+    }
 }
 
 function populateFilterDropdowns() {
@@ -4333,6 +4441,39 @@ function updateListingImagesMiniPreview() {
         .join('') + (urls.length > 5 ? `<div style="display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:10px;background:var(--light-gray);color:var(--text-muted);font-weight:800;">+${urls.length - 5}</div>` : '');
 }
 
+function resetCreateListingDraft({ resetForm = true } = {}) {
+    selectedListingImages.forEach((_, i) => revokeListingImageUrl(i));
+    selectedListingImages = Array.from({ length: MAX_LISTING_IMAGES }, () => null);
+    selectedListingImageUrls = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
+    currentListingImageSlotIndex = 0;
+    try {
+        renderListingImagesSlots();
+    } catch (e) {
+        null;
+    }
+    try {
+        updateListingImagesMiniPreview();
+    } catch (e) {
+        null;
+    }
+    if (resetForm) {
+        const form = document.getElementById('addListingForm');
+        form?.reset?.();
+        const city = document.getElementById('listingCity');
+        const wilaya = document.getElementById('listingWilaya');
+        if (city) populateCitySelect(city, wilaya?.value || '', '');
+        const sub = document.getElementById('listingSubcategory');
+        const cat = document.getElementById('listingCategory');
+        if (sub) populateListingSubcategorySelect(sub, cat?.value || '', '');
+        const priceType = document.getElementById('listingPriceType');
+        const price = document.getElementById('listingPrice');
+        if (priceType && price) {
+            price.disabled = priceType.value === 'Free';
+            if (priceType.value === 'Free') price.value = '0';
+        }
+    }
+}
+
 function renderListingImagesSlots() {
     const container = document.getElementById('listingImagesSlots');
     if (!container) return;
@@ -4407,7 +4548,6 @@ themeToggle.addEventListener('click', () => {
 
 function openModal(modalId) {
     const protectedModals = [
-        'addListingModal',
         'editListingModal',
         'editProfileModal',
         'changePasswordModal',
@@ -4416,7 +4556,9 @@ function openModal(modalId) {
         'notificationsModal'
     ];
     if (protectedModals.includes(modalId) && !requireAuthOrPrompt()) return;
-    document.getElementById(modalId).classList.add('active');
+    const el = document.getElementById(modalId);
+    if (!el) return;
+    el.classList.add('active');
     body.classList.add('modal-open');
     if (modalId === 'notificationsModal') {
         renderNotificationsModal().then(() => markAllNotificationsRead()).then(() => refreshUnreadNotificationCount());
@@ -4430,23 +4572,8 @@ function openModal(modalId) {
 }
 
 function closeModal(modalId) {
-    document.getElementById(modalId).classList.remove('active');
-    if (modalId === 'listingDetailModal') {
-        listingDetailViewRecordedListingId = null;
-        listingDetailViewRecorded = false;
-    }
-    if (modalId === 'addListingModal') {
-        selectedListingImages.forEach((_, i) => revokeListingImageUrl(i));
-        selectedListingImages = Array.from({ length: MAX_LISTING_IMAGES }, () => null);
-        selectedListingImageUrls = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
-        updateListingImagesMiniPreview();
-        const preview = document.getElementById('imagePreviewContainer');
-        if (preview) {
-            preview.innerHTML = '';
-            preview.style.display = 'none';
-        }
-        document.getElementById('listingImagesModal')?.classList?.remove('active');
-    }
+    const el = document.getElementById(modalId);
+    if (el) el.classList.remove('active');
     if (modalId === 'otherCategoriesModal') {
         categoryPickerTargetSelectId = '';
     }
@@ -4464,14 +4591,14 @@ function openListingLimitModal(limit = FREE_LISTING_LIMIT) {
 
 function upgradeToVipFromListingLimit() {
     closeModal('listingLimitModal');
-    closeModal('addListingModal');
+    showSection('home-section');
     openVipModal();
     lucide.createIcons();
 }
 
 function upgradeToVerifiedFromListingLimit() {
     closeModal('listingLimitModal');
-    closeModal('addListingModal');
+    showSection('home-section');
     openVerifiedUpgradeModal();
     lucide.createIcons();
 }
@@ -5021,7 +5148,6 @@ function setupImageEditorDrag() {
 
 window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {
-        if (event.target.id === 'listingDetailModal') return;
         event.target.classList.remove('active');
         if (event.target.id === 'confirmModal') {
             confirmCallback = null;
@@ -5209,8 +5335,10 @@ function reportUser() {
 function openShareModal(listingId) {
     const listing = listings.find(l => l.id === listingId);
     if (!listing) return;
-    const url = encodeURIComponent(window.location.href + '?listing=' + listingId);
-    const title = encodeURIComponent(listing.title);
+    const urlObj = new URL(window.location.href);
+    urlObj.searchParams.delete('new');
+    urlObj.searchParams.set('listing', String(listingId));
+    const url = encodeURIComponent(urlObj.toString());
     const shareText = encodeURIComponent(`Découvrez cette annonce: ${listing.title} - ${listing.price} DZD`);
     window.open(`https://t.me/share/url?url=${url}&text=${shareText}`, '_blank');
 }
@@ -5277,14 +5405,42 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
 
         const title = document.getElementById('listingTitle').value.trim();
         const description = document.getElementById('listingDescription')?.value?.trim?.() || '';
+        const condition = document.getElementById('listingCondition')?.value || '';
+        const priceType = document.getElementById('listingPriceType')?.value || '';
         const price = Number(document.getElementById('listingPrice').value) || 0;
         const category = document.getElementById('listingCategory').value;
         const subcategory = document.getElementById('listingSubcategory')?.value || '';
         const wilaya = document.getElementById('listingWilaya').value;
+        const city = document.getElementById('listingCity')?.value || '';
+        const delivery = document.getElementById('listingDelivery')?.value || '';
+        const contactPhone = document.getElementById('listingContactPhone')?.value?.trim?.() || '';
+        const availability = document.getElementById('listingAvailability')?.value || 'Available';
+        const tagsRaw = document.getElementById('listingTags')?.value || '';
+        const tags = Array.from(
+            new Map(
+                tagsRaw
+                    .split(',')
+                    .map((t) => String(t || '').trim())
+                    .filter(Boolean)
+                    .map((t) => [t.toLowerCase(), t])
+            ).values()
+        ).slice(0, 5);
         const files = selectedListingImages.filter(Boolean);
 
         if (!title) {
             showToast('Title is required', 'alert-circle');
+            return;
+        }
+        if (!condition) {
+            showToast('Condition is required', 'alert-circle');
+            return;
+        }
+        if (!priceType) {
+            showToast('Price type is required', 'alert-circle');
+            return;
+        }
+        if (priceType !== 'Free' && price <= 0) {
+            showToast('Price is required', 'alert-circle');
             return;
         }
         if (!subcategory && Array.isArray(listingSubcategoriesByCategory[category]) && listingSubcategoriesByCategory[category].length) {
@@ -5293,6 +5449,18 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         }
         if (!wilaya) {
             showToast('Wilaya is required', 'alert-circle');
+            return;
+        }
+        if (!city) {
+            showToast('City / Commune is required', 'alert-circle');
+            return;
+        }
+        if (!delivery) {
+            showToast('Delivery is required', 'alert-circle');
+            return;
+        }
+        if (!contactPhone) {
+            showToast('Phone number is required', 'alert-circle');
             return;
         }
         if (files.length === 0) {
@@ -5323,10 +5491,17 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                     owner_id: userId,
                     title,
                     description: description || null,
+                    condition: condition || null,
+                    price_type: priceType || null,
                     subcategory: subcategory || null,
                     price,
+                    delivery: delivery || null,
+                    availability: availability || null,
                     category: category || null,
                     wilaya: wilaya || null,
+                    city: city || null,
+                    contact_phone: contactPhone || null,
+                    tags: tags.length ? tags : null,
                     status: 'active'
                 })
                 .select('id')
@@ -5388,16 +5563,10 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             return;
         }
 
-        closeModal('addListingModal');
         showToast('Listing posted!', 'check-circle');
-        e.target.reset();
-        selectedListingImages.forEach((_, i) => revokeListingImageUrl(i));
-        selectedListingImages = Array.from({ length: MAX_LISTING_IMAGES }, () => null);
-        selectedListingImageUrls = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
-        updateListingImagesMiniPreview();
-        document.getElementById('imagePreviewContainer').style.display = 'none';
-        showSection('home-section');
+        resetCreateListingDraft({ resetForm: true });
         await withTimeout(fetchListingsFromSupabase({ silent: true }), 12000, 'Refreshing listings timed out');
+        openListingDetail(listingId);
     } catch (err) {
         showToast(err?.message || 'Something went wrong', 'alert-circle');
     } finally {
@@ -6136,11 +6305,25 @@ function openEditListingModal(event, id) {
     document.getElementById('editListingTitle').value = item.title;
     const descEl = document.getElementById('editListingDescription');
     if (descEl) descEl.value = item.description || '';
+    const conditionEl = document.getElementById('editListingCondition');
+    if (conditionEl) conditionEl.value = item.condition || '';
+    const priceTypeEl = document.getElementById('editListingPriceType');
+    if (priceTypeEl) priceTypeEl.value = item.price_type || '';
     document.getElementById('editListingPrice').value = item.price;
     document.getElementById('editListingCategory').value = item.category;
     const subSelect = document.getElementById('editListingSubcategory');
     populateListingSubcategorySelect(subSelect, item.category, item.subcategory || '');
-    document.getElementById('editListingWilaya').value = item.location;
+    document.getElementById('editListingWilaya').value = item.wilaya || '';
+    const cityEl = document.getElementById('editListingCity');
+    populateCitySelect(cityEl, item.wilaya || '', item.city || '');
+    const deliveryEl = document.getElementById('editListingDelivery');
+    if (deliveryEl) deliveryEl.value = item.delivery || '';
+    const phoneEl = document.getElementById('editListingContactPhone');
+    if (phoneEl) phoneEl.value = item.contact_phone || '';
+    const availEl = document.getElementById('editListingAvailability');
+    if (availEl) availEl.value = item.availability || 'Available';
+    const tagsEl = document.getElementById('editListingTags');
+    if (tagsEl) tagsEl.value = Array.isArray(item.tags) ? item.tags.join(', ') : '';
     openModal('editListingModal');
     lucide.createIcons();
 }
@@ -6156,12 +6339,61 @@ async function saveEditedListing() {
     }
     const nextTitle = document.getElementById('editListingTitle').value.trim();
     const nextDescription = document.getElementById('editListingDescription')?.value?.trim?.() || '';
+    const nextCondition = document.getElementById('editListingCondition')?.value || '';
+    const nextPriceType = document.getElementById('editListingPriceType')?.value || '';
     const nextPrice = Number(document.getElementById('editListingPrice').value) || 0;
     const nextCategory = document.getElementById('editListingCategory').value || null;
     const nextSubcategory = document.getElementById('editListingSubcategory')?.value || '';
     const nextWilaya = document.getElementById('editListingWilaya').value || null;
+    const nextCity = document.getElementById('editListingCity')?.value || '';
+    const nextDelivery = document.getElementById('editListingDelivery')?.value || '';
+    const nextPhone = document.getElementById('editListingContactPhone')?.value?.trim?.() || '';
+    const nextAvailability = document.getElementById('editListingAvailability')?.value || 'Available';
+    const tagsRaw = document.getElementById('editListingTags')?.value || '';
+    const nextTags = Array.from(
+        new Map(
+            tagsRaw
+                .split(',')
+                .map((t) => String(t || '').trim())
+                .filter(Boolean)
+                .map((t) => [t.toLowerCase(), t])
+        ).values()
+    ).slice(0, 5);
+
+    if (!nextTitle) {
+        showToast('Title is required', 'alert-circle');
+        return;
+    }
+    if (!nextCondition) {
+        showToast('Condition is required', 'alert-circle');
+        return;
+    }
+    if (!nextPriceType) {
+        showToast('Price type is required', 'alert-circle');
+        return;
+    }
+    if (nextPriceType !== 'Free' && nextPrice <= 0) {
+        showToast('Price is required', 'alert-circle');
+        return;
+    }
     if (!nextSubcategory && nextCategory && Array.isArray(listingSubcategoriesByCategory[nextCategory]) && listingSubcategoriesByCategory[nextCategory].length) {
         showToast('Subcategory is required', 'alert-circle');
+        return;
+    }
+    if (!nextWilaya) {
+        showToast('Wilaya is required', 'alert-circle');
+        return;
+    }
+    if (!nextCity) {
+        showToast('City / Commune is required', 'alert-circle');
+        return;
+    }
+    if (!nextDelivery) {
+        showToast('Delivery is required', 'alert-circle');
+        return;
+    }
+    if (!nextPhone) {
+        showToast('Phone number is required', 'alert-circle');
         return;
     }
     const { error } = await client
@@ -6169,10 +6401,17 @@ async function saveEditedListing() {
         .update({
             title: nextTitle,
             description: nextDescription || null,
+            condition: nextCondition || null,
+            price_type: nextPriceType || null,
             subcategory: nextSubcategory || null,
             price: nextPrice,
+            delivery: nextDelivery || null,
+            availability: nextAvailability || null,
             category: nextCategory,
-            wilaya: nextWilaya
+            wilaya: nextWilaya,
+            city: nextCity || null,
+            contact_phone: nextPhone || null,
+            tags: nextTags.length ? nextTags : null
         })
         .eq('id', editingListingId)
         .eq('owner_id', currentSupabaseUserId);
@@ -7183,6 +7422,9 @@ function showSection(sectionId) {
         lucide.createIcons();
         return;
     }
+    if (sectionId !== 'create-listing-section' && sectionId !== 'listing-detail-section') {
+        clearListingRouteParams({ replace: true });
+    }
     const protectedSections = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section'];
     if (protectedSections.includes(sectionId) && !requireAuthOrPrompt()) {
         sectionId = 'home-section';
@@ -7231,6 +7473,84 @@ function showSection(sectionId) {
         clearSellerProfileRouteTag();
         renderAdminDashboard();
     }
+}
+
+function getActiveSectionId() {
+    const active = document.querySelector('.content-section.active');
+    return active?.id || 'home-section';
+}
+
+function clearListingRouteParams({ replace = true } = {}) {
+    const url = new URL(window.location.href);
+    const had = url.searchParams.has('listing') || url.searchParams.has('new');
+    url.searchParams.delete('listing');
+    url.searchParams.delete('new');
+    if (!had) return;
+    if (replace) {
+        history.replaceState(history.state || null, '', url.pathname + url.search);
+    } else {
+        history.pushState(history.state || null, '', url.pathname + url.search);
+    }
+}
+
+function navigateBackFromListingFlow() {
+    if (history.length > 1) {
+        history.back();
+        return;
+    }
+    clearListingRouteParams({ replace: true });
+    showSection('home-section');
+}
+
+function openCreateListingPage({ pushState = true } = {}) {
+    if (!requireAuthOrPrompt()) return;
+    if (isAutoGeneratedTag(userProfile?.tag)) {
+        showToast('Set your username before posting listings', 'alert-circle');
+        openModal('editProfileModal');
+        return;
+    }
+    const from = getActiveSectionId();
+    if (pushState) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('listing');
+        url.searchParams.set('new', '1');
+        history.pushState({ view: 'new', from }, '', url.pathname + url.search);
+    }
+    resetCreateListingDraft({ resetForm: true });
+    showSection('create-listing-section');
+    try {
+        renderListingImagesSlots();
+    } catch (e) {
+        null;
+    }
+    const phoneInput = document.getElementById('listingContactPhone');
+    if (phoneInput && !phoneInput.value && userProfile?.phone) {
+        phoneInput.value = userProfile.phone;
+    }
+    lucide.createIcons();
+}
+
+function handleListingRoutesFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const profileParam = params.get('profile');
+    if (profileParam) return;
+    const listingParam = params.get('listing');
+    const newListingParam = params.get('new');
+    if (listingParam) {
+        const id = Number(listingParam);
+        if (Number.isFinite(id) && id > 0) {
+            openListingDetail(id, { pushState: false });
+            return;
+        }
+    }
+    if (newListingParam) {
+        openCreateListingPage({ pushState: false });
+        return;
+    }
+    const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
+    const blocked = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section'];
+    const lastSection = (blocked.includes(lastSectionRaw) && !isLoggedIn()) ? 'home-section' : lastSectionRaw;
+    showSection(lastSection);
 }
 
 let syncMessagesHeightTimer = null;
@@ -7497,14 +7817,17 @@ function renderFavorites() {
 function createCardHTML(item) {
     const isFavorite = favorites.includes(item.id);
     const pulse = pendingHeartPulses.has(item.id) && isFavorite;
+    const availability = String(item.availability || '').toLowerCase();
+    const badgeText = availability === 'sold' ? 'Sold' : (availability === 'reserved' ? 'Reserved' : '');
     return `
         <div class="card" onclick="openListingDetail(${item.id})">
             <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
                 <i data-lucide="heart"></i>
             </button>
+            ${badgeText ? `<div class="card-status-badge ${availability}">${badgeText}</div>` : ''}
             <img src="${item.image}" alt="${item.title}" class="card-img">
             <div class="card-content">
-                <div class="card-price">${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD</div>
+                <div class="card-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
                 <div class="card-title">${item.title}</div>
                 <div class="card-footer">
                     <span><i data-lucide="map-pin" style="width:12px"></i> ${item.location}</span>
@@ -8471,16 +8794,25 @@ function setListingDetailImage(listingId, index) {
     });
 }
 
-function openListingDetail(listingId) {
+function openListingDetail(listingId, { pushState = true } = {}) {
     const item = listings.find(l => l.id === listingId);
     if (!item) return;
     currentListingDetailId = listingId;
+    if (pushState) {
+        const from = getActiveSectionId();
+        const url = new URL(window.location.href);
+        url.searchParams.delete('new');
+        url.searchParams.set('listing', String(listingId));
+        history.pushState({ view: 'listing', listingId, from }, '', url.pathname + url.search);
+    }
+    showSection('listing-detail-section');
     if (!DEMO_MODE) {
         item.reviewsData = listingReviewsCache.get(listingId) || [];
     } else if (!Array.isArray(item.reviewsData)) {
         item.reviewsData = [];
     }
-    const content = document.getElementById('listingDetailContent');
+    const content = document.getElementById('listingDetailPage');
+    if (!content) return;
     const seller = item.seller || { name: "Utilisateur Winjay", tag: "@user", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay", verified: false, rating: 0, reviews: 0, reviewsData: [] };
     const isLiked = favorites.includes(listingId);
     const pulse = pendingHeartPulses.has(listingId) && isLiked;
@@ -8523,11 +8855,14 @@ function openListingDetail(listingId) {
                 ${thumbsHtml}
             </div>
             <div class="detail-info">
-                <h2>${item.title}</h2>
-                <div class="detail-price">${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD</div>
+                <h2>${item.title} <span class="listing-status-badge ${String(item.availability || 'Available').toLowerCase() === 'sold' ? 'sold' : (String(item.availability || 'Available').toLowerCase() === 'reserved' ? 'pending' : 'ok')}">${escapeHtml(item.availability || 'Available')}</span></h2>
+                <div class="detail-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
                 <div class="detail-meta">
-                    <span><i data-lucide="map-pin"></i> ${item.location}</span>
-                    <span><i data-lucide="tag"></i> ${item.subcategory ? `${item.category} · ${item.subcategory}` : item.category}</span>
+                    <span><i data-lucide="map-pin"></i> ${escapeHtml(item.location)}</span>
+                    <span><i data-lucide="tag"></i> ${escapeHtml(item.subcategory ? `${item.category} · ${item.subcategory}` : item.category)}</span>
+                    <span><i data-lucide="check-circle"></i> ${escapeHtml(item.condition || '—')}</span>
+                    <span><i data-lucide="truck"></i> ${escapeHtml(item.delivery || '—')}</span>
+                    <span><i data-lucide="badge-dollar-sign"></i> ${escapeHtml(item.price_type || '—')}</span>
                     <span><i data-lucide="calendar"></i> ${item.date}</span>
                     <span><i data-lucide="eye"></i> <span id="listingViewsCount">${Number(item.views_count) || 0}</span></span>
                     <button class="detail-like-btn ${isLiked ? 'active' : ''} ${pulse ? 'pulse' : ''}" type="button" onclick="toggleFavorite(event, ${item.id})" title="Like">
@@ -8536,6 +8871,7 @@ function openListingDetail(listingId) {
                     </button>
                 </div>
                 ${item.description ? `<div class="detail-description"><h3>Description</h3><p>${escapeHtml(item.description)}</p></div>` : ''}
+                ${Array.isArray(item.tags) && item.tags.length ? `<div class="detail-tags">${item.tags.map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
                 <h3>Vendeur</h3>
                 <div class="seller-card" onclick="openSellerProfileByOwnerId('${item.owner_id}')">
                     <div class="seller-info">
@@ -8552,12 +8888,14 @@ function openListingDetail(listingId) {
                     </div>
                     <i data-lucide="chevron-right"></i>
                 </div>
-                <div style="margin-top: 15px;">
+                <div class="detail-contact-actions">
                     <button class="message-contact-btn" onclick="startChatWithSellerByOwnerId('${item.owner_id}')">
                         <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
                         Message
                     </button>
+                    ${item.contact_phone ? `<a class="call-contact-btn" href="tel:${String(item.contact_phone).replace(/[^0-9+]/g, '')}" onclick="event.stopPropagation();"><i data-lucide="phone-call" style="width: 18px; height: 18px;"></i> Appeler</a>` : ''}
                 </div>
+                ${item.contact_phone ? `<div class="detail-phone"><i data-lucide="phone"></i> ${escapeHtml(item.contact_phone)}</div>` : ''}
                 <div id="listingReviewHighlightWrap">
                     ${bestListingReview ? `
                     <div class="review-highlight clickable" onclick="expandListingReviews(${item.id})">
@@ -8606,7 +8944,6 @@ function openListingDetail(listingId) {
                 </div>
             </div>
         </div>${similarHTML}`;
-    openModal('listingDetailModal');
     lucide.createIcons();
     refreshListingReviewsForListingDetail(listingId, seller?.name || 'Vendeur');
     if (!listingDetailViewRecorded || listingDetailViewRecordedListingId !== listingId) {
@@ -8738,7 +9075,6 @@ function mapProfileRowToSeller(row) {
 async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
     if (!ownerId) return;
     if (ownerId === currentSupabaseUserId) {
-        closeModal('listingDetailModal');
         showSection('profile-section');
         switchMyProfileSection(section);
         return;
@@ -8756,7 +9092,6 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
     const sellerSummary = computeRatingSummaryFromReviews(seller.reviewsData);
     seller.rating = sellerSummary.rating;
     seller.reviews = sellerSummary.reviews;
-    closeModal('listingDetailModal');
     const content = document.getElementById('externalProfileContent');
     const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === ownerId);
     if (!content) return;
@@ -8834,7 +9169,6 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
 async function openSellerProfile(tag, section = 'listings') {
     currentSellerProfileTag = tag;
     if (tag === userProfile.tag) {
-        closeModal('listingDetailModal');
         showSection('profile-section');
         switchMyProfileSection(section);
         return;
@@ -8860,7 +9194,6 @@ async function openSellerProfile(tag, section = 'listings') {
     const sellerSummary = computeRatingSummaryFromReviews(seller.reviewsData);
     seller.rating = sellerSummary.rating;
     seller.reviews = sellerSummary.reviews;
-    closeModal('listingDetailModal');
     if (!content) return;
     const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === profileRow.id);
     content.innerHTML = `
