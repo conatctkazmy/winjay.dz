@@ -5496,6 +5496,7 @@ function updateProfileUI() {
 function updateUpgradeOfferVisibility() {
     const vip = !!userProfile?.isVip;
     const verified = !!userProfile?.verified;
+    const showFreeVerified = isLoggedIn() && !verified;
 
     const sidebarVip = document.getElementById('sidebarVipCta');
     if (sidebarVip) sidebarVip.style.display = vip ? 'none' : '';
@@ -5513,7 +5514,7 @@ function updateUpgradeOfferVisibility() {
     if (limitVerifiedBtn) limitVerifiedBtn.style.display = verified ? 'none' : '';
 
     document.querySelectorAll('.free-verified-pill').forEach((el) => {
-        el.style.display = verified ? 'none' : '';
+        el.style.display = showFreeVerified ? '' : 'none';
     });
 
     const questCard = document.getElementById('verifiedQuestCard');
