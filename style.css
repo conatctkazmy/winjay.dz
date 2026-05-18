@@ -144,6 +144,60 @@ html.app-loading main {
     overflow: visible;
 }
 
+.is-touch-device .navbar {
+    padding: 0 12px;
+}
+
+.is-touch-device .navbar .free-verified-pill {
+    display: none;
+}
+
+.is-touch-device .nav-center {
+    display: none;
+}
+
+.is-touch-device .mobile-search-btn {
+    display: inline-flex;
+}
+
+.is-touch-device .mobile-search-expand {
+    display: block;
+    inset: auto;
+    left: 0;
+    right: 0;
+    top: 60px;
+    bottom: auto;
+    padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+    background-color: transparent;
+}
+
+.is-touch-device .nav-right {
+    gap: 8px;
+}
+
+.is-touch-device .nav-left {
+    min-width: 0;
+    gap: 10px;
+}
+
+.is-touch-device .logo {
+    min-width: 0;
+    gap: 6px;
+}
+
+.is-touch-device .logo img {
+    height: 34px !important;
+}
+
+.is-touch-device .logo .text-xl {
+    font-size: 1rem;
+    white-space: nowrap;
+}
+
+.is-touch-device .icon-btn {
+    padding: 7px;
+}
+
 .nav-login-btn {
     display: inline-flex;
     align-items: center;
@@ -1220,6 +1274,11 @@ main.expanded {
     margin-left: 0;
 }
 
+.is-touch-device main {
+    margin-left: 0 !important;
+    padding: 15px;
+}
+
 .content-section {
     display: none;
 }
@@ -1255,6 +1314,17 @@ main.expanded {
     max-width: 920px;
     margin-left: auto;
     margin-right: auto;
+}
+
+.is-touch-device #create-listing-section,
+.is-touch-device #listing-detail-section {
+    max-width: none;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+.is-touch-device .page-card {
+    width: 100%;
 }
 
 .profile-header {
@@ -3300,6 +3370,36 @@ body.dark-mode .listing-status-badge {
     max-width: 533px;
     width: 95%;
     max-height: 90vh;
+    overflow-y: auto;
+}
+
+.is-touch-device #selectPickerModal.active,
+.is-touch-device #otherCategoriesModal.active {
+    display: flex !important;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.is-touch-device #selectPickerModal .modal-content,
+.is-touch-device #otherCategoriesModal .modal-content {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    top: auto;
+    transform: none;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border-radius: 22px 22px 0 0;
+    padding: 18px 16px calc(16px + env(safe-area-inset-bottom));
+    max-height: 88svh;
+    overflow: hidden;
+}
+
+.is-touch-device #selectPickerModal .select-picker-list,
+.is-touch-device #otherCategoriesModal .categories-grid {
+    max-height: 62svh;
     overflow-y: auto;
 }
 

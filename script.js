@@ -1,4 +1,23 @@
 let isDarkMode = false;
+function applyTouchDeviceClass() {
+    try {
+        const ua = String(navigator.userAgent || '');
+        const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+        const mqCoarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+        const mqHoverNone = !!(window.matchMedia && window.matchMedia('(hover: none)').matches);
+        const sw = (window.screen && window.screen.width) ? Number(window.screen.width) : Number(window.innerWidth);
+        const sh = (window.screen && window.screen.height) ? Number(window.screen.height) : Number(window.innerHeight);
+        const smallScreen = Math.min(sw || 0, sh || 0) > 0 ? Math.min(sw, sh) <= 820 : false;
+        const should = (mqCoarse && mqHoverNone) || (isMobileUA && smallScreen);
+        document.documentElement.classList.toggle('is-touch-device', !!should);
+    } catch (e) {
+        null;
+    }
+}
+
+applyTouchDeviceClass();
+window.addEventListener('orientationchange', () => setTimeout(applyTouchDeviceClass, 180));
+
 function createEmptyUserProfile() {
     return {
         name: "Guest",
