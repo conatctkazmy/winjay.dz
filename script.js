@@ -3961,6 +3961,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     populateAllExtraCategories();
     populateWorkCategoriesSelect();
     setupCategoryPickers();
+    setupSelectPickers();
     loadUserProfileImages();
     setupImageEditorDrag();
     handleIdentityFilePreview('idFrontInput', 'idFrontPreview');
@@ -4136,6 +4137,7 @@ function populateWilayas() {
             option.textContent = wilaya;
             select.appendChild(option);
         });
+        refreshSelectPicker(select);
     });
 }
 
@@ -4169,6 +4171,7 @@ function populateCitySelect(selectEl, wilayaLabel, selectedValue = '') {
     });
     selectEl.disabled = cities.length === 0;
     if (selectedValue && cities.includes(selectedValue)) selectEl.value = selectedValue;
+    refreshSelectPicker(selectEl);
 }
 
 function setupListingCitySelects() {
@@ -4285,6 +4288,7 @@ function populateListingSubcategorySelect(selectEl, mainCategory, selectedValue 
     });
     selectEl.disabled = list.length === 0;
     if (selectedValue && list.includes(selectedValue)) selectEl.value = selectedValue;
+    refreshSelectPicker(selectEl);
 }
 
 function setupListingSubcategorySelects() {
@@ -4332,6 +4336,150 @@ function openCategoryPicker(selectId) {
     if (!id) return;
     categoryPickerTargetSelectId = id;
     openOtherCategoriesModal(false);
+}
+
+let selectPickerTargetSelectId = '';
+let selectPickerCachedOptions = [];
+
+function getSelectPickerLabelForSelect(selectEl) {
+    if (!selectEl) return 'Sélectionnez';
+    const group = selectEl.closest('.form-group');
+    const label = group ? group.querySelector('label') : null;
+    const txt = label ? String(label.textContent || '').trim() : '';
+    return txt || 'Sélectionnez';
+}
+
+function getSelectPlaceholderText(selectEl) {
+    if (!selectEl) return 'Sélectionnez';
+    const first = selectEl.querySelector('option');
+    if (!first) return 'Sélectionnez';
+    const t = String(first.textContent || '').trim();
+    return t || 'Sélectionnez';
+}
+
+function getPickerButtonForSelect(selectEl) {
+    if (!selectEl) return null;
+    const id = selectEl.id;
+    if (!id) return null;
+    return document.querySelector(`.select-picker-btn[data-select-id="${CSS.escape(id)}"]`);
+}
+
+function refreshSelectPicker(selectEl) {
+    if (!selectEl) return;
+    const btn = getPickerButtonForSelect(selectEl);
+    if (!btn) return;
+    const value = String(selectEl.value || '').trim();
+    const selectedOpt = Array.from(selectEl.options).find((opt) => opt.value === value);
+    const text = selectedOpt ? String(selectedOpt.textContent || '').trim() : '';
+    btn.textContent = text || getSelectPlaceholderText(selectEl);
+    btn.disabled = !!selectEl.disabled;
+}
+
+function enhanceSelectToPicker(selectEl) {
+    if (!selectEl || !selectEl.id) return;
+    if (selectEl.dataset.pickerEnhanced === '1') return;
+    selectEl.dataset.pickerEnhanced = '1';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'select-picker-btn';
+    btn.dataset.selectId = selectEl.id;
+    btn.addEventListener('click', () => openSelectPickerFor(selectEl.id));
+
+    selectEl.classList.add('select-picker-hidden');
+    selectEl.parentNode.insertBefore(btn, selectEl);
+
+    selectEl.addEventListener('change', () => refreshSelectPicker(selectEl));
+    refreshSelectPicker(selectEl);
+}
+
+function openSelectPickerFor(selectId) {
+    const id = String(selectId || '').trim();
+    if (!id) return;
+    if (id === 'listingCategory' || id === 'editListingCategory' || id === 'editWorkCategory') {
+        openCategoryPicker(id);
+        return;
+    }
+
+    const select = document.getElementById(id);
+    if (!select || select.disabled) return;
+    selectPickerTargetSelectId = id;
+    const title = document.getElementById('selectPickerTitle');
+    if (title) title.textContent = getSelectPickerLabelForSelect(select);
+    const search = document.getElementById('selectPickerSearch');
+    if (search) search.value = '';
+
+    const options = Array.from(select.options)
+        .filter((opt) => !opt.disabled && String(opt.value || '').trim() !== '')
+        .map((opt) => ({
+            value: String(opt.value || ''),
+            label: String(opt.textContent || '').trim()
+        }));
+    selectPickerCachedOptions = options;
+    renderSelectPickerOptions(options, String(select.value || ''));
+    openModal('selectPickerModal');
+    lucide.createIcons();
+    try {
+        if (search) setTimeout(() => search.focus(), 80);
+    } catch (e) {
+        null;
+    }
+}
+
+function renderSelectPickerOptions(options, currentValue) {
+    const list = document.getElementById('selectPickerList');
+    if (!list) return;
+    const cur = String(currentValue || '');
+    list.innerHTML = (options || []).map((opt) => {
+        const active = String(opt.value) === cur ? ' active' : '';
+        const safeValue = String(opt.value).replace(/"/g, '&quot;');
+        const safeLabel = String(opt.label).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return `<button type="button" class="select-picker-option${active}" onclick="selectPickerChoose(&quot;${safeValue}&quot;)">${safeLabel}</button>`;
+    }).join('');
+}
+
+function filterSelectPickerOptions() {
+    const search = document.getElementById('selectPickerSearch');
+    const term = search ? String(search.value || '').toLowerCase().trim() : '';
+    const select = document.getElementById(String(selectPickerTargetSelectId || '').trim());
+    const currentValue = select ? String(select.value || '') : '';
+    const filtered = term
+        ? selectPickerCachedOptions.filter((o) => String(o.label || '').toLowerCase().includes(term))
+        : selectPickerCachedOptions;
+    renderSelectPickerOptions(filtered, currentValue);
+}
+
+function selectPickerChoose(value) {
+    const id = String(selectPickerTargetSelectId || '').trim();
+    const select = document.getElementById(id);
+    if (!select) return;
+    select.value = value;
+    try {
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch (e) {
+        null;
+    }
+    refreshSelectPicker(select);
+    selectPickerTargetSelectId = '';
+    closeModal('selectPickerModal');
+}
+
+function setupSelectPickers() {
+    const selectors = [
+        '#create-listing-section select',
+        '#editListingModal select'
+    ];
+    const nodes = selectors.flatMap((sel) => Array.from(document.querySelectorAll(sel)));
+    nodes.forEach((el) => enhanceSelectToPicker(el));
+
+    const listingCategory = document.getElementById('listingCategory');
+    if (listingCategory) {
+        const btn = getPickerButtonForSelect(listingCategory);
+        if (btn && !btn.dataset.boundCategory) {
+            btn.dataset.boundCategory = '1';
+            btn.addEventListener('click', () => openCategoryPicker('listingCategory'));
+        }
+    }
 }
 
 function setupCategoryPickers() {

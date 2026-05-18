@@ -1180,6 +1180,18 @@
         </div>
     </div>
 
+    <div id="selectPickerModal" class="modal">
+        <div class="modal-content modal-large select-picker-modal">
+            <span class="close" onclick="closeModal('selectPickerModal')">&times;</span>
+            <h2 id="selectPickerTitle">Sélectionnez</h2>
+            <div class="search-container modal-search">
+                <i data-lucide="search"></i>
+                <input type="text" id="selectPickerSearch" placeholder="Rechercher..." onkeyup="filterSelectPickerOptions()">
+            </div>
+            <div class="select-picker-list" id="selectPickerList"></div>
+        </div>
+    </div>
+
     <div id="contactModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('contactModal')">&times;</span>
