@@ -1000,6 +1000,31 @@ async function submitIdentityVerification() {
         submitBtn.textContent = 'Submitting...';
     }
 
+    const withTimeout = (promise, ms, label) => {
+        let timeoutId;
+        const timeout = new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error(label)), ms);
+        });
+        return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+    };
+
+    let watchdogFired = false;
+    const watchdogId = setTimeout(() => {
+        watchdogFired = true;
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = prevBtnText;
+        }
+        showConfirmModal(
+            'Still working…',
+            'Your upload is taking longer than expected. Please check your internet connection and try again. If the problem continues, try smaller/clearer photos.',
+            null,
+            false,
+            'OK',
+            'Close'
+        );
+    }, 25000);
+
     try {
         const front = document.getElementById('idFrontInput')?.files?.[0];
         const back = document.getElementById('idBackInput')?.files?.[0];
@@ -1040,7 +1065,8 @@ async function submitIdentityVerification() {
             return;
         }
 
-        const { data: userData, error: userErr } = await client.auth.getUser();
+        if (submitBtn) submitBtn.textContent = 'Checking session...';
+        const { data: userData, error: userErr } = await withTimeout(client.auth.getUser(), 12000, 'Login check timed out');
         const userId = userData?.user?.id || null;
         if (userErr || !userId) {
             showConfirmModal('Session expired', 'Please log in again to continue.', () => openModal('loginModal'), false, 'Log in', 'Close');
@@ -1053,30 +1079,37 @@ async function submitIdentityVerification() {
         const uploadOne = async (file, kind) => {
             const safe = safeStorageFilename(file?.name || `${kind}.png`);
             const path = `${prefix}_${kind}_${safe}`;
-            const { error } = await client.storage.from(IDENTITY_DOCS_BUCKET).upload(path, file, {
+            const { error } = await withTimeout(
+                client.storage.from(IDENTITY_DOCS_BUCKET).upload(path, file, {
                 cacheControl: '3600',
                 upsert: false,
                 contentType: file.type || undefined
-            });
+                }),
+                20000,
+                `Upload ${kind} timed out`
+            );
             if (error) throw error;
             return path;
         };
 
         try {
+            if (submitBtn) submitBtn.textContent = 'Uploading front...';
             frontPath = await uploadOne(front, 'front');
+            if (submitBtn) submitBtn.textContent = 'Uploading back...';
             backPath = await uploadOne(back, 'back');
         } catch (e) {
             showConfirmModal('Upload failed', String(e?.message || 'We could not upload your documents. Please try again.'), null, false, 'OK', 'Close');
             return;
         }
 
-        const { error: insertErr } = await client.from('identity_applications').insert({
+        if (submitBtn) submitBtn.textContent = 'Sending request...';
+        const { error: insertErr } = await withTimeout(client.from('identity_applications').insert({
             user_id: userId,
             dob: dobValue,
             front_path: frontPath,
             back_path: backPath,
             status: 'pending'
-        });
+        }), 12000, 'Submission timed out');
         if (insertErr) {
             showConfirmModal('Submission failed', String(insertErr.message || 'We could not submit your request. Please try again.'), null, false, 'OK', 'Close');
             return;
@@ -1095,8 +1128,10 @@ async function submitIdentityVerification() {
         );
         renderVerifiedQuestCard();
     } catch (e) {
+        if (watchdogFired) return;
         showConfirmModal('Unexpected error', String(e?.message || 'Something went wrong. Please try again.'), null, false, 'OK', 'Close');
     } finally {
+        clearTimeout(watchdogId);
         if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.textContent = prevBtnText;
