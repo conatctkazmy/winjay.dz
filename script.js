@@ -993,93 +993,115 @@ function handleIdentityFilePreview(inputId, imgId) {
 }
 
 async function submitIdentityVerification() {
-    const front = document.getElementById('idFrontInput')?.files?.[0];
-    const back = document.getElementById('idBackInput')?.files?.[0];
-    const dobValue = document.getElementById('idDob')?.value;
-    const confirm18 = document.getElementById('idConfirm18')?.checked;
-
-    if (!front || !back) {
-        showToast('Please upload front and back.', 'alert-circle');
-        return;
+    const submitBtn = document.querySelector('#identityVerificationModal .confirm-ok-btn');
+    const prevBtnText = submitBtn?.textContent || 'Submit';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
     }
-    if (!dobValue) {
-        showToast('Please add your date of birth.', 'alert-circle');
-        return;
-    }
-    if (!confirm18) {
-        showToast('Please confirm you are 18+.', 'alert-circle');
-        return;
-    }
-
-    const dob = new Date(dobValue);
-    if (Number.isNaN(dob.getTime())) {
-        showToast('Invalid date of birth.', 'alert-circle');
-        return;
-    }
-    const now = new Date();
-    let age = now.getFullYear() - dob.getFullYear();
-    const m = now.getMonth() - dob.getMonth();
-    if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age -= 1;
-    if (age < 18) {
-        showToast('You must be 18+ to be verified.', 'alert-circle');
-        return;
-    }
-
-    if (!requireAuthOrPrompt()) return;
-    const client = initSupabase();
-    if (!client) {
-        showToast('Supabase is not configured', 'alert-circle');
-        return;
-    }
-
-    const { data: userData, error: userErr } = await client.auth.getUser();
-    const userId = userData?.user?.id || null;
-    if (userErr || !userId) {
-        showToast('Please log in again', 'log-in');
-        openModal('loginModal');
-        return;
-    }
-
-    let frontPath = '';
-    let backPath = '';
-    const prefix = `${userId}/${Date.now()}`;
-    const uploadOne = async (file, kind) => {
-        const safe = safeStorageFilename(file?.name || `${kind}.png`);
-        const path = `${prefix}_${kind}_${safe}`;
-        const { error } = await client.storage.from(IDENTITY_DOCS_BUCKET).upload(path, file, {
-            cacheControl: '3600',
-            upsert: false,
-            contentType: file.type || undefined
-        });
-        if (error) throw error;
-        return path;
-    };
 
     try {
-        frontPath = await uploadOne(front, 'front');
-        backPath = await uploadOne(back, 'back');
+        const front = document.getElementById('idFrontInput')?.files?.[0];
+        const back = document.getElementById('idBackInput')?.files?.[0];
+        const dobValue = document.getElementById('idDob')?.value;
+        const confirm18 = document.getElementById('idConfirm18')?.checked;
+
+        if (!front || !back) {
+            showConfirmModal('Missing files', 'Please upload both the front and back of your ID.', null, false, 'OK', 'Close');
+            return;
+        }
+        if (!dobValue) {
+            showConfirmModal('Missing date of birth', 'Please add your date of birth to continue.', null, false, 'OK', 'Close');
+            return;
+        }
+        if (!confirm18) {
+            showConfirmModal('Confirmation required', 'Please confirm you are 18+ and that the document is valid.', null, false, 'OK', 'Close');
+            return;
+        }
+
+        const dob = new Date(dobValue);
+        if (Number.isNaN(dob.getTime())) {
+            showConfirmModal('Invalid date', 'The date of birth you selected is not valid. Please choose a correct date.', null, false, 'OK', 'Close');
+            return;
+        }
+        const now = new Date();
+        let age = now.getFullYear() - dob.getFullYear();
+        const m = now.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age -= 1;
+        if (age < 18) {
+            showConfirmModal('Not eligible', 'You must be 18+ to submit identity verification.', null, false, 'OK', 'Close');
+            return;
+        }
+
+        if (!requireAuthOrPrompt()) return;
+        const client = initSupabase();
+        if (!client) {
+            showConfirmModal('Service unavailable', 'Supabase is not configured. Please try again later.', null, false, 'OK', 'Close');
+            return;
+        }
+
+        const { data: userData, error: userErr } = await client.auth.getUser();
+        const userId = userData?.user?.id || null;
+        if (userErr || !userId) {
+            showConfirmModal('Session expired', 'Please log in again to continue.', () => openModal('loginModal'), false, 'Log in', 'Close');
+            return;
+        }
+
+        let frontPath = '';
+        let backPath = '';
+        const prefix = `${userId}/${Date.now()}`;
+        const uploadOne = async (file, kind) => {
+            const safe = safeStorageFilename(file?.name || `${kind}.png`);
+            const path = `${prefix}_${kind}_${safe}`;
+            const { error } = await client.storage.from(IDENTITY_DOCS_BUCKET).upload(path, file, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: file.type || undefined
+            });
+            if (error) throw error;
+            return path;
+        };
+
+        try {
+            frontPath = await uploadOne(front, 'front');
+            backPath = await uploadOne(back, 'back');
+        } catch (e) {
+            showConfirmModal('Upload failed', String(e?.message || 'We could not upload your documents. Please try again.'), null, false, 'OK', 'Close');
+            return;
+        }
+
+        const { error: insertErr } = await client.from('identity_applications').insert({
+            user_id: userId,
+            dob: dobValue,
+            front_path: frontPath,
+            back_path: backPath,
+            status: 'pending'
+        });
+        if (insertErr) {
+            showConfirmModal('Submission failed', String(insertErr.message || 'We could not submit your request. Please try again.'), null, false, 'OK', 'Close');
+            return;
+        }
+
+        const quest = getVerifiedQuestState();
+        saveVerifiedQuestState({ ...quest, identityVerified: true });
+        closeModal('identityVerificationModal');
+        showConfirmModal(
+            'Request received',
+            "Your identity documents were submitted successfully. Our team will review them and you’ll be notified once it’s approved.",
+            null,
+            false,
+            'OK',
+            'Close'
+        );
+        renderVerifiedQuestCard();
     } catch (e) {
-        showToast(e?.message || 'Upload failed', 'alert-circle');
-        return;
+        showConfirmModal('Unexpected error', String(e?.message || 'Something went wrong. Please try again.'), null, false, 'OK', 'Close');
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = prevBtnText;
+        }
     }
-
-    const { error: insertErr } = await client.from('identity_applications').insert({
-        user_id: userId,
-        dob: dobValue,
-        front_path: frontPath,
-        back_path: backPath,
-        status: 'pending'
-    });
-    if (insertErr) {
-        showToast(insertErr.message || 'Failed to submit', 'alert-circle');
-        return;
-    }
-
-    const quest = getVerifiedQuestState();
-    saveVerifiedQuestState({ ...quest, identityVerified: true });
-    closeModal('identityVerificationModal');
-    showToast('Identity submitted!', 'check-circle');
-    renderVerifiedQuestCard();
 }
 
 const DEMO_MODE = false;
