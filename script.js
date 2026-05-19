@@ -448,6 +448,7 @@ async function handleAuthSessionChange(session) {
             setMessageBadge(0);
             setNotificationBadge(0);
             favorites = [];
+            myProfileReviewsLoaded = false;
             try {
                 renderListings();
                 renderFavorites();
@@ -7123,7 +7124,25 @@ function renderMyProfileReviews() {
     lucide.createIcons();
 }
 
-function switchMyProfileSection(section) {
+let myProfileReviewsLoaded = false;
+
+async function ensureMyProfileReviewsLoaded() {
+    if (myProfileReviewsLoaded) return true;
+    if (!currentSupabaseUserId) return false;
+    try {
+        userProfile.reviewsData = await fetchProfileReviews(currentSupabaseUserId);
+        const summary = computeRatingSummaryFromReviews(userProfile.reviewsData);
+        userProfile.rating = summary.rating;
+        userProfile.reviews = summary.reviews;
+        updateProfileUI();
+        myProfileReviewsLoaded = true;
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+async function switchMyProfileSection(section) {
     const listingsTab = document.getElementById('myProfileListingsTab');
     const reviewsTab = document.getElementById('myProfileReviewsTab');
     const listingsPanel = document.getElementById('myProfileListingsSection');
@@ -7136,7 +7155,19 @@ function switchMyProfileSection(section) {
     listingsPanel.classList.toggle('active', showListings);
     reviewsPanel.classList.toggle('active', !showListings);
 
-    if (!showListings) renderMyProfileReviews();
+    if (!showListings) {
+        const list = document.getElementById('myProfileReviewsList');
+        if (list && !myProfileReviewsLoaded) {
+            list.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><p style="margin-top: 10px;">Loading reviews...</p></div>`;
+            lucide.createIcons();
+        }
+        const ok = await ensureMyProfileReviewsLoaded();
+        if (!ok) {
+            showToast('Failed to load profile reviews', 'alert-circle');
+            return;
+        }
+        renderMyProfileReviews();
+    }
 }
 
 let adminActiveTab = 'overview';
