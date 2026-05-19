@@ -9371,18 +9371,96 @@ function openListingDetail(listingId, { pushState = true } = {}) {
             <div class="detail-info">
                 <h2>${item.title} <span class="listing-status-badge ${String(item.availability || 'Available').toLowerCase() === 'sold' ? 'sold' : (String(item.availability || 'Available').toLowerCase() === 'reserved' ? 'pending' : 'ok')}">${escapeHtml(item.availability || 'Available')}</span></h2>
                 <div class="detail-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
-                <div class="detail-meta">
-                    <span class="meta-item meta-location"><i data-lucide="map-pin"></i> ${escapeHtml(item.location)}</span>
-                    <span class="meta-item meta-category"><i data-lucide="tag"></i> ${escapeHtml(item.subcategory ? `${item.category} · ${item.subcategory}` : item.category)}</span>
-                    <span class="meta-item meta-condition"><i data-lucide="check-circle"></i> ${escapeHtml(item.condition || '—')}</span>
-                    <span class="meta-item meta-delivery"><i data-lucide="truck"></i> ${escapeHtml(item.delivery || '—')}</span>
-                    <span class="meta-item meta-price-type"><i data-lucide="badge-dollar-sign"></i> ${escapeHtml(item.price_type || '—')}</span>
-                    <span class="meta-item meta-date"><i data-lucide="calendar"></i> ${item.date}</span>
-                    <span class="meta-item meta-views"><i data-lucide="eye"></i> <span id="listingViewsCount">${Number(item.views_count) || 0}</span></span>
-                    <button class="detail-like-btn meta-like ${isLiked ? 'active' : ''} ${pulse ? 'pulse' : ''}" type="button" onclick="toggleFavorite(event, ${item.id})" title="Like">
-                        <i data-lucide="heart"></i>
-                        <span id="listingLikesCount">${Number(item.likes_count) || 0}</span>
-                    </button>
+                <div class="detail-kv-grid">
+                    <div class="kv-card">
+                        <div class="kv-card-head">
+                            <div class="kv-card-title"><i data-lucide="file-text"></i> Informations de l'annonce</div>
+                        </div>
+                        <div class="kv-rows">
+                            <div class="kv-row">
+                                <div class="kv-label">Numéro</div>
+                                <div class="kv-value">${escapeHtml(String(item.id ?? '—'))}</div>
+                            </div>
+                            <div class="kv-row">
+                                <div class="kv-label">Date</div>
+                                <div class="kv-value">${escapeHtml(String(item.date || '—'))}</div>
+                            </div>
+                            <div class="kv-row">
+                                <div class="kv-label">Localisation</div>
+                                <div class="kv-value">${escapeHtml(item.location || '—')}</div>
+                            </div>
+                            <div class="kv-row">
+                                <div class="kv-label">Catégorie</div>
+                                <div class="kv-value">${escapeHtml(item.subcategory ? `${item.category} · ${item.subcategory}` : (item.category || '—'))}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="kv-card">
+                        <div class="kv-card-head">
+                            <div class="kv-card-title"><i data-lucide="list-check"></i> Détails</div>
+                        </div>
+                        <div class="kv-rows">
+                            <div class="kv-row">
+                                <div class="kv-label">Disponibilité</div>
+                                <div class="kv-value">${escapeHtml(item.availability || '—')}</div>
+                            </div>
+                            <div class="kv-row">
+                                <div class="kv-label">État</div>
+                                <div class="kv-value">${escapeHtml(item.condition || '—')}</div>
+                            </div>
+                            <div class="kv-row">
+                                <div class="kv-label">Livraison</div>
+                                <div class="kv-value">${escapeHtml(item.delivery || '—')}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="kv-card">
+                        <div class="kv-card-head">
+                            <div class="kv-card-title"><i data-lucide="badge-dollar-sign"></i> Prix</div>
+                        </div>
+                        <div class="kv-rows">
+                            <div class="kv-row">
+                                <div class="kv-label">Type</div>
+                                <div class="kv-value">${escapeHtml(item.price_type || '—')}</div>
+                            </div>
+                            <div class="kv-row">
+                                <div class="kv-label">Montant</div>
+                                <div class="kv-value">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="kv-card">
+                        <div class="kv-card-head">
+                            <div class="kv-card-title"><i data-lucide="bar-chart-3"></i> Statistiques</div>
+                        </div>
+                        <div class="kv-rows">
+                            <div class="kv-row">
+                                <div class="kv-label">Vues</div>
+                                <div class="kv-value"><span id="listingViewsCount">${Number(item.views_count) || 0}</span></div>
+                            </div>
+                            <div class="kv-row">
+                                <div class="kv-label">Likes</div>
+                                <div class="kv-value kv-value-actions">
+                                    <button class="detail-like-btn ${isLiked ? 'active' : ''} ${pulse ? 'pulse' : ''}" type="button" onclick="toggleFavorite(event, ${item.id})" title="Like">
+                                        <i data-lucide="heart"></i>
+                                        <span id="listingLikesCount">${Number(item.likes_count) || 0}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    ${item.contact_phone ? `
+                    <div class="kv-card">
+                        <div class="kv-card-head">
+                            <div class="kv-card-title"><i data-lucide="phone"></i> Contact</div>
+                        </div>
+                        <div class="kv-rows">
+                            <div class="kv-row">
+                                <div class="kv-label">Téléphone</div>
+                                <div class="kv-value">${escapeHtml(item.contact_phone)}</div>
+                            </div>
+                        </div>
+                    </div>` : ''}
                 </div>
                 ${item.description ? `<div class="detail-description"><h3>Description</h3><p>${escapeHtml(item.description)}</p></div>` : ''}
                 ${Array.isArray(item.tags) && item.tags.length ? `<div class="detail-tags">${item.tags.map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
