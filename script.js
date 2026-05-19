@@ -9372,14 +9372,14 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                 <h2>${item.title} <span class="listing-status-badge ${String(item.availability || 'Available').toLowerCase() === 'sold' ? 'sold' : (String(item.availability || 'Available').toLowerCase() === 'reserved' ? 'pending' : 'ok')}">${escapeHtml(item.availability || 'Available')}</span></h2>
                 <div class="detail-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
                 <div class="detail-meta">
-                    <span><i data-lucide="map-pin"></i> ${escapeHtml(item.location)}</span>
-                    <span><i data-lucide="tag"></i> ${escapeHtml(item.subcategory ? `${item.category} · ${item.subcategory}` : item.category)}</span>
-                    <span><i data-lucide="check-circle"></i> ${escapeHtml(item.condition || '—')}</span>
-                    <span><i data-lucide="truck"></i> ${escapeHtml(item.delivery || '—')}</span>
-                    <span><i data-lucide="badge-dollar-sign"></i> ${escapeHtml(item.price_type || '—')}</span>
-                    <span><i data-lucide="calendar"></i> ${item.date}</span>
-                    <span><i data-lucide="eye"></i> <span id="listingViewsCount">${Number(item.views_count) || 0}</span></span>
-                    <button class="detail-like-btn ${isLiked ? 'active' : ''} ${pulse ? 'pulse' : ''}" type="button" onclick="toggleFavorite(event, ${item.id})" title="Like">
+                    <span class="meta-item meta-location"><i data-lucide="map-pin"></i> ${escapeHtml(item.location)}</span>
+                    <span class="meta-item meta-category"><i data-lucide="tag"></i> ${escapeHtml(item.subcategory ? `${item.category} · ${item.subcategory}` : item.category)}</span>
+                    <span class="meta-item meta-condition"><i data-lucide="check-circle"></i> ${escapeHtml(item.condition || '—')}</span>
+                    <span class="meta-item meta-delivery"><i data-lucide="truck"></i> ${escapeHtml(item.delivery || '—')}</span>
+                    <span class="meta-item meta-price-type"><i data-lucide="badge-dollar-sign"></i> ${escapeHtml(item.price_type || '—')}</span>
+                    <span class="meta-item meta-date"><i data-lucide="calendar"></i> ${item.date}</span>
+                    <span class="meta-item meta-views"><i data-lucide="eye"></i> <span id="listingViewsCount">${Number(item.views_count) || 0}</span></span>
+                    <button class="detail-like-btn meta-like ${isLiked ? 'active' : ''} ${pulse ? 'pulse' : ''}" type="button" onclick="toggleFavorite(event, ${item.id})" title="Like">
                         <i data-lucide="heart"></i>
                         <span id="listingLikesCount">${Number(item.likes_count) || 0}</span>
                     </button>
