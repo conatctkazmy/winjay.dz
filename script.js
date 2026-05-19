@@ -4515,7 +4515,16 @@ function bindSelectPickerDropdown() {
         if (content && content.contains(e.target)) return;
         const id = String(selectPickerTargetSelectId || '').trim();
         const btn = id ? document.querySelector(`.select-picker-btn[data-select-id="${CSS.escape(id)}"]`) : null;
-        if (btn && (btn === e.target || btn.contains(e.target))) return;
+        if (btn && (btn === e.target || btn.contains(e.target))) {
+            closeModal('selectPickerModal');
+            try {
+                e.preventDefault?.();
+                e.stopPropagation?.();
+            } catch (err) {
+                null;
+            }
+            return;
+        }
         closeModal('selectPickerModal');
     }, true);
 
