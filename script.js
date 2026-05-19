@@ -226,22 +226,26 @@ function mapSupabaseListingRow(row, profilesById = {}) {
     };
 }
 
-async function fetchListingsFromSupabase({ silent = false } = {}) {
+async function fetchListingsFromSupabase({ silent = false, includeProfiles = false, limit = 200 } = {}) {
     const client = initSupabase();
     if (!client) return;
-    const { data, error } = await client
+    let query = client
         .from('listings')
         .select(
             'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, listing_images(url, sort_order)'
         )
         .order('created_at', { ascending: false });
+    const safeLimit = Number(limit) || 0;
+    if (safeLimit > 0) query = query.limit(safeLimit);
+    const { data, error } = await query;
     if (error) {
         if (!silent) showToast(error.message || 'Failed to load listings', 'alert-circle');
         return;
     }
-    const ownerIds = Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean)));
-    const profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
+    const ownerIds = includeProfiles ? Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean))) : [];
+    const profilesById = includeProfiles && ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
     listings = (data || []).map((row) => mapSupabaseListingRow(row, profilesById));
+    saveMarketplaceListingsToStorage();
     syncMyListingsFromListings();
     renderListings();
     renderMyListings();
@@ -1373,10 +1377,13 @@ let createListingMode = 'create';
 let confirmCallback = null;
 let currentListingDetailId = null;
 let currentSellerProfileTag = null;
+let currentSellerProfileOwnerId = null;
+let currentSellerProfileName = '';
 const listingReviewPanelState = {};
 const listingDetailImageIndex = {};
 const listingReviewsCache = new Map();
 const profileRatingSummaryCache = new Map();
+const sellerProfileReviewsCache = new Map();
 let listingDetailViewRecordedListingId = null;
 let listingDetailViewRecorded = false;
 
@@ -2555,9 +2562,10 @@ async function fetchProfileByTag(tag) {
     const t = String(tag || '').trim().toLowerCase();
     if (!t) return null;
     const normalized = t.startsWith('@') ? t : '@' + t;
-    const viewAttempt = await client.from('public_profiles').select('*').eq('tag', normalized).maybeSingle();
+    const selectCols = 'id, created_at, display_name, tag, avatar_url, cover_url, location, business_type, work_category, is_vip, verified';
+    const viewAttempt = await client.from('public_profiles').select(selectCols).eq('tag', normalized).maybeSingle();
     if (!viewAttempt.error && viewAttempt.data) return viewAttempt.data;
-    const { data, error } = await client.from('profiles').select('*').eq('tag', normalized).maybeSingle();
+    const { data, error } = await client.from('profiles').select(selectCols).eq('tag', normalized).maybeSingle();
     if (error) {
         if (!hasShownProfilesReadToast) {
             hasShownProfilesReadToast = true;
@@ -2574,7 +2582,18 @@ async function fetchProfilesByIds(ids) {
     const list = Array.isArray(ids) ? ids.filter(Boolean) : [];
     if (!list.length) return {};
 
-    const viewAttempt = await client.from('public_profiles').select('*').in('id', list);
+    if (list.length > 200) {
+        const out = {};
+        for (let i = 0; i < list.length; i += 200) {
+            const chunk = list.slice(i, i + 200);
+            const part = await fetchProfilesByIds(chunk);
+            Object.assign(out, part);
+        }
+        return out;
+    }
+
+    const selectCols = 'id, created_at, display_name, tag, avatar_url, cover_url, location, business_type, work_category, is_vip, verified';
+    const viewAttempt = await client.from('public_profiles').select(selectCols).in('id', list);
     if (!viewAttempt.error) {
         const out = {};
         (viewAttempt.data || []).forEach((p) => {
@@ -2583,7 +2602,7 @@ async function fetchProfilesByIds(ids) {
         return out;
     }
 
-    const { data, error } = await client.from('profiles').select('*').in('id', list);
+    const { data, error } = await client.from('profiles').select(selectCols).in('id', list);
     if (error) {
         if (!hasShownProfilesReadToast) {
             hasShownProfilesReadToast = true;
@@ -2903,12 +2922,14 @@ function computeRatingSummaryFromReviews(reviewsData) {
 async function fetchProfileReviews(profileId) {
     const client = initSupabase();
     if (!client || !profileId) return [];
+    const pid = String(profileId || '').trim();
+    if (!pid) return [];
     const selectWithReplies = 'id, created_at, author_id, rating, comment, reply, reply_author_id, reply_created_at';
     const baseQuery = (targetColumn, selectCols) =>
         client
             .from('profile_reviews')
             .select(selectCols)
-            .eq(targetColumn, profileId)
+            .eq(targetColumn, pid)
             .order('created_at', { ascending: false })
             .limit(200);
 
@@ -3988,9 +4009,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!supabaseClient) {
         loadUserProfileFromStorage();
     }
-    await fetchListingsFromSupabase({ silent: false });
     populateWilayas();
-    await loadAlgeriaCommunesData();
+    loadAlgeriaCommunesData();
     populateCategories();
     setupListingSubcategorySelects();
     setupListingCitySelects();
@@ -4034,6 +4054,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const listingParam = params.get('listing');
     const editParam = params.get('edit');
     const newListingParam = params.get('new');
+    const listingIdFromUrl = Number(listingParam) || 0;
+    const editIdFromUrl = Number(editParam) || 0;
+
+    if (listingsGrid && (!Array.isArray(listings) || listings.length === 0)) {
+        listingsGrid.innerHTML = `<div style="padding: 28px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 44px; height: 44px;"></i><p style="margin-top: 12px;">Loading listings...</p></div>`;
+        lucide.createIcons();
+    }
+    const listingsPromise = fetchListingsFromSupabase({ silent: false, includeProfiles: false, limit: 200 });
+
     if (profileParam) {
         const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
         showSection('seller-profile-section');
@@ -4043,22 +4072,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             lucide.createIcons();
         }
         await openSellerProfile(tag.toLowerCase(), 'listings', { pushState: false });
-    } else if (listingParam) {
-        const id = Number(listingParam);
-        if (Number.isFinite(id) && id > 0) {
-            openListingDetail(id, { pushState: false });
-        } else {
-            showSection('home-section');
-        }
-    } else if (editParam) {
-        const id = Number(editParam);
-        if (Number.isFinite(id) && id > 0) {
-            openEditListingPageById(id, { pushState: false });
-        } else {
-            showSection('home-section');
-        }
     } else if (newListingParam) {
         openCreateListingPage({ pushState: false });
+    } else if (Number.isFinite(editIdFromUrl) && editIdFromUrl > 0) {
+        await listingsPromise;
+        openEditListingPageById(editIdFromUrl, { pushState: false });
+    } else if (Number.isFinite(listingIdFromUrl) && listingIdFromUrl > 0) {
+        await listingsPromise;
+        openListingDetail(listingIdFromUrl, { pushState: false });
     } else {
         if (lastSection === 'seller-profile-section') {
             const storedTag = (localStorage.getItem(SELLER_PROFILE_LAST_TAG_STORAGE_KEY) || '').trim();
@@ -4078,13 +4099,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    renderListings();
+    if (DEMO_MODE) renderListings();
     updateProfileUI();
     renderFavorites();
     setupChatFeatures();
     setupMessagesTwitterUI();
     bindChatJumpLatestScroll();
-    await bootstrapMessages();
+    bootstrapMessages();
     maybeOpenPendingAdmin();
     if (!window.__winjayRouteHooked) {
         window.__winjayRouteHooked = true;
@@ -4227,7 +4248,7 @@ async function loadAlgeriaCommunesData() {
     if (communesLoadPromise) return communesLoadPromise;
     communesLoadPromise = (async () => {
         try {
-            const res = await fetch('algeria_communes.json', { cache: 'no-store' });
+            const res = await fetch('algeria_communes.json', { cache: 'force-cache' });
             if (!res.ok) throw new Error('Failed to load communes dataset');
             const data = await res.json();
             const entries = Array.isArray(data?.wilayas) ? data.wilayas : [];
@@ -9973,7 +9994,23 @@ async function shareSellerProfile(ownerId, tag, name) {
     if (shared && ownerId) await createNotificationFromClient({ recipientId: ownerId, type: 'profile_share', targetProfileId: ownerId, meta: { platform: 'share' } });
 }
 
-function switchSellerProfileSection(section = 'listings') {
+async function ensureSellerProfileReviewsLoaded(ownerId) {
+    const id = String(ownerId || '').trim();
+    if (!id) return [];
+    if (sellerProfileReviewsCache.has(id)) return sellerProfileReviewsCache.get(id) || [];
+    const rows = await fetchProfileReviews(id);
+    sellerProfileReviewsCache.set(id, rows);
+    const summary = computeRatingSummaryFromReviews(rows);
+    profileRatingSummaryCache.set(id, summary);
+    const ratingEl = document.getElementById('sellerProfileRatingContainer');
+    if (ratingEl) ratingEl.innerHTML = getRatingHTML(summary.rating, summary.reviews);
+    const listEl = document.getElementById('sellerProfileReviewsList');
+    if (listEl) listEl.innerHTML = getReviewsListHTML(rows, currentSellerProfileName || 'Seller', false, 'profile', currentSellerProfileTag || '');
+    lucide.createIcons();
+    return rows;
+}
+
+async function switchSellerProfileSection(section = 'listings') {
     const listingsTab = document.getElementById('sellerListingsTab');
     const reviewsTab = document.getElementById('sellerReviewsTab');
     const listingsPanel = document.getElementById('sellerListingsSection');
@@ -9985,6 +10022,18 @@ function switchSellerProfileSection(section = 'listings') {
     reviewsTab.classList.toggle('active', !showListings);
     listingsPanel.classList.toggle('active', showListings);
     reviewsPanel.classList.toggle('active', !showListings);
+    if (!showListings && currentSellerProfileOwnerId) {
+        const listEl = document.getElementById('sellerProfileReviewsList');
+        if (listEl && !sellerProfileReviewsCache.has(String(currentSellerProfileOwnerId))) {
+            listEl.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><p style="margin-top: 10px;">Loading reviews...</p></div>`;
+            lucide.createIcons();
+        }
+        try {
+            await ensureSellerProfileReviewsLoaded(currentSellerProfileOwnerId);
+        } catch (e) {
+            showToast('Failed to load profile reviews', 'alert-circle');
+        }
+    }
 }
 
 function mapProfileRowToSeller(row) {
@@ -10035,11 +10084,17 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
     }
     currentSellerProfileTag = profileRow.tag || '';
     const seller = mapProfileRowToSeller(profileRow);
+    currentSellerProfileOwnerId = String(profileRow.id || ownerId || '');
+    currentSellerProfileName = seller.name || '';
     setSellerProfileRouteTag(seller.tag || profileRow.tag || '', { pushState: true, from, fromListingId });
-    seller.reviewsData = await fetchProfileReviews(profileRow.id);
-    const sellerSummary = computeRatingSummaryFromReviews(seller.reviewsData);
-    seller.rating = sellerSummary.rating;
-    seller.reviews = sellerSummary.reviews;
+    const cachedSummary = profileRatingSummaryCache.get(String(profileRow.id)) || null;
+    if (cachedSummary) {
+        seller.rating = cachedSummary.rating;
+        seller.reviews = cachedSummary.reviews;
+    } else {
+        seller.rating = 0;
+        seller.reviews = 0;
+    }
     const content = document.getElementById('externalProfileContent');
     const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === ownerId);
     if (!content) return;
@@ -10056,7 +10111,7 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
                     <div class="profile-text">
                         <div class="name-badge"><h2>${seller.name}</h2> ${getUserBadgesHTML(seller)}</div>
                         <p>${seller.tag}</p>
-                        ${getRatingHTML(seller.rating, seller.reviews)}
+                        <div id="sellerProfileRatingContainer">${getRatingHTML(seller.rating, seller.reviews)}</div>
                         <div class="profile-bio-box">
                             <div class="bio-item"><i data-lucide="map-pin"></i><span>${seller.location}</span></div>
                             <div class="bio-item"><i data-lucide="briefcase"></i><span>${seller.businessType}</span></div>
@@ -10105,12 +10160,19 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
                     <button class="submit-btn" type="button" onclick="addProfileReviewById('${ownerId}','seller-profile')">Post review</button>
                     </div>
                 <h3 style="margin-top:18px;">Reviews about ${seller.name}</h3>
-                <div class="reviews-list">${getReviewsListHTML(seller.reviewsData, seller.name, false, 'profile', seller.tag)}</div>
+                <div class="reviews-list" id="sellerProfileReviewsList">${getReviewsListHTML([], seller.name, false, 'profile', seller.tag)}</div>
                 </div>
             </div>
         </div>`;
     showSection('seller-profile-section');
     switchSellerProfileSection(section);
+    fetchProfileRatingSummary(profileRow.id).then((summary) => {
+        if (String(currentSellerProfileOwnerId || '') !== String(profileRow.id || '')) return;
+        profileRatingSummaryCache.set(String(profileRow.id), summary);
+        const el = document.getElementById('sellerProfileRatingContainer');
+        if (el) el.innerHTML = getRatingHTML(summary.rating, summary.reviews);
+        lucide.createIcons();
+    });
     lucide.createIcons();
 }
 
@@ -10121,14 +10183,9 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         switchMyProfileSection(section);
         return;
     }
-    const client = initSupabase();
-    if (!client) {
-        showToast('Supabase is not configured', 'alert-circle');
-        return;
-    }
     const content = document.getElementById('externalProfileContent');
-    const { data: profileRow, error } = await client.from('profiles').select('*').eq('tag', tag).maybeSingle();
-    if (error || !profileRow?.id) {
+    const profileRow = await fetchProfileByTag(tag);
+    if (!profileRow?.id) {
         showToast('Seller profile not found', 'alert-circle');
         if (content) {
             content.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-muted);"><i data-lucide="user-x" style="width: 44px; height: 44px;"></i><p style="margin-top: 12px;">Profile not found.</p></div>`;
@@ -10140,10 +10197,16 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
     const from = getActiveSectionId();
     const fromListingId = from === 'listing-detail-section' ? currentListingDetailId : null;
     setSellerProfileRouteTag(seller.tag || profileRow.tag || '', { pushState, from, fromListingId });
-    seller.reviewsData = await fetchProfileReviews(profileRow.id);
-    const sellerSummary = computeRatingSummaryFromReviews(seller.reviewsData);
-    seller.rating = sellerSummary.rating;
-    seller.reviews = sellerSummary.reviews;
+    currentSellerProfileOwnerId = String(profileRow.id || '');
+    currentSellerProfileName = seller.name || '';
+    const cachedSummary = profileRatingSummaryCache.get(String(profileRow.id)) || null;
+    if (cachedSummary) {
+        seller.rating = cachedSummary.rating;
+        seller.reviews = cachedSummary.reviews;
+    } else {
+        seller.rating = 0;
+        seller.reviews = 0;
+    }
     if (!content) return;
     const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === profileRow.id);
     content.innerHTML = `
@@ -10159,7 +10222,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
                     <div class="profile-text">
                         <div class="name-badge"><h2>${seller.name}</h2> ${getUserBadgesHTML(seller)}</div>
                         <p>${seller.tag}</p>
-                        ${getRatingHTML(seller.rating, seller.reviews)}
+                        <div id="sellerProfileRatingContainer">${getRatingHTML(seller.rating, seller.reviews)}</div>
                         <div class="profile-bio-box">
                             <div class="bio-item"><i data-lucide="map-pin"></i><span>${seller.location}</span></div>
                             <div class="bio-item"><i data-lucide="briefcase"></i><span>${seller.businessType}</span></div>
@@ -10208,12 +10271,19 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
                         <button class="submit-btn" type="button" onclick="addProfileReviewById('${profileRow.id}','seller-profile')">Publier l'avis</button>
                     </div>
                     <h3 style="margin-top:18px;">Avis sur ${seller.name}</h3>
-                    <div class="reviews-list">${getReviewsListHTML(seller.reviewsData, seller.name, false, 'profile', seller.tag)}</div>
+                    <div class="reviews-list" id="sellerProfileReviewsList">${getReviewsListHTML([], seller.name, false, 'profile', seller.tag)}</div>
                 </div>
             </div>
         </div>`;
     showSection('seller-profile-section');
     switchSellerProfileSection(section);
+    fetchProfileRatingSummary(profileRow.id).then((summary) => {
+        if (String(currentSellerProfileOwnerId || '') !== String(profileRow.id || '')) return;
+        profileRatingSummaryCache.set(String(profileRow.id), summary);
+        const el = document.getElementById('sellerProfileRatingContainer');
+        if (el) el.innerHTML = getRatingHTML(summary.rating, summary.reviews);
+        lucide.createIcons();
+    });
     lucide.createIcons();
 }
 
