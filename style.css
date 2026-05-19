@@ -553,10 +553,15 @@ body.modal-open .mobile-footer-bar {
 html.dropdown-open,
 body.dropdown-open {
     overflow-y: scroll;
+    overscroll-behavior: none;
 }
 
 body.dropdown-open .mobile-footer-bar {
     display: none !important;
+}
+
+body.dropdown-open {
+    touch-action: none;
 }
 
 body.sidebar-open {
@@ -3652,6 +3657,9 @@ body.dark-mode .listing-status-badge {
     max-height: min(320px, 45vh);
     overflow-y: auto;
     padding-right: 6px;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
 }
 
 #selectPickerModal .close {

@@ -4442,6 +4442,8 @@ let selectPickerTitleBound = false;
 let dropdownScrollLocked = false;
 let dropdownScrollLockedY = 0;
 let dropdownScrollHandlersBound = false;
+let selectPickerSuppressOpenUntil = 0;
+let selectPickerSuppressOpenId = '';
 
 function isSelectPickerEventTargetInsideDropdown(target) {
     const modal = document.getElementById('selectPickerModal');
@@ -4495,6 +4497,7 @@ function lockDropdownScroll() {
     document.documentElement.classList.add('dropdown-open');
     document.body.classList.add('dropdown-open');
     bindDropdownScrollLockHandlers();
+    window.scrollTo(0, dropdownScrollLockedY);
 }
 
 function unlockDropdownScroll() {
@@ -4519,6 +4522,8 @@ function bindSelectPickerDropdown() {
         if (nextBtn) {
             if (activeBtn && (nextBtn === activeBtn || activeBtn.contains(nextBtn))) {
                 closeModal('selectPickerModal');
+                selectPickerSuppressOpenId = id;
+                selectPickerSuppressOpenUntil = Date.now() + 450;
                 try {
                     e.preventDefault?.();
                     e.stopPropagation?.();
@@ -4713,6 +4718,7 @@ function getPickerScrollTopForAnchor(anchor) {
 function openSelectPickerFor(selectId) {
     const id = String(selectId || '').trim();
     if (!id) return;
+    if (selectPickerSuppressOpenId === id && Date.now() < selectPickerSuppressOpenUntil) return;
     const select = document.getElementById(id);
     if (!select || select.disabled) return;
     selectPickerTargetSelectId = id;
@@ -4746,11 +4752,11 @@ function openSelectPickerFor(selectId) {
         const top = getPickerScrollTopForAnchor(selectPickerAnchorEl);
         if (typeof top === 'number') {
             try {
-                window.scrollTo({ top, behavior: 'smooth' });
+                window.scrollTo({ top, behavior: 'auto' });
             } catch (e) {
                 window.scrollTo(0, top);
             }
-            setTimeout(openNow, 220);
+            setTimeout(openNow, 40);
         } else {
             openNow();
         }
