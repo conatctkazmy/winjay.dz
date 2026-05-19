@@ -8947,7 +8947,7 @@ async function addThreadComment(contextType, targetId, index) {
             showToast('Review not found', 'alert-circle');
             return;
         }
-        const { error } = await client.from('profile_review_comments').insert({ review_id: reviewId, author_id: currentSupabaseUserId, text: escapeHtml(text) });
+        const { error } = await client.from('profile_review_comments').insert({ review_id: reviewId, author_id: currentSupabaseUserId, body: escapeHtml(text) });
         if (error) {
             showToast(error.message || 'Failed to add comment', 'alert-circle');
             return;
