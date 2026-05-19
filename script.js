@@ -2220,7 +2220,7 @@ function handleAuthExpired(error) {
     return true;
 }
 
-function setSellerProfileRouteTag(tag) {
+function setSellerProfileRouteTag(tag, { pushState = true, from = '', fromListingId = null } = {}) {
     const t = String(tag || '').trim().toLowerCase();
     if (!t) return;
     try {
@@ -2230,8 +2230,21 @@ function setSellerProfileRouteTag(tag) {
     }
     try {
         const url = new URL(window.location.href);
+        url.searchParams.delete('listing');
+        url.searchParams.delete('new');
         url.searchParams.set('profile', t.startsWith('@') ? t : '@' + t);
-        window.history.replaceState({}, '', url.toString());
+        const state = {
+            __winjay: true,
+            view: 'profile',
+            tag: t.startsWith('@') ? t : '@' + t,
+            from: from ? String(from) : '',
+            fromListingId: fromListingId ? Number(fromListingId) : null
+        };
+        if (pushState) {
+            window.history.pushState(state, '', url.pathname + url.search);
+        } else {
+            window.history.replaceState(state, '', url.pathname + url.search);
+        }
     } catch (e) {
         null;
     }
@@ -4025,7 +4038,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             content.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 44px; height: 44px;"></i><p style="margin-top: 12px;">Loading profile...</p></div>`;
             lucide.createIcons();
         }
-        await openSellerProfile(tag.toLowerCase());
+        await openSellerProfile(tag.toLowerCase(), 'listings', { pushState: false });
     } else if (listingParam) {
         const id = Number(listingParam);
         if (Number.isFinite(id) && id > 0) {
@@ -8004,6 +8017,32 @@ function clearListingRouteParams({ replace = true } = {}) {
     }
 }
 
+function navigateBackFromSellerProfileFlow() {
+    const state = history.state && typeof history.state === 'object' ? history.state : null;
+    const from = state?.from ? String(state.from) : '';
+    const fromListingId = Number(state?.fromListingId) || 0;
+    if (history.length > 1) {
+        history.back();
+        return;
+    }
+    if (from === 'listing-detail-section' && fromListingId > 0) {
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('profile');
+            url.searchParams.delete('new');
+            url.searchParams.set('listing', String(fromListingId));
+            history.replaceState({ __winjay: true, view: 'listing', listingId: fromListingId, from: 'seller-profile-section' }, '', url.pathname + url.search);
+        } catch (e) {
+            null;
+        }
+        openListingDetail(fromListingId, { pushState: false });
+        return;
+    }
+    clearSellerProfileRouteTag();
+    const last = (localStorage.getItem('winjayLastSection') || '').trim() || 'home-section';
+    showSection(last === 'listing-detail-section' || last === 'create-listing-section' ? 'home-section' : last);
+}
+
 function navigateBackFromListingFlow() {
     const state = history.state && typeof history.state === 'object' ? history.state : null;
     const from = state?.from ? String(state.from) : '';
@@ -8052,7 +8091,17 @@ function openCreateListingPage({ pushState = true } = {}) {
 function handleListingRoutesFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const profileParam = params.get('profile');
-    if (profileParam) return;
+    if (profileParam) {
+        const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
+        showSection('seller-profile-section');
+        const content = document.getElementById('externalProfileContent');
+        if (content) {
+            content.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 44px; height: 44px;"></i><p style="margin-top: 12px;">Loading profile...</p></div>`;
+            lucide.createIcons();
+        }
+        openSellerProfile(tag.toLowerCase(), 'listings', { pushState: false });
+        return;
+    }
     const listingParam = params.get('listing');
     const newListingParam = params.get('new');
     if (listingParam) {
@@ -9680,6 +9729,8 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
         switchMyProfileSection(section);
         return;
     }
+    const from = getActiveSectionId();
+    const fromListingId = from === 'listing-detail-section' ? currentListingDetailId : null;
     const profilesById = await fetchProfilesByIds([ownerId]);
     const profileRow = profilesById[ownerId] || null;
     if (!profileRow?.id) {
@@ -9688,7 +9739,7 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
     }
     currentSellerProfileTag = profileRow.tag || '';
     const seller = mapProfileRowToSeller(profileRow);
-    setSellerProfileRouteTag(seller.tag || profileRow.tag || '');
+    setSellerProfileRouteTag(seller.tag || profileRow.tag || '', { pushState: true, from, fromListingId });
     seller.reviewsData = await fetchProfileReviews(profileRow.id);
     const sellerSummary = computeRatingSummaryFromReviews(seller.reviewsData);
     seller.rating = sellerSummary.rating;
@@ -9767,7 +9818,7 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
     lucide.createIcons();
 }
 
-async function openSellerProfile(tag, section = 'listings') {
+async function openSellerProfile(tag, section = 'listings', { pushState = true } = {}) {
     currentSellerProfileTag = tag;
     if (tag === userProfile.tag) {
         showSection('profile-section');
@@ -9790,7 +9841,9 @@ async function openSellerProfile(tag, section = 'listings') {
         return;
     }
     const seller = mapProfileRowToSeller(profileRow);
-    setSellerProfileRouteTag(seller.tag || profileRow.tag || '');
+    const from = getActiveSectionId();
+    const fromListingId = from === 'listing-detail-section' ? currentListingDetailId : null;
+    setSellerProfileRouteTag(seller.tag || profileRow.tag || '', { pushState, from, fromListingId });
     seller.reviewsData = await fetchProfileReviews(profileRow.id);
     const sellerSummary = computeRatingSummaryFromReviews(seller.reviewsData);
     seller.rating = sellerSummary.rating;
