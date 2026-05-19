@@ -549,6 +549,15 @@ body.modal-open .mobile-footer-bar {
     display: none !important;
 }
 
+html.dropdown-open,
+body.dropdown-open {
+    overflow-y: scroll;
+}
+
+body.dropdown-open .mobile-footer-bar {
+    display: none !important;
+}
+
 body.sidebar-open {
     overflow: hidden;
 }

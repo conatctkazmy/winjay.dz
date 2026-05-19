@@ -4439,6 +4439,71 @@ let selectPickerCachedOptions = [];
 let selectPickerAnchorEl = null;
 let selectPickerDropdownBound = false;
 let selectPickerTitleBound = false;
+let dropdownScrollLocked = false;
+let dropdownScrollLockedY = 0;
+let dropdownScrollHandlersBound = false;
+
+function isSelectPickerEventTargetInsideDropdown(target) {
+    const modal = document.getElementById('selectPickerModal');
+    if (!modal || !modal.classList.contains('active')) return false;
+    const content = modal.querySelector('.modal-content');
+    return !!content && content.contains(target);
+}
+
+function bindDropdownScrollLockHandlers() {
+    if (dropdownScrollHandlersBound) return;
+    dropdownScrollHandlersBound = true;
+
+    window.addEventListener('scroll', () => {
+        if (!dropdownScrollLocked) return;
+        const y = dropdownScrollLockedY;
+        const now = window.scrollY || window.pageYOffset || 0;
+        if (Math.abs(now - y) < 2) return;
+        window.scrollTo(0, y);
+    }, { passive: true });
+
+    document.addEventListener('wheel', (e) => {
+        if (!dropdownScrollLocked) return;
+        if (isSelectPickerEventTargetInsideDropdown(e.target)) return;
+        e.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!dropdownScrollLocked) return;
+        if (isSelectPickerEventTargetInsideDropdown(e.target)) return;
+        e.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener('keydown', (e) => {
+        if (!dropdownScrollLocked) return;
+        if (isSelectPickerEventTargetInsideDropdown(e.target)) return;
+        const k = String(e.key || '');
+        const block = [
+            'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+            'PageUp', 'PageDown', 'Home', 'End', ' ',
+            'Spacebar'
+        ];
+        if (!block.includes(k)) return;
+        e.preventDefault();
+    });
+}
+
+function lockDropdownScroll() {
+    if (dropdownScrollLocked) return;
+    dropdownScrollLocked = true;
+    dropdownScrollLockedY = window.scrollY || window.pageYOffset || 0;
+    document.documentElement.classList.add('dropdown-open');
+    document.body.classList.add('dropdown-open');
+    bindDropdownScrollLockHandlers();
+}
+
+function unlockDropdownScroll() {
+    if (!dropdownScrollLocked) return;
+    dropdownScrollLocked = false;
+    dropdownScrollLockedY = 0;
+    document.documentElement.classList.remove('dropdown-open');
+    document.body.classList.remove('dropdown-open');
+}
 
 function bindSelectPickerDropdown() {
     if (selectPickerDropdownBound) return;
@@ -4648,7 +4713,7 @@ function openSelectPickerFor(selectId) {
     selectPickerAnchorEl = getPickerButtonForSelect(select) || select;
     const openNow = () => {
         modal.classList.add('active');
-        body.classList.add('modal-open');
+        lockDropdownScroll();
         positionSelectPickerDropdown();
         setTimeout(positionSelectPickerDropdown, 160);
         setTimeout(positionSelectPickerDropdown, 420);
@@ -4970,6 +5035,7 @@ function closeModal(modalId) {
         selectPickerTargetSelectId = '';
         selectPickerCachedOptions = [];
         selectPickerAnchorEl = null;
+        unlockDropdownScroll();
         try {
             const content = el ? el.querySelector('.modal-content') : null;
             if (content) {
