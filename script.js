@@ -4291,6 +4291,7 @@ function populateCategories() {
         if (this.value === "OPEN_OTHER_MODAL") {
             openCategoryPicker('listingCategory');
             this.value = "";
+            refreshSelectPicker(this);
         }
     });
     lucide.createIcons();
@@ -4593,15 +4594,6 @@ function setupSelectPickers() {
     const nodes = selectors.flatMap((sel) => Array.from(document.querySelectorAll(sel)));
     nodes.forEach((el) => enhanceSelectToPicker(el));
     nodes.forEach((el) => refreshSelectPicker(el));
-
-    const listingCategory = document.getElementById('listingCategory');
-    if (listingCategory) {
-        const btn = getPickerButtonForSelect(listingCategory);
-        if (btn && !btn.dataset.boundCategory) {
-            btn.dataset.boundCategory = '1';
-            btn.addEventListener('click', () => openCategoryPicker('listingCategory'));
-        }
-    }
 }
 
 function setupCategoryPickers() {

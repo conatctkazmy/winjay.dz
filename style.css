@@ -3382,14 +3382,12 @@ body.dark-mode .listing-status-badge {
     overflow-y: auto;
 }
 
-.is-touch-device #selectPickerModal.active,
 .is-touch-device #otherCategoriesModal.active {
     display: flex !important;
     align-items: flex-end;
     justify-content: center;
 }
 
-.is-touch-device #selectPickerModal .modal-content,
 .is-touch-device #otherCategoriesModal .modal-content {
     position: relative;
     left: auto;
@@ -3406,21 +3404,18 @@ body.dark-mode .listing-status-badge {
     overflow: hidden;
 }
 
-.is-touch-device #selectPickerModal .select-picker-list,
 .is-touch-device #otherCategoriesModal .categories-grid {
     max-height: 62svh;
     overflow-y: auto;
 }
 
 @media (hover: none) and (pointer: coarse) {
-    #selectPickerModal.active,
     #otherCategoriesModal.active {
         display: flex !important;
         align-items: flex-end;
         justify-content: center;
     }
 
-    #selectPickerModal .modal-content,
     #otherCategoriesModal .modal-content {
         position: relative;
         left: auto;
@@ -3437,7 +3432,6 @@ body.dark-mode .listing-status-badge {
         overflow: hidden;
     }
 
-    #selectPickerModal .select-picker-list,
     #otherCategoriesModal .categories-grid {
         max-height: 62svh;
         overflow-y: auto;
@@ -3445,14 +3439,12 @@ body.dark-mode .listing-status-badge {
 }
 
 @media (max-device-width: 768px) {
-    #selectPickerModal.active,
     #otherCategoriesModal.active {
         display: flex !important;
         align-items: flex-end;
         justify-content: center;
     }
 
-    #selectPickerModal .modal-content,
     #otherCategoriesModal .modal-content {
         position: relative;
         left: auto;
@@ -3469,7 +3461,6 @@ body.dark-mode .listing-status-badge {
         overflow: hidden;
     }
 
-    #selectPickerModal .select-picker-list,
     #otherCategoriesModal .categories-grid {
         max-height: 62svh;
         overflow-y: auto;
@@ -3477,7 +3468,6 @@ body.dark-mode .listing-status-badge {
 }
 
 @media (max-width: 768px) {
-    #selectPickerModal .modal-content,
     #otherCategoriesModal .modal-content {
         position: fixed;
         left: 0;
@@ -3493,7 +3483,6 @@ body.dark-mode .listing-status-badge {
         overflow: hidden;
     }
 
-    #selectPickerModal .select-picker-list,
     #otherCategoriesModal .categories-grid {
         max-height: 62svh;
         overflow-y: auto;
