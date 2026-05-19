@@ -4058,8 +4058,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const editIdFromUrl = Number(editParam) || 0;
 
     if (listingsGrid && (!Array.isArray(listings) || listings.length === 0)) {
-        listingsGrid.innerHTML = `<div style="padding: 28px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 44px; height: 44px;"></i><p style="margin-top: 12px;">Loading listings...</p></div>`;
-        lucide.createIcons();
+        listingsGrid.innerHTML = getHomeListingsSkeletonHTML(12);
     }
     const listingsPromise = fetchListingsFromSupabase({ silent: false, includeProfiles: false, limit: 200 });
 
@@ -4068,8 +4067,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         showSection('seller-profile-section');
         const content = document.getElementById('externalProfileContent');
         if (content) {
-            content.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 44px; height: 44px;"></i><p style="margin-top: 12px;">Loading profile...</p></div>`;
-            lucide.createIcons();
+            content.innerHTML = getSellerProfileSkeletonHTML();
         }
         await openSellerProfile(tag.toLowerCase(), 'listings', { pushState: false });
     } else if (newListingParam) {
@@ -4087,8 +4085,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showSection('seller-profile-section');
                 const content = document.getElementById('externalProfileContent');
                 if (content) {
-                    content.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 44px; height: 44px;"></i><p style="margin-top: 12px;">Loading profile...</p></div>`;
-                    lucide.createIcons();
+                    content.innerHTML = getSellerProfileSkeletonHTML();
                 }
                 await openSellerProfile(storedTag.toLowerCase());
             } else {
@@ -8394,8 +8391,7 @@ function handleListingRoutesFromUrl() {
         showSection('seller-profile-section');
         const content = document.getElementById('externalProfileContent');
         if (content) {
-            content.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 44px; height: 44px;"></i><p style="margin-top: 12px;">Loading profile...</p></div>`;
-            lucide.createIcons();
+            content.innerHTML = getSellerProfileSkeletonHTML();
         }
         openSellerProfile(tag.toLowerCase(), 'listings', { pushState: false });
         return;
@@ -8661,6 +8657,49 @@ function renderPagination(totalPages) {
     html += `<button class="page-btn nav" ${currentPage === totalPages ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})"><i data-lucide="chevron-right"></i></button>`;
 
     pagination.innerHTML = html;
+}
+
+function getHomeListingsSkeletonHTML(count = 12) {
+    const n = Math.max(1, Math.min(30, Number(count) || 12));
+    return `<div class="loading-skeleton"><div class="skeleton-grid">${Array.from({ length: n }, () => `<div class="skeleton-card"></div>`).join('')}</div></div>`;
+}
+
+function getSellerProfileSkeletonHTML() {
+    return `
+        <div class="profile-skeleton">
+            <div class="profile-header profile-skeleton-header">
+                <div class="cover-photo-container profile-skeleton-cover">
+                    <div class="skeleton-block"></div>
+                </div>
+                <div class="profile-info-container">
+                    <div class="profile-pic-wrapper">
+                        <div class="skeleton-block" style="width: 120px; height: 120px; border-radius: 50%;"></div>
+                    </div>
+                    <div class="profile-details">
+                        <div class="profile-text">
+                            <div class="profile-skeleton-lines">
+                                <div class="skeleton-block" style="height: 22px; width: 220px;"></div>
+                                <div class="skeleton-block" style="height: 16px; width: 120px;"></div>
+                                <div class="skeleton-block" style="height: 18px; width: 160px;"></div>
+                                <div class="skeleton-block" style="height: 56px; width: min(520px, 100%);"></div>
+                            </div>
+                            <div class="profile-skeleton-actions">
+                                <div class="skeleton-block"></div>
+                                <div class="skeleton-block"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="profile-content">
+                <div class="profile-skeleton-tabs">
+                    <div class="skeleton-block"></div>
+                    <div class="skeleton-block"></div>
+                </div>
+                ${getHomeListingsSkeletonHTML(8)}
+            </div>
+        </div>
+    `;
 }
 
 function renderListings() {
@@ -10076,6 +10115,8 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
     }
     const from = getActiveSectionId();
     const fromListingId = from === 'listing-detail-section' ? currentListingDetailId : null;
+    const content = document.getElementById('externalProfileContent');
+    if (content) content.innerHTML = getSellerProfileSkeletonHTML();
     const profilesById = await fetchProfilesByIds([ownerId]);
     const profileRow = profilesById[ownerId] || null;
     if (!profileRow?.id) {
@@ -10095,7 +10136,6 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
         seller.rating = 0;
         seller.reviews = 0;
     }
-    const content = document.getElementById('externalProfileContent');
     const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === ownerId);
     if (!content) return;
     content.innerHTML = `
@@ -10184,6 +10224,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         return;
     }
     const content = document.getElementById('externalProfileContent');
+    if (content) content.innerHTML = getSellerProfileSkeletonHTML();
     const profileRow = await fetchProfileByTag(tag);
     if (!profileRow?.id) {
         showToast('Seller profile not found', 'alert-circle');

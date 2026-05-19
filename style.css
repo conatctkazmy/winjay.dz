@@ -1784,6 +1784,70 @@ body.dark-mode .listing-status-badge {
     border-radius: 16px;
 }
 
+.skeleton-block {
+    background: linear-gradient(90deg, var(--light-gray) 25%, var(--border-color) 50%, var(--light-gray) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 12px;
+}
+
+.profile-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.profile-skeleton-header .cover-photo-container::after {
+    display: none;
+}
+
+.profile-skeleton-cover {
+    height: 300px;
+}
+
+.profile-skeleton-cover .skeleton-block {
+    height: 100%;
+    width: 100%;
+    border-radius: 0;
+}
+
+.profile-skeleton-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 6px;
+}
+
+.profile-skeleton-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.profile-skeleton-actions .skeleton-block {
+    height: 42px;
+    width: 140px;
+    border-radius: 9999px;
+}
+
+.profile-skeleton-tabs {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.profile-skeleton-tabs .skeleton-block {
+    height: 44px;
+    width: 140px;
+    border-radius: 14px;
+}
+
+@media (max-width: 768px) {
+    .profile-skeleton-cover {
+        height: 220px;
+    }
+}
+
 @keyframes shimmer {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
