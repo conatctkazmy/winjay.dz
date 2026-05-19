@@ -1368,6 +1368,7 @@ let favorites = [];
 const pendingHeartPulses = new Set();
 let searchHistory = [];
 let editingListingId = null;
+let createListingMode = 'create';
 let confirmCallback = null;
 let currentListingDetailId = null;
 let currentSellerProfileTag = null;
@@ -3951,6 +3952,7 @@ if (DEMO_MODE) ensureCategoryListings();
 const MAX_LISTING_IMAGES = 10;
 let selectedListingImages = Array.from({ length: MAX_LISTING_IMAGES }, () => null);
 let selectedListingImageUrls = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
+let selectedListingImageSources = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
 let currentListingImageSlotIndex = 0;
 
 const VERIFIED_BADGE_HTML = `<span class="verified-badge" title="Vendeur Vérifié" onclick="showVerifiedPopup(event)"><img src="https://upload.wikimedia.org/wikipedia/commons/e/e4/Twitter_Verified_Badge.svg" alt="Vérifié" style="filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(1deg) brightness(102%) contrast(105%);"></span>`;
@@ -4029,6 +4031,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     const profileParam = params.get('profile');
     const listingParam = params.get('listing');
+    const editParam = params.get('edit');
     const newListingParam = params.get('new');
     if (profileParam) {
         const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
@@ -4043,6 +4046,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const id = Number(listingParam);
         if (Number.isFinite(id) && id > 0) {
             openListingDetail(id, { pushState: false });
+        } else {
+            showSection('home-section');
+        }
+    } else if (editParam) {
+        const id = Number(editParam);
+        if (Number.isFinite(id) && id > 0) {
+            openEditListingPageById(id, { pushState: false });
         } else {
             showSection('home-section');
         }
@@ -4922,6 +4932,25 @@ function revokeListingImageUrl(index) {
     selectedListingImageUrls[index] = '';
 }
 
+function removeListingImageSlot(event, index) {
+    try {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+    } catch (e) {
+        null;
+    }
+    const idx = Math.max(0, Math.min(MAX_LISTING_IMAGES - 1, Number(index) || 0));
+    if (selectedListingImageSources[idx] === 'new') {
+        revokeListingImageUrl(idx);
+    } else {
+        selectedListingImageUrls[idx] = '';
+    }
+    selectedListingImages[idx] = null;
+    selectedListingImageSources[idx] = '';
+    renderListingImagesSlots();
+    updateListingImagesMiniPreview();
+}
+
 function updateListingImagesMiniPreview() {
     const preview = document.getElementById('imagePreviewContainer');
     if (!preview) return;
@@ -4942,6 +4971,7 @@ function resetCreateListingDraft({ resetForm = true } = {}) {
     selectedListingImages.forEach((_, i) => revokeListingImageUrl(i));
     selectedListingImages = Array.from({ length: MAX_LISTING_IMAGES }, () => null);
     selectedListingImageUrls = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
+    selectedListingImageSources = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
     currentListingImageSlotIndex = 0;
     try {
         renderListingImagesSlots();
@@ -4977,9 +5007,9 @@ function renderListingImagesSlots() {
     container.innerHTML = Array.from({ length: MAX_LISTING_IMAGES }, (_, i) => {
         const url = selectedListingImageUrls[i];
         if (url) {
-            return `<button type="button" class="listing-image-slot" onclick="selectListingImageSlot(${i})"><img src="${url}" alt=""></button>`;
+            return `<div class="listing-image-slot" role="button" tabindex="0" onclick="selectListingImageSlot(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectListingImageSlot(${i});}"><img src="${url}" alt=""><button type="button" class="listing-image-remove" onclick="removeListingImageSlot(event, ${i})" aria-label="Remove image"><i data-lucide="x"></i></button></div>`;
         }
-        return `<button type="button" class="listing-image-slot" onclick="selectListingImageSlot(${i})"><div class="slot-label"><i data-lucide="plus"></i><span>${i + 1}</span></div></button>`;
+        return `<div class="listing-image-slot" role="button" tabindex="0" onclick="selectListingImageSlot(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectListingImageSlot(${i});}"><div class="slot-label"><i data-lucide="plus"></i><span>${i + 1}</span></div></div>`;
     }).join('');
     lucide.createIcons();
 }
@@ -5010,6 +5040,7 @@ document.getElementById('listingImageSlotInput')?.addEventListener('change', (e)
     revokeListingImageUrl(idx);
     selectedListingImages[idx] = file;
     selectedListingImageUrls[idx] = URL.createObjectURL(file);
+    selectedListingImageSources[idx] = 'new';
     renderListingImagesSlots();
     updateListingImagesMiniPreview();
     e.target.value = '';
@@ -5875,9 +5906,10 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
     }
     const submitBtn = e.target?.querySelector?.('button[type="submit"]') || null;
     const originalBtnText = submitBtn?.textContent || '';
+    const isEditMode = createListingMode === 'edit' && Number(editingListingId) > 0;
     if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Posting...';
+        submitBtn.textContent = isEditMode ? 'Saving...' : 'Posting...';
     }
 
     const withTimeout = (promise, ms, label) => {
@@ -5942,7 +5974,14 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                     .map((t) => [t.toLowerCase(), t])
             ).values()
         ).slice(0, 5);
-        const files = selectedListingImages.filter(Boolean);
+        const imagePlan = Array.from({ length: MAX_LISTING_IMAGES }, (_, i) => {
+            const url = selectedListingImageUrls[i];
+            if (!url) return null;
+            const file = selectedListingImages[i];
+            if (file) return { kind: 'new', file };
+            return { kind: 'existing', url };
+        }).filter(Boolean);
+        const files = imagePlan.filter((x) => x.kind === 'new').map((x) => x.file);
 
         if (!title) {
             showToast('Title is required', 'alert-circle');
@@ -5980,12 +6019,12 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             showToast('Phone number is required', 'alert-circle');
             return;
         }
-        if (files.length === 0) {
+        if (imagePlan.length === 0) {
             showToast('Please add at least 1 photo', 'alert-circle');
             return;
         }
 
-        if (!isPrivilegedAccount) {
+        if (!isEditMode && !isPrivilegedAccount) {
             const { data: existingUserListings, error: limitErr } = await withTimeout(
                 client.from('listings').select('id').eq('owner_id', userId).limit(FREE_LISTING_LIMIT + 1),
                 12000,
@@ -5999,6 +6038,99 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 openListingLimitModal(FREE_LISTING_LIMIT);
                 return;
             }
+        }
+
+        if (isEditMode) {
+            const listingId = Number(editingListingId);
+            const objectPaths = [];
+            const finalUrls = [];
+            for (let i = 0; i < imagePlan.length; i++) {
+                const entry = imagePlan[i];
+                if (entry.kind === 'existing') {
+                    finalUrls.push(entry.url);
+                    continue;
+                }
+                const f = entry.file;
+                const safeName = String(f.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_');
+                const objectPath = `${userId}/${listingId}/${Date.now()}_${i + 1}_${safeName}`;
+                objectPaths.push(objectPath);
+                const { error: uploadErr } = await withTimeout(
+                    client.storage
+                        .from(LISTING_IMAGES_BUCKET)
+                        .upload(objectPath, f, { cacheControl: '3600', upsert: false, contentType: f.type || undefined }),
+                    20000,
+                    'Image upload timed out'
+                );
+                if (uploadErr) {
+                    const msg = uploadErr?.message || 'Image upload failed';
+                    showToast(msg.includes('row-level security') ? 'Storage: permission denied (RLS)' : msg, 'alert-circle');
+                    return;
+                }
+                const { data: publicData } = client.storage.from(LISTING_IMAGES_BUCKET).getPublicUrl(objectPath);
+                const publicUrl = publicData?.publicUrl || '';
+                if (!publicUrl) {
+                    showToast('Failed to generate image URL', 'alert-circle');
+                    return;
+                }
+                finalUrls.push(publicUrl);
+            }
+            const { error: updateErr } = await withTimeout(
+                client
+                    .from('listings')
+                    .update({
+                        title,
+                        description: description || null,
+                        condition: condition || null,
+                        price_type: priceType || null,
+                        subcategory: subcategory || null,
+                        price,
+                        delivery: delivery || null,
+                        availability: availability || null,
+                        category: category || null,
+                        wilaya: wilaya || null,
+                        city: city || null,
+                        contact_phone: contactPhone || null,
+                        tags: tags.length ? tags : null
+                    })
+                    .eq('id', listingId)
+                    .eq('owner_id', userId),
+                15000,
+                'Listing update timed out'
+            );
+            if (updateErr) {
+                const msg = updateErr?.message || 'Failed to update listing';
+                showToast(msg.includes('row-level security') ? 'Listings: permission denied (RLS)' : msg, 'alert-circle');
+                return;
+            }
+            const imageRows = finalUrls.map((u, i) => ({ listing_id: listingId, url: u, sort_order: i + 1 }));
+            const { error: delErr } = await withTimeout(
+                client.from('listing_images').delete().eq('listing_id', listingId),
+                15000,
+                'Deleting images timed out'
+            );
+            if (delErr) {
+                const msg = delErr?.message || 'Failed to update listing images';
+                showToast(msg.includes('row-level security') ? 'Listing images: permission denied (RLS)' : msg, 'alert-circle');
+                return;
+            }
+            const { error: imgErr } = await withTimeout(
+                client.from('listing_images').insert(imageRows),
+                15000,
+                'Saving images timed out'
+            );
+            if (imgErr) {
+                const msg = imgErr?.message || 'Failed to save listing images';
+                showToast(msg.includes('row-level security') ? 'Listing images: permission denied (RLS)' : msg, 'alert-circle');
+                return;
+            }
+            showToast('Listing updated!', 'check-circle');
+            editingListingId = null;
+            createListingMode = 'create';
+            setCreateListingPageMode('create');
+            resetCreateListingDraft({ resetForm: true });
+            await withTimeout(fetchListingsFromSupabase({ silent: true }), 12000, 'Refreshing listings timed out');
+            openListingDetail(listingId);
+            return;
         }
 
         const { data: inserted, error: insertErr } = await withTimeout(
@@ -6772,7 +6904,7 @@ function createMyListingCardHTML(item) {
     return `
         <div class="card my-listing-card" onclick="openListingDetail(${item.id})">
             <div class="listing-actions">
-                <button class="action-btn edit" onclick="openEditListingModal(event, ${item.id})">
+                <button class="action-btn edit" onclick="openEditListingPage(event, ${item.id})">
                     <i data-lucide="pencil"></i>
                 </button>
                 <button class="action-btn delete" onclick="deleteMyListing(event, ${item.id})">
@@ -8006,9 +8138,10 @@ function getActiveSectionId() {
 
 function clearListingRouteParams({ replace = true } = {}) {
     const url = new URL(window.location.href);
-    const had = url.searchParams.has('listing') || url.searchParams.has('new');
+    const had = url.searchParams.has('listing') || url.searchParams.has('new') || url.searchParams.has('edit');
     url.searchParams.delete('listing');
     url.searchParams.delete('new');
+    url.searchParams.delete('edit');
     if (!had) return;
     if (replace) {
         history.replaceState(history.state || null, '', url.pathname + url.search);
@@ -8044,6 +8177,16 @@ function navigateBackFromSellerProfileFlow() {
 }
 
 function navigateBackFromListingFlow() {
+    if (createListingMode === 'edit') {
+        editingListingId = null;
+        createListingMode = 'create';
+        try {
+            setCreateListingPageMode('create');
+            resetCreateListingDraft({ resetForm: true });
+        } catch (e) {
+            null;
+        }
+    }
     const state = history.state && typeof history.state === 'object' ? history.state : null;
     const from = state?.from ? String(state.from) : '';
     if (from) {
@@ -8055,12 +8198,115 @@ function navigateBackFromListingFlow() {
     showSection(last === 'listing-detail-section' || last === 'create-listing-section' ? 'home-section' : last);
 }
 
+function setCreateListingPageMode(mode = 'create') {
+    const section = document.getElementById('create-listing-section');
+    if (!section) return;
+    const h2 = section.querySelector('.page-card-head h2');
+    const sub = section.querySelector('.page-card-head .muted');
+    const submit = section.querySelector('#addListingForm button[type="submit"]');
+    if (!h2 || !sub || !submit) return;
+    if (!h2.dataset.defaultText) h2.dataset.defaultText = h2.textContent || '';
+    if (!sub.dataset.defaultText) sub.dataset.defaultText = sub.textContent || '';
+    if (!submit.dataset.defaultText) submit.dataset.defaultText = submit.textContent || '';
+    const isEdit = String(mode || '').toLowerCase() === 'edit';
+    h2.textContent = isEdit ? "Modifier une annonce" : (h2.dataset.defaultText || "Créer une annonce");
+    sub.textContent = isEdit ? "Modifiez les détails et mettez à jour les photos" : (sub.dataset.defaultText || "Remplissez les détails et ajoutez des photos");
+    submit.textContent = isEdit ? "Enregistrer" : (submit.dataset.defaultText || "Publier l'annonce");
+}
+
+function openEditListingPage(event, id) {
+    try {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+    } catch (e) {
+        null;
+    }
+    openEditListingPageById(id, { pushState: true });
+}
+
+function openEditListingPageById(id, { pushState = true } = {}) {
+    const listingId = Number(id);
+    const item = listings.find((l) => l.id === listingId);
+    if (!item) return;
+    editingListingId = listingId;
+    createListingMode = 'edit';
+    setCreateListingPageMode('edit');
+    if (pushState) {
+        const from = getActiveSectionId();
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('listing');
+            url.searchParams.delete('new');
+            url.searchParams.delete('profile');
+            url.searchParams.set('edit', String(listingId));
+            history.pushState({ __winjay: true, view: 'edit', editId: listingId, from }, '', url.pathname + url.search);
+        } catch (e) {
+            null;
+        }
+    }
+    resetCreateListingDraft({ resetForm: false });
+    const titleEl = document.getElementById('listingTitle');
+    if (titleEl) titleEl.value = item.title || '';
+    const descEl = document.getElementById('listingDescription');
+    if (descEl) descEl.value = item.description || '';
+    const conditionEl = document.getElementById('listingCondition');
+    if (conditionEl) conditionEl.value = item.condition || '';
+    const priceTypeEl = document.getElementById('listingPriceType');
+    if (priceTypeEl) priceTypeEl.value = item.price_type || '';
+    const priceEl = document.getElementById('listingPrice');
+    if (priceEl) priceEl.value = String(Number(item.price) || 0);
+    const categoryEl = document.getElementById('listingCategory');
+    if (categoryEl) categoryEl.value = item.category || '';
+    const subEl = document.getElementById('listingSubcategory');
+    populateListingSubcategorySelect(subEl, item.category || '', item.subcategory || '');
+    const wilayaEl = document.getElementById('listingWilaya');
+    if (wilayaEl) wilayaEl.value = item.wilaya || '';
+    const cityEl = document.getElementById('listingCity');
+    populateCitySelect(cityEl, item.wilaya || '', item.city || '');
+    const deliveryEl = document.getElementById('listingDelivery');
+    if (deliveryEl) deliveryEl.value = item.delivery || '';
+    const phoneEl = document.getElementById('listingContactPhone');
+    if (phoneEl) phoneEl.value = item.contact_phone || '';
+    const availEl = document.getElementById('listingAvailability');
+    if (availEl) availEl.value = item.availability || 'Available';
+    const tagsEl = document.getElementById('listingTags');
+    if (tagsEl) tagsEl.value = Array.isArray(item.tags) ? item.tags.join(', ') : '';
+    if (priceTypeEl && priceEl) {
+        priceEl.disabled = priceTypeEl.value === 'Free';
+        if (priceTypeEl.value === 'Free') priceEl.value = '0';
+    }
+    selectedListingImages = Array.from({ length: MAX_LISTING_IMAGES }, () => null);
+    selectedListingImageUrls = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
+    selectedListingImageSources = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
+    const existing = Array.isArray(item.images) ? item.images.filter(Boolean) : [];
+    existing.slice(0, MAX_LISTING_IMAGES).forEach((u, i) => {
+        selectedListingImageUrls[i] = u;
+        selectedListingImageSources[i] = 'existing';
+    });
+    renderListingImagesSlots();
+    updateListingImagesMiniPreview();
+    showSection('create-listing-section');
+    try {
+        setupSelectPickers();
+    } catch (e) {
+        null;
+    }
+    lucide.createIcons();
+}
+
 function openCreateListingPage({ pushState = true } = {}) {
     if (!requireAuthOrPrompt()) return;
     if (isAutoGeneratedTag(userProfile?.tag)) {
         showToast('Set your username before posting listings', 'alert-circle');
         openModal('editProfileModal');
         return;
+    }
+    editingListingId = null;
+    createListingMode = 'create';
+    try {
+        setCreateListingPageMode('create');
+    } catch (e) {
+        null;
     }
     const from = getActiveSectionId();
     if (pushState) {
@@ -8103,11 +8349,19 @@ function handleListingRoutesFromUrl() {
         return;
     }
     const listingParam = params.get('listing');
+    const editParam = params.get('edit');
     const newListingParam = params.get('new');
     if (listingParam) {
         const id = Number(listingParam);
         if (Number.isFinite(id) && id > 0) {
             openListingDetail(id, { pushState: false });
+            return;
+        }
+    }
+    if (editParam) {
+        const id = Number(editParam);
+        if (Number.isFinite(id) && id > 0) {
+            openEditListingPageById(id, { pushState: false });
             return;
         }
     }

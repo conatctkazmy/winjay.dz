@@ -1199,6 +1199,32 @@ body.sidebar-open .mobile-footer-bar {
     display: block;
 }
 
+.listing-image-remove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 28px;
+    height: 28px;
+    border-radius: 9999px;
+    border: 1px solid var(--border-color);
+    background: rgba(15, 20, 25, 0.6);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+}
+
+.listing-image-remove svg {
+    width: 16px;
+    height: 16px;
+}
+
+.dark-mode .listing-image-remove {
+    background: rgba(0, 0, 0, 0.6);
+}
+
 .listing-image-slot .slot-label {
     display: flex;
     flex-direction: column;
