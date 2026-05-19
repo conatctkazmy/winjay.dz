@@ -3649,6 +3649,11 @@ body.dark-mode .listing-status-badge {
     right: 14px;
 }
 
+#selectPickerTitle {
+    cursor: pointer;
+    user-select: none;
+}
+
 .detail-container {
     display: flex;
     flex-direction: column;

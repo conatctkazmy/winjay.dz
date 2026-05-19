@@ -4405,6 +4405,17 @@ function openOtherCategoriesModal(clearTarget = false) {
     if (clearTarget) categoryPickerTargetSelectId = '';
     openModal('otherCategoriesModal');
     try {
+        const modal = document.getElementById('otherCategoriesModal');
+        const title = modal ? modal.querySelector('h2') : null;
+        if (title && !title.dataset.boundClose) {
+            title.dataset.boundClose = '1';
+            title.style.cursor = 'pointer';
+            title.addEventListener('click', () => closeModal('otherCategoriesModal'));
+        }
+    } catch (e) {
+        null;
+    }
+    try {
         const input = document.getElementById('categorySearch');
         if (input) {
             input.value = '';
@@ -4427,6 +4438,7 @@ let selectPickerTargetSelectId = '';
 let selectPickerCachedOptions = [];
 let selectPickerAnchorEl = null;
 let selectPickerDropdownBound = false;
+let selectPickerTitleBound = false;
 
 function bindSelectPickerDropdown() {
     if (selectPickerDropdownBound) return;
@@ -4454,6 +4466,19 @@ function bindSelectPickerDropdown() {
         if (!modal || !modal.classList.contains('active')) return;
         positionSelectPickerDropdown();
     });
+
+    if (!selectPickerTitleBound) {
+        selectPickerTitleBound = true;
+        const title = document.getElementById('selectPickerTitle');
+        if (title) {
+            title.style.cursor = 'pointer';
+            title.addEventListener('click', () => {
+                const modal = document.getElementById('selectPickerModal');
+                if (!modal || !modal.classList.contains('active')) return;
+                closeModal('selectPickerModal');
+            });
+        }
+    }
 }
 
 function positionSelectPickerDropdown() {
@@ -4578,6 +4603,24 @@ function enhanceSelectToPicker(selectEl) {
     refreshSelectPicker(selectEl);
 }
 
+function shouldAutoScrollPickerAnchor() {
+    return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function getPickerScrollTopForAnchor(anchor) {
+    const el = anchor || null;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const navbar = document.querySelector('.navbar');
+    const navH = navbar ? navbar.offsetHeight || 0 : 0;
+    const padding = 16;
+    const desiredTop = navH + padding;
+    const currentTop = rect.top;
+    if (currentTop <= desiredTop + 6) return null;
+    const target = (window.scrollY || window.pageYOffset || 0) + currentTop - desiredTop;
+    return Math.max(0, Math.round(target));
+}
+
 function openSelectPickerFor(selectId) {
     const id = String(selectId || '').trim();
     if (!id) return;
@@ -4603,8 +4646,28 @@ function openSelectPickerFor(selectId) {
     const content = modal.querySelector('.modal-content');
     if (!content) return;
     selectPickerAnchorEl = getPickerButtonForSelect(select) || select;
-    modal.classList.add('active');
-    positionSelectPickerDropdown();
+    const openNow = () => {
+        modal.classList.add('active');
+        body.classList.add('modal-open');
+        positionSelectPickerDropdown();
+        setTimeout(positionSelectPickerDropdown, 160);
+        setTimeout(positionSelectPickerDropdown, 420);
+    };
+    if (shouldAutoScrollPickerAnchor()) {
+        const top = getPickerScrollTopForAnchor(selectPickerAnchorEl);
+        if (typeof top === 'number') {
+            try {
+                window.scrollTo({ top, behavior: 'smooth' });
+            } catch (e) {
+                window.scrollTo(0, top);
+            }
+            setTimeout(openNow, 220);
+        } else {
+            openNow();
+        }
+    } else {
+        openNow();
+    }
     lucide.createIcons();
 }
 
