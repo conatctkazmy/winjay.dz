@@ -3974,6 +3974,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     await fetchListingsFromSupabase({ silent: false });
     populateWilayas();
+    await loadAlgeriaCommunesData();
     populateCategories();
     setupListingSubcategorySelects();
     setupListingCitySelects();
@@ -4168,13 +4169,75 @@ const wilayaCitiesOverrides = {
     "25 Constantine": ["Constantine", "El Khroub", "Aïn Smara", "Didouche Mourad", "Hamma Bouziane"]
 };
 
+let communesByWilayaCode = null;
+let communesLoadPromise = null;
+
+function getWilayaCode(wilayaLabel) {
+    const m = String(wilayaLabel || '').trim().match(/^(\d{2})\b/);
+    return m ? m[1] : '';
+}
+
+function sanitizeCommuneName(value) {
+    let s = String(value || '').trim();
+    if (!s) return '';
+    s = s.replace(/\s+/g, ' ');
+    s = s.replace(/^[^A-Za-zÀ-ÿ0-9]+/g, '');
+    return s.trim();
+}
+
+function normalizeCommuneList(items) {
+    const seen = new Set();
+    const out = [];
+    (items || []).forEach((raw) => {
+        const name = sanitizeCommuneName(raw);
+        if (!name) return;
+        const key = name.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(name);
+    });
+    return out;
+}
+
+async function loadAlgeriaCommunesData() {
+    if (communesLoadPromise) return communesLoadPromise;
+    communesLoadPromise = (async () => {
+        try {
+            const res = await fetch('algeria_communes.json', { cache: 'no-store' });
+            if (!res.ok) throw new Error('Failed to load communes dataset');
+            const data = await res.json();
+            const entries = Array.isArray(data?.wilayas) ? data.wilayas : [];
+            const map = {};
+            entries.forEach((w) => {
+                const code = String(w?.code || '').trim();
+                if (!/^\d{2}$/.test(code)) return;
+                const list = normalizeCommuneList(Array.isArray(w?.communes) ? w.communes : []);
+                if (!list.length) return;
+                map[code] = list;
+            });
+            communesByWilayaCode = Object.keys(map).length ? map : null;
+        } catch (e) {
+            communesByWilayaCode = null;
+        }
+    })();
+    return communesLoadPromise;
+}
+
 function getWilayaDisplayName(wilayaLabel) {
     return String(wilayaLabel || '').replace(/^\d+\s*/, '').trim();
 }
 
 function getCitiesForWilaya(wilayaLabel) {
     const key = String(wilayaLabel || '').trim();
+    const code = getWilayaCode(key);
     const override = wilayaCitiesOverrides[key];
+    const dataset = communesByWilayaCode && code ? communesByWilayaCode[code] : null;
+    if (Array.isArray(dataset) && dataset.length) {
+        if (Array.isArray(override) && override.length) {
+            return normalizeCommuneList([...dataset, ...override]);
+        }
+        return dataset;
+    }
     if (Array.isArray(override) && override.length) return override;
     const name = getWilayaDisplayName(key);
     return name ? [name] : [];
