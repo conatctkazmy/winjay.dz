@@ -7955,7 +7955,9 @@ function showSection(sectionId) {
     syncMessagesScrollLock();
 
     // Save current section to localStorage
-    localStorage.setItem('winjayLastSection', sectionId);
+    if (sectionId !== 'listing-detail-section' && sectionId !== 'create-listing-section') {
+        localStorage.setItem('winjayLastSection', sectionId);
+    }
     updateLivePresence();
 
     if (sectionId === 'home-section') {
@@ -8003,12 +8005,15 @@ function clearListingRouteParams({ replace = true } = {}) {
 }
 
 function navigateBackFromListingFlow() {
-    if (history.length > 1) {
+    const state = history.state && typeof history.state === 'object' ? history.state : null;
+    const from = state?.from ? String(state.from) : '';
+    if (from) {
         history.back();
         return;
     }
     clearListingRouteParams({ replace: true });
-    showSection('home-section');
+    const last = (localStorage.getItem('winjayLastSection') || '').trim() || 'home-section';
+    showSection(last === 'listing-detail-section' || last === 'create-listing-section' ? 'home-section' : last);
 }
 
 function openCreateListingPage({ pushState = true } = {}) {
@@ -8023,7 +8028,7 @@ function openCreateListingPage({ pushState = true } = {}) {
         const url = new URL(window.location.href);
         url.searchParams.delete('listing');
         url.searchParams.set('new', '1');
-        history.pushState({ view: 'new', from }, '', url.pathname + url.search);
+        history.pushState({ __winjay: true, view: 'new', from }, '', url.pathname + url.search);
     }
     resetCreateListingDraft({ resetForm: true });
     showSection('create-listing-section');
@@ -8063,7 +8068,11 @@ function handleListingRoutesFromUrl() {
     }
     const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
     const blocked = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section'];
-    const lastSection = (blocked.includes(lastSectionRaw) && !isLoggedIn()) ? 'home-section' : lastSectionRaw;
+    const safeLast =
+        lastSectionRaw === 'listing-detail-section' || lastSectionRaw === 'create-listing-section'
+            ? 'home-section'
+            : lastSectionRaw;
+    const lastSection = (blocked.includes(safeLast) && !isLoggedIn()) ? 'home-section' : safeLast;
     showSection(lastSection);
 }
 
@@ -9317,7 +9326,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
         const url = new URL(window.location.href);
         url.searchParams.delete('new');
         url.searchParams.set('listing', String(listingId));
-        history.pushState({ view: 'listing', listingId, from }, '', url.pathname + url.search);
+        history.pushState({ __winjay: true, view: 'listing', listingId, from }, '', url.pathname + url.search);
     }
     showSection('listing-detail-section');
     if (!DEMO_MODE) {
