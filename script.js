@@ -4514,16 +4514,31 @@ function bindSelectPickerDropdown() {
         const content = modal.querySelector('.modal-content');
         if (content && content.contains(e.target)) return;
         const id = String(selectPickerTargetSelectId || '').trim();
-        const btn = id ? document.querySelector(`.select-picker-btn[data-select-id="${CSS.escape(id)}"]`) : null;
-        if (btn && (btn === e.target || btn.contains(e.target))) {
-            closeModal('selectPickerModal');
-            try {
-                e.preventDefault?.();
-                e.stopPropagation?.();
-            } catch (err) {
-                null;
+        const activeBtn = id ? document.querySelector(`.select-picker-btn[data-select-id="${CSS.escape(id)}"]`) : null;
+        const nextBtn = e.target?.closest?.('.select-picker-btn') || null;
+        if (nextBtn) {
+            if (activeBtn && (nextBtn === activeBtn || activeBtn.contains(nextBtn))) {
+                closeModal('selectPickerModal');
+                try {
+                    e.preventDefault?.();
+                    e.stopPropagation?.();
+                } catch (err) {
+                    null;
+                }
+                return;
             }
-            return;
+            const nextId = String(nextBtn.dataset.selectId || '').trim();
+            closeModal('selectPickerModal');
+            if (nextId) {
+                try {
+                    e.preventDefault?.();
+                    e.stopPropagation?.();
+                } catch (err) {
+                    null;
+                }
+                setTimeout(() => openSelectPickerFor(nextId), 0);
+                return;
+            }
         }
         closeModal('selectPickerModal');
     }, true);
