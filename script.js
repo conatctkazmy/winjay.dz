@@ -4404,13 +4404,50 @@ function enhanceSelectToPicker(selectEl) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'select-picker-btn';
+    btn.id = `${selectEl.id}__pickerBtn`;
     btn.dataset.selectId = selectEl.id;
+    btn.setAttribute('aria-haspopup', 'dialog');
+    btn.setAttribute('aria-controls', 'selectPickerModal');
     btn.addEventListener('click', () => openSelectPickerFor(selectEl.id));
 
     selectEl.classList.add('select-picker-hidden');
+    selectEl.tabIndex = -1;
+    selectEl.setAttribute('aria-hidden', 'true');
     selectEl.parentNode.insertBefore(btn, selectEl);
 
     selectEl.addEventListener('change', () => refreshSelectPicker(selectEl));
+    const intercept = (e) => {
+        try {
+            e.preventDefault?.();
+            e.stopPropagation?.();
+        } catch (err) {
+            null;
+        }
+        try {
+            selectEl.blur?.();
+        } catch (err) {
+            null;
+        }
+        openSelectPickerFor(selectEl.id);
+    };
+    ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach((evt) => {
+        selectEl.addEventListener(evt, intercept, { passive: false });
+    });
+    selectEl.addEventListener('focus', () => {
+        try {
+            selectEl.blur?.();
+        } catch (err) {
+            null;
+        }
+    });
+    const labels = Array.from(document.querySelectorAll(`label[for="${CSS.escape(selectEl.id)}"]`));
+    labels.forEach((lab) => {
+        try {
+            lab.setAttribute('for', btn.id);
+        } catch (err) {
+            null;
+        }
+    });
     refreshSelectPicker(selectEl);
 }
 
@@ -4492,6 +4529,7 @@ function setupSelectPickers() {
     ];
     const nodes = selectors.flatMap((sel) => Array.from(document.querySelectorAll(sel)));
     nodes.forEach((el) => enhanceSelectToPicker(el));
+    nodes.forEach((el) => refreshSelectPicker(el));
 
     const listingCategory = document.getElementById('listingCategory');
     if (listingCategory) {
@@ -6495,6 +6533,11 @@ function openEditListingModal(event, id) {
     const tagsEl = document.getElementById('editListingTags');
     if (tagsEl) tagsEl.value = Array.isArray(item.tags) ? item.tags.join(', ') : '';
     openModal('editListingModal');
+    try {
+        setupSelectPickers();
+    } catch (e) {
+        null;
+    }
     lucide.createIcons();
 }
 
@@ -7696,6 +7739,11 @@ function openCreateListingPage({ pushState = true } = {}) {
     const phoneInput = document.getElementById('listingContactPhone');
     if (phoneInput && !phoneInput.value && userProfile?.phone) {
         phoneInput.value = userProfile.phone;
+    }
+    try {
+        setupSelectPickers();
+    } catch (e) {
+        null;
     }
     lucide.createIcons();
 }
