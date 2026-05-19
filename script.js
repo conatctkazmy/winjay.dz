@@ -4361,6 +4361,69 @@ function openCategoryPicker(selectId) {
 
 let selectPickerTargetSelectId = '';
 let selectPickerCachedOptions = [];
+let selectPickerAnchorEl = null;
+let selectPickerDropdownBound = false;
+
+function bindSelectPickerDropdown() {
+    if (selectPickerDropdownBound) return;
+    selectPickerDropdownBound = true;
+    document.addEventListener('pointerdown', (e) => {
+        const modal = document.getElementById('selectPickerModal');
+        if (!modal || !modal.classList.contains('active')) return;
+        const content = modal.querySelector('.modal-content');
+        if (content && content.contains(e.target)) return;
+        const id = String(selectPickerTargetSelectId || '').trim();
+        const btn = id ? document.querySelector(`.select-picker-btn[data-select-id="${CSS.escape(id)}"]`) : null;
+        if (btn && (btn === e.target || btn.contains(e.target))) return;
+        closeModal('selectPickerModal');
+    }, true);
+
+    document.addEventListener('keydown', (e) => {
+        if (String(e.key || '') !== 'Escape') return;
+        const modal = document.getElementById('selectPickerModal');
+        if (!modal || !modal.classList.contains('active')) return;
+        closeModal('selectPickerModal');
+    });
+
+    window.addEventListener('resize', () => {
+        const modal = document.getElementById('selectPickerModal');
+        if (!modal || !modal.classList.contains('active')) return;
+        positionSelectPickerDropdown();
+    });
+}
+
+function positionSelectPickerDropdown() {
+    const modal = document.getElementById('selectPickerModal');
+    if (!modal) return;
+    const content = modal.querySelector('.modal-content');
+    if (!content) return;
+    const anchor = selectPickerAnchorEl || content;
+    const rect = anchor.getBoundingClientRect();
+    const viewportW = window.innerWidth || document.documentElement.clientWidth || 0;
+    const viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+    const minW = 220;
+    const margin = 8;
+    let width = Math.max(minW, rect.width || minW);
+    width = Math.min(width, Math.max(minW, viewportW - margin * 2));
+    let left = rect.left;
+    left = Math.max(margin, Math.min(left, viewportW - width - margin));
+
+    content.style.left = `${Math.round(left)}px`;
+    content.style.right = 'auto';
+    content.style.width = `${Math.round(width)}px`;
+    content.style.top = `${Math.round(rect.bottom + margin)}px`;
+    content.style.bottom = 'auto';
+    content.style.transform = 'none';
+
+    const prevVisibility = content.style.visibility;
+    content.style.visibility = 'hidden';
+    const h = content.offsetHeight || 0;
+    const preferAbove = (rect.bottom + margin + h > viewportH - margin) && rect.top > (viewportH - rect.bottom);
+    let top = preferAbove ? (rect.top - h - margin) : (rect.bottom + margin);
+    top = Math.max(margin, Math.min(top, viewportH - h - margin));
+    content.style.top = `${Math.round(top)}px`;
+    content.style.visibility = prevVisibility;
+}
 
 function getSelectPickerLabelForSelect(selectEl) {
     if (!selectEl) return 'Sélectionnez';
@@ -4454,11 +4517,6 @@ function enhanceSelectToPicker(selectEl) {
 function openSelectPickerFor(selectId) {
     const id = String(selectId || '').trim();
     if (!id) return;
-    if (id === 'listingCategory' || id === 'editListingCategory' || id === 'editWorkCategory') {
-        openCategoryPicker(id);
-        return;
-    }
-
     const select = document.getElementById(id);
     if (!select || select.disabled) return;
     selectPickerTargetSelectId = id;
@@ -4475,13 +4533,15 @@ function openSelectPickerFor(selectId) {
         }));
     selectPickerCachedOptions = options;
     renderSelectPickerOptions(options, String(select.value || ''));
-    openModal('selectPickerModal');
+    bindSelectPickerDropdown();
+    const modal = document.getElementById('selectPickerModal');
+    if (!modal) return;
+    const content = modal.querySelector('.modal-content');
+    if (!content) return;
+    selectPickerAnchorEl = getPickerButtonForSelect(select) || select;
+    modal.classList.add('active');
+    positionSelectPickerDropdown();
     lucide.createIcons();
-    try {
-        if (search) setTimeout(() => search.focus(), 80);
-    } catch (e) {
-        null;
-    }
 }
 
 function renderSelectPickerOptions(options, currentValue) {
@@ -4525,7 +4585,10 @@ function selectPickerChoose(value) {
 function setupSelectPickers() {
     const selectors = [
         '#create-listing-section select',
-        '#editListingModal select'
+        '#editListingModal select',
+        '#sortSelect',
+        '#filterWilaya',
+        '#filterCategory'
     ];
     const nodes = selectors.flatMap((sel) => Array.from(document.querySelectorAll(sel)));
     nodes.forEach((el) => enhanceSelectToPicker(el));
@@ -4784,6 +4847,25 @@ function closeModal(modalId) {
     if (el) el.classList.remove('active');
     if (modalId === 'otherCategoriesModal') {
         categoryPickerTargetSelectId = '';
+    }
+    if (modalId === 'selectPickerModal') {
+        selectPickerTargetSelectId = '';
+        selectPickerCachedOptions = [];
+        selectPickerAnchorEl = null;
+        try {
+            const content = el ? el.querySelector('.modal-content') : null;
+            if (content) {
+                content.style.left = '';
+                content.style.right = '';
+                content.style.top = '';
+                content.style.bottom = '';
+                content.style.width = '';
+                content.style.transform = '';
+                content.style.visibility = '';
+            }
+        } catch (e) {
+            null;
+        }
     }
     if (!document.querySelector('.modal.active')) {
         body.classList.remove('modal-open');

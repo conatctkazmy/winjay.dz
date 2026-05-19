@@ -3621,6 +3621,45 @@ body.dark-mode .listing-status-badge {
     background-color: rgba(255, 107, 0, 0.08);
 }
 
+#selectPickerModal.active {
+    display: block !important;
+    background: transparent;
+    pointer-events: none;
+}
+
+#selectPickerModal .modal-content {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: auto;
+    bottom: auto;
+    transform: none;
+    width: min(420px, calc(100vw - 16px));
+    max-width: none;
+    margin: 0;
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+    overflow: hidden;
+    pointer-events: auto;
+}
+
+#selectPickerModal .modal-search {
+    margin-bottom: 12px;
+}
+
+#selectPickerModal .select-picker-list {
+    max-height: min(320px, 45vh);
+    overflow-y: auto;
+    padding-right: 6px;
+}
+
+#selectPickerModal .close {
+    top: 12px;
+    right: 14px;
+}
+
 .detail-container {
     display: flex;
     flex-direction: column;
