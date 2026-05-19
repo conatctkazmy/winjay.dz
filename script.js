@@ -2939,7 +2939,7 @@ async function fetchProfileReviews(profileId) {
     if (reviewIds.length) {
         const res = await client
             .from('profile_review_comments')
-            .select('id, created_at, review_id, author_id, text')
+            .select('id, created_at, review_id, author_id, body')
             .in('review_id', reviewIds)
             .order('created_at', { ascending: true })
             .limit(500);
@@ -2976,7 +2976,7 @@ async function fetchProfileReviews(profileId) {
                 tag: ts.tag,
                 pic: ts.pic || ts.profilePic,
                 date: formatRelativeDate(t.created_at),
-                text: escapeHtml(t.text || '')
+                text: escapeHtml(t.body || t.text || '')
             };
         });
         return {
@@ -9161,6 +9161,10 @@ async function addProfileReview(targetTag, source = 'seller-profile') {
     }
 
     if (DEMO_MODE) {
+        if (String(targetTag || '').toLowerCase() === String(userProfile.tag || '').toLowerCase()) {
+            showToast('Vous ne pouvez pas noter votre propre profil.', 'alert-circle');
+            return;
+        }
         const profile = findProfileByTag(targetTag);
         if (!profile) return;
         const reviewer = getCurrentReviewerIdentity();
@@ -9200,6 +9204,10 @@ async function addProfileReview(targetTag, source = 'seller-profile') {
     const targetProfile = await fetchProfileByTag(targetTag);
     if (!targetProfile?.id) {
         showToast('Seller profile not found', 'alert-circle');
+        return;
+    }
+    if (String(targetProfile.id) === String(currentSupabaseUserId)) {
+        showToast('Vous ne pouvez pas noter votre propre profil.', 'alert-circle');
         return;
     }
 
@@ -9274,6 +9282,10 @@ async function addProfileReviewById(targetProfileId, source = 'seller-profile') 
     const targetId = String(targetProfileId || '').trim();
     if (!targetId) {
         showToast('Seller profile not found', 'alert-circle');
+        return;
+    }
+    if (String(targetId) === String(currentSupabaseUserId)) {
+        showToast('Vous ne pouvez pas noter votre propre profil.', 'alert-circle');
         return;
     }
 
