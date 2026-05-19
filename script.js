@@ -9521,7 +9521,6 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                     </div>` : ''}
                 </div>
                 ${item.description ? `<div class="detail-description"><h3>Description</h3><p>${escapeHtml(item.description)}</p></div>` : ''}
-                ${Array.isArray(item.tags) && item.tags.length ? `<div class="detail-tags">${item.tags.map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
                 <h3>Vendeur</h3>
                 <div class="seller-card" onclick="openSellerProfileByOwnerId('${item.owner_id}')">
                     <div class="seller-info">
