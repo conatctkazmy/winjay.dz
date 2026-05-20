@@ -1299,6 +1299,14 @@ html.sidebar-open {
     .sidebar.collapsed #sidebarFollowingDivider {
         display: none !important;
     }
+
+    .sidebar.collapsed #themeToggle {
+        justify-content: center;
+    }
+
+    .sidebar.collapsed #themeToggle span {
+        display: none;
+    }
 }
 
 .sidebar-content {
