@@ -10487,6 +10487,17 @@ function setCarouselIndex(carouselEl, index, { animate = true, persist = false }
     carouselEl.dataset.index = String(next);
     if (!animate) track.style.transition = 'none';
     track.style.transform = `translateX(-${next * step}%)`;
+    const prevBtn = carouselEl.querySelector('.carousel-arrow.prev');
+    const nextBtn = carouselEl.querySelector('.carousel-arrow.next');
+    const hideArrows = slides.length <= columns || max <= 0;
+    if (prevBtn) {
+        prevBtn.style.display = hideArrows ? 'none' : '';
+        prevBtn.disabled = hideArrows ? true : next <= 0;
+    }
+    if (nextBtn) {
+        nextBtn.style.display = hideArrows ? 'none' : '';
+        nextBtn.disabled = hideArrows ? true : next >= max;
+    }
     const dots = carouselEl.querySelectorAll('.carousel-dot');
     dots.forEach((d) => {
         const i = Number(d.getAttribute('data-dot-index')) || 0;
@@ -10547,6 +10558,7 @@ function initCarouselElement(carouselEl) {
             applyIndex(getIndex() + 1, { animate: true, persist: true });
         });
     }
+    setCarouselIndex(carouselEl, getIndex(), { animate: false, persist: false });
 
     let pointerId = null;
     let startX = 0;
