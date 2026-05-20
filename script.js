@@ -3851,6 +3851,7 @@ function bootstrapLivePresence() {
     }
     livePresenceChannel = client.channel('live-visitors', { config: { presence: { key } } });
     livePresenceChannel.on('presence', { event: 'sync' }, () => {
+        updateAdminOnlineKpiValue();
         const adminOpen = document.getElementById('admin-dashboard-section')?.classList?.contains('active');
         if (adminOpen && adminActiveTab === 'live') renderAdminLiveVisitors();
     });
@@ -7868,6 +7869,22 @@ async function switchMyProfileSection(section) {
 
 let adminActiveTab = 'overview';
 
+function getLiveVisitorsCount() {
+    try {
+        if (!livePresenceChannel) return 0;
+        const state = livePresenceChannel.presenceState?.() || {};
+        return Object.keys(state || {}).length;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function updateAdminOnlineKpiValue() {
+    const el = document.getElementById('adminKpiOnlineValue');
+    if (!el) return;
+    el.textContent = String(getLiveVisitorsCount());
+}
+
 function adminBadge(status) {
     const s = String(status || '').toLowerCase();
     if (s === 'approved') return `<span class="admin-badge ok">APPROVED</span>`;
@@ -7959,6 +7976,7 @@ async function renderAdminKpis() {
         el.innerHTML = '';
         return;
     }
+    const onlineNow = getLiveVisitorsCount();
     const users = await adminCount('profiles');
     const listingsCount = await adminCount('listings');
     const vipPending = await adminCount('vip_applications', (q) => q.eq('status', 'pending'));
@@ -7966,6 +7984,7 @@ async function renderAdminKpis() {
     const identityPending = await adminCount('identity_applications', (q) => q.eq('status', 'pending'));
     const submissionsPending = await adminCount('submissions', (q) => q.eq('status', 'pending'));
     const items = [
+        { icon: 'activity', label: 'Online now', valueHtml: `<span id="adminKpiOnlineValue">${escapeHtml(String(onlineNow))}</span>` },
         { icon: 'users', label: 'Users', value: users.error ? '—' : users.count },
         { icon: 'layout-grid', label: 'Listings', value: listingsCount.error ? '—' : listingsCount.count },
         { icon: 'crown', label: 'VIP pending', value: vipPending.error ? '—' : vipPending.count },
@@ -7978,7 +7997,7 @@ async function renderAdminKpis() {
             (x) => `
             <div class="admin-kpi">
                 <div class="kpi-label"><i data-lucide="${x.icon}"></i> ${escapeHtml(x.label)}</div>
-                <div class="kpi-value">${escapeHtml(String(x.value))}</div>
+                <div class="kpi-value">${x.valueHtml ? x.valueHtml : escapeHtml(String(x.value))}</div>
             </div>
         `
         )
@@ -8738,6 +8757,108 @@ function renderAdminLiveVisitors() {
         .join('');
 }
 
+async function adminFetchSignupMetrics(days = 30) {
+    if (DEMO_MODE) {
+        const today = new Date();
+        const series = [];
+        for (let i = Math.max(1, Number(days) || 30) - 1; i >= 0; i--) {
+            const d = new Date(today);
+            d.setDate(today.getDate() - i);
+            const v = Math.max(0, Math.round(10 + 6 * Math.sin(i / 2) + (Math.random() * 6 - 3)));
+            series.push({ date: d.toISOString().slice(0, 10), count: v });
+        }
+        const total = series.reduce((sum, x) => sum + (Number(x.count) || 0), 0) + 1200;
+        return { series, total };
+    }
+    const client = initSupabase();
+    if (!client) return null;
+    const { data: sessionData } = await client.auth.getSession();
+    const token = sessionData?.session?.access_token || '';
+    if (!token) return null;
+    try {
+        const res = await fetch(`${SUPABASE_PROJECT_URL}/functions/v1/admin-signup-metrics`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                apikey: SUPABASE_ANON_KEY,
+                authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ days: Math.max(1, Math.min(180, Number(days) || 30)) })
+        });
+        if (!res.ok) return null;
+        const payload = await res.json();
+        if (!payload || !Array.isArray(payload.series)) return null;
+        return {
+            total: Number(payload.total) || 0,
+            series: payload.series.map((x) => ({
+                date: String(x?.date || ''),
+                count: Number(x?.count) || 0
+            }))
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+function renderAdminGrowthChartSvg(series) {
+    const width = 900;
+    const height = 260;
+    const padX = 34;
+    const padY = 26;
+    const w = width - padX * 2;
+    const h = height - padY * 2;
+    const points = Array.isArray(series) ? series.slice() : [];
+    if (!points.length) return '';
+    const maxVal = Math.max(1, ...points.map((x) => Number(x.count) || 0));
+    const step = points.length <= 1 ? 0 : w / (points.length - 1);
+    const coords = points.map((p, idx) => {
+        const x = padX + idx * step;
+        const y = padY + (1 - (Number(p.count) || 0) / maxVal) * h;
+        return { x, y };
+    });
+    const path = coords
+        .map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(2)} ${c.y.toFixed(2)}`)
+        .join(' ');
+    const area = `${path} L${(padX + w).toFixed(2)} ${(padY + h).toFixed(2)} L${padX.toFixed(2)} ${(padY + h).toFixed(2)} Z`;
+    const last = points[points.length - 1];
+    const lastLabel = last?.date ? String(last.date).slice(5) : '';
+    const first = points[0];
+    const firstLabel = first?.date ? String(first.date).slice(5) : '';
+    return `
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Users growth">
+            <defs>
+                <linearGradient id="adminGrowthFill" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="var(--primary-color)" stop-opacity="0.22"></stop>
+                    <stop offset="100%" stop-color="var(--primary-color)" stop-opacity="0"></stop>
+                </linearGradient>
+            </defs>
+            <path d="${area}" fill="url(#adminGrowthFill)"></path>
+            <path d="${path}" fill="none" stroke="var(--primary-color)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+            <text x="${padX}" y="${height - 10}" fill="var(--text-muted)" font-size="12" font-weight="700">${escapeHtml(firstLabel)}</text>
+            <text x="${padX + w}" y="${height - 10}" fill="var(--text-muted)" font-size="12" font-weight="700" text-anchor="end">${escapeHtml(lastLabel)}</text>
+        </svg>
+    `.trim();
+}
+
+async function renderAdminGrowthChart() {
+    if (!isAdminAuthorized()) return;
+    const chartEl = document.getElementById('adminGrowthChart');
+    const summaryEl = document.getElementById('adminGrowthSummary');
+    if (!chartEl || !summaryEl) return;
+    chartEl.innerHTML = '<div class="muted">Loading...</div>';
+    summaryEl.textContent = '';
+    const days = 30;
+    const data = await adminFetchSignupMetrics(days);
+    if (!data) {
+        chartEl.innerHTML = '<div class="muted">Unable to load growth data.</div>';
+        return;
+    }
+    const series = Array.isArray(data.series) ? data.series.slice() : [];
+    const lastDays = series.reduce((sum, x) => sum + (Number(x.count) || 0), 0);
+    summaryEl.textContent = `Last ${days} days: +${lastDays} · Total: ${Number(data.total) || 0}`;
+    chartEl.innerHTML = renderAdminGrowthChartSvg(series) || '<div class="muted">No data.</div>';
+}
+
 async function renderAdminOverviewLists() {
     if (!isAdminAuthorized()) return;
     const pendingEl = document.getElementById('adminPendingList');
@@ -8784,7 +8905,10 @@ async function renderAdminDashboard(force = false) {
     if (!adminActiveTab) adminActiveTab = 'overview';
     setActiveAdminTab(adminActiveTab);
     await renderAdminKpis();
-    if (adminActiveTab === 'overview') await renderAdminOverviewLists();
+    if (adminActiveTab === 'overview') {
+        await renderAdminOverviewLists();
+        await renderAdminGrowthChart();
+    }
     if (adminActiveTab === 'users') await renderAdminUsers();
     if (adminActiveTab === 'vip') await renderVipApplications();
     if (adminActiveTab === 'verified') {

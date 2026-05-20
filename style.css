@@ -5796,6 +5796,21 @@ footer {
     padding: 14px;
 }
 
+.admin-growth-card {
+    margin-top: 14px;
+}
+
+.admin-chart {
+    width: 100%;
+    min-height: 240px;
+}
+
+.admin-chart svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
 .admin-card-head {
     display: flex;
     align-items: center;
