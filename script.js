@@ -139,6 +139,7 @@ let listingsHasMore = true;
 let listingsLoadMoreBound = false;
 let lucideRenderTimer = null;
 let marketplaceRenderTimer = null;
+let lastCarouselSwipeAt = 0;
 
 function scheduleLucideCreateIcons() {
     if (lucideRenderTimer) {
@@ -8191,6 +8192,22 @@ function getSimilarListings(item) {
     return listings.filter(l => l.id !== item.id && (l.category === item.category || l.location === item.location)).slice(0, 4);
 }
 
+function handleCardOpen(e, listingId) {
+    const id = Number(listingId) || 0;
+    if (!id) return;
+    try {
+        const target = e?.target || null;
+        const carousel = target && typeof target.closest === 'function' ? target.closest('.js-carousel[data-carousel="card"]') : null;
+        if (carousel) {
+            if (carousel.dataset.dragging === '1') return;
+            if (Date.now() - (Number(lastCarouselSwipeAt) || 0) < 900) return;
+        }
+    } catch (err) {
+        null;
+    }
+    openListingDetail(id);
+}
+
 function createMyListingCardHTML(item) {
     const isFavorite = favorites.includes(item.id);
     const pulse = pendingHeartPulses.has(item.id) && isFavorite;
@@ -8208,7 +8225,7 @@ function createMyListingCardHTML(item) {
             </div>`
         : `<img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low">`;
     return `
-        <div class="card my-listing-card" onclick="openListingDetail(${item.id})">
+        <div class="card my-listing-card" onclick="handleCardOpen(event, ${item.id})">
             <div class="listing-actions">
                 <button class="action-btn edit" onclick="openEditListingPage(event, ${item.id})">
                     <i data-lucide="pencil"></i>
@@ -10352,11 +10369,14 @@ function setCarouselIndex(carouselEl, index, { animate = true, persist = false }
     const track = carouselEl.querySelector('.carousel-track');
     const slides = carouselEl.querySelectorAll('.carousel-slide');
     if (!track || slides.length === 0) return;
-    const max = slides.length - 1;
+    const columnsRaw = Number(carouselEl.dataset.columns) || 1;
+    const columns = Math.max(1, Math.min(3, columnsRaw));
+    const max = Math.max(0, slides.length - columns);
+    const step = 100 / columns;
     const next = Math.max(0, Math.min(max, Number(index) || 0));
     carouselEl.dataset.index = String(next);
     if (!animate) track.style.transition = 'none';
-    track.style.transform = `translateX(-${next * 100}%)`;
+    track.style.transform = `translateX(-${next * step}%)`;
     const dots = carouselEl.querySelectorAll('.carousel-dot');
     dots.forEach((d) => {
         const i = Number(d.getAttribute('data-dot-index')) || 0;
@@ -10379,10 +10399,17 @@ function initCarouselElement(carouselEl) {
     const track = carouselEl.querySelector('.carousel-track');
     if (!viewport || !track) return;
     const slides = carouselEl.querySelectorAll('.carousel-slide');
-    if (slides.length <= 1) return;
+    const columnsRaw = Number(carouselEl.dataset.columns) || 1;
+    const columns = Math.max(1, Math.min(3, columnsRaw));
+    if (slides.length <= columns) {
+        setCarouselIndex(carouselEl, 0, { animate: false, persist: carouselEl.dataset.carousel === 'detail' });
+        return;
+    }
 
     const applyIndex = (idx, opts) => setCarouselIndex(carouselEl, idx, opts);
-    const getIndex = () => Math.max(0, Math.min(slides.length - 1, Number(carouselEl.dataset.index) || 0));
+    const maxIndex = Math.max(0, slides.length - columns);
+    const step = 100 / columns;
+    const getIndex = () => Math.max(0, Math.min(maxIndex, Number(carouselEl.dataset.index) || 0));
 
     carouselEl.querySelectorAll('.carousel-dot').forEach((dot) => {
         if (dot.dataset.bound) return;
@@ -10454,7 +10481,7 @@ function initCarouselElement(carouselEl) {
         }
         e.preventDefault();
         const pct = (dx / Math.max(1, viewport.clientWidth)) * 100;
-        const base = -startIndex * 100;
+        const base = -startIndex * step;
         track.style.transform = `translateX(${base + pct}%)`;
     }, { passive: false });
 
@@ -10467,6 +10494,7 @@ function initCarouselElement(carouselEl) {
             if (dx <= -threshold) next = startIndex + 1;
             if (dx >= threshold) next = startIndex - 1;
             carouselEl.dataset.dragged = '1';
+            lastCarouselSwipeAt = Date.now();
         }
         track.style.transition = '';
         applyIndex(next, { animate: true, persist: carouselEl.dataset.carousel === 'detail' });
@@ -10510,7 +10538,7 @@ function initCarouselElement(carouselEl) {
         }
         e.preventDefault();
         const pct = (dx / Math.max(1, viewport.clientWidth)) * 100;
-        const base = -startIndex * 100;
+        const base = -startIndex * step;
         track.style.transform = `translateX(${base + pct}%)`;
     }, { passive: false });
 
@@ -10528,6 +10556,7 @@ function initCarouselElement(carouselEl) {
             if (dx <= -threshold) next = startIndex + 1;
             if (dx >= threshold) next = startIndex - 1;
             carouselEl.dataset.dragged = '1';
+            lastCarouselSwipeAt = Date.now();
         }
         track.style.transition = '';
         applyIndex(next, { animate: true, persist: carouselEl.dataset.carousel === 'detail' });
@@ -10613,7 +10642,7 @@ function createCardHTML(item) {
             </div>`
         : `<img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low">`;
     return `
-        <div class="card" onclick="openListingDetail(${item.id})">
+        <div class="card" onclick="handleCardOpen(event, ${item.id})">
             <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
                 <i data-lucide="heart"></i>
             </button>
@@ -11586,7 +11615,8 @@ function getListingImagesForDetail(item) {
 
 function setListingDetailImage(listingId, index) {
     const urls = getListingImagesForDetail(listings.find((l) => l.id === listingId));
-    const idx = Math.max(0, Math.min(urls.length - 1, Number(index) || 0));
+    const maxIdx = urls.length > 1 ? Math.max(0, urls.length - 2) : Math.max(0, urls.length - 1);
+    const idx = Math.max(0, Math.min(maxIdx, Number(index) || 0));
     listingDetailImageIndex[listingId] = idx;
     const carousel = document.querySelector(`.js-carousel[data-carousel="detail"][data-listing-id="${Number(listingId) || 0}"]`);
     if (carousel) {
@@ -11631,11 +11661,13 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     const pulse = pendingHeartPulses.has(listingId) && isLiked;
     const detailImages = getListingImagesForDetail(item);
     const selectedIdxRaw = listingDetailImageIndex[listingId] ?? 0;
-    const selectedIdx = Math.max(0, Math.min(detailImages.length - 1, Number(selectedIdxRaw) || 0));
+    const maxDetailIndex = detailImages.length > 1 ? Math.max(0, detailImages.length - 2) : 0;
+    const selectedIdx = Math.max(0, Math.min(maxDetailIndex, Number(selectedIdxRaw) || 0));
     listingDetailImageIndex[listingId] = selectedIdx;
-    const mainImageUrl = detailImages[selectedIdx] || item.image;
+    const mainImageUrl = detailImages[0] || item.image;
+    const detailDotsCount = maxDetailIndex + 1;
     const detailCarouselHtml = detailImages.length > 1
-        ? `<div class="detail-carousel js-carousel" data-carousel="detail" data-listing-id="${listingId}" data-index="${selectedIdx}">
+        ? `<div class="detail-carousel js-carousel" data-carousel="detail" data-columns="2" data-listing-id="${listingId}" data-index="${selectedIdx}">
                 <button type="button" class="carousel-arrow prev" aria-label="Previous image"><i data-lucide="chevron-left"></i></button>
                 <div class="carousel-viewport">
                     <div class="carousel-track">
@@ -11644,7 +11676,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                 </div>
                 <button type="button" class="carousel-arrow next" aria-label="Next image"><i data-lucide="chevron-right"></i></button>
                 <div class="carousel-dots">
-                    ${detailImages.map((_, i) => `<button type="button" class="carousel-dot ${i === selectedIdx ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
+                    ${Array.from({ length: detailDotsCount }, (_, i) => `<button type="button" class="carousel-dot ${i === selectedIdx ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
                 </div>
             </div>`
         : `<img id="detailMainImage" src="${mainImageUrl}" data-src="${mainImageUrl}" class="detail-image" alt="${escapeHtml(item.title)}" onclick="openLightbox('${mainImageUrl}')">`;

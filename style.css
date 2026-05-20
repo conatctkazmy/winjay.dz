@@ -2050,6 +2050,15 @@ main.expanded {
     border: 1px solid var(--border-color);
 }
 
+.detail-carousel[data-columns="2"] {
+    height: auto;
+    aspect-ratio: 2 / 1;
+}
+
+.detail-carousel[data-columns="2"] .carousel-slide {
+    flex: 0 0 50%;
+}
+
 .carousel-viewport {
     width: 100%;
     height: 100%;
