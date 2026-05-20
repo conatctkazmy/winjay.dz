@@ -55,8 +55,8 @@ const MESSAGE_MEDIA_BUCKET = 'message-media';
 const IDENTITY_DOCS_BUCKET = 'identity-docs';
 const FREE_LISTING_LIMIT = 4;
 const SELLER_PROFILE_LAST_TAG_STORAGE_KEY = 'winjayLastSellerProfileTagV1';
-const INITIAL_LISTINGS_FETCH_LIMIT = 30;
-const LISTINGS_FETCH_PAGE_SIZE = 30;
+const INITIAL_LISTINGS_FETCH_LIMIT = 24;
+const LISTINGS_FETCH_PAGE_SIZE = 24;
 
 function safeStorageFilename(name) {
     return String(name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -8136,7 +8136,7 @@ function createMyListingCardHTML(item) {
             <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
                 <i data-lucide="heart"></i>
             </button>
-            <img src="${item.image}" alt="${item.title}" class="card-img">
+            <img src="${item.image}" alt="${item.title}" class="card-img" loading="lazy" decoding="async" fetchpriority="low">
             <div class="card-content">
                 <div class="card-price">${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD</div>
                 <div class="card-title">${item.title}</div>
@@ -10283,7 +10283,7 @@ function createCardHTML(item) {
                 <i data-lucide="heart"></i>
             </button>
             ${badgeText ? `<div class="card-status-badge ${availability}">${badgeText}</div>` : ''}
-            <img src="${item.image}" alt="${item.title}" class="card-img">
+            <img src="${item.image}" alt="${item.title}" class="card-img" loading="lazy" decoding="async" fetchpriority="low">
             <div class="card-content">
                 <div class="card-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
                 <div class="card-title">${item.title}</div>
