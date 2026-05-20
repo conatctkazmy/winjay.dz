@@ -3644,10 +3644,23 @@ async function fetchProfileReviews(profileId) {
     });
 }
 
-async function startChatWithSellerByOwnerId(ownerId) {
+async function startChatWithSellerByOwnerId(ownerId, listingId = null) {
     if (!ownerId) return;
     if (!requireAuthOrPrompt()) return;
     if (DEMO_MODE) return;
+    const lid = Number(listingId) || 0;
+    if (lid) {
+        const item = listings.find((l) => l.id === lid);
+        trackListingContactAction('message', lid);
+        trackAnalyticsEvent('chat_start', {
+            listingId: lid,
+            category: item?.category || null,
+            wilaya: item?.wilaya || null,
+            dedupeKey: `chat_start:${lid}:${getAnalyticsSessionId()}`
+        });
+    } else {
+        trackAnalyticsEvent('chat_start', { dedupeKey: `chat_start:direct:${getAnalyticsSessionId()}` });
+    }
     const client = initSupabase();
     if (!client || !currentSupabaseUserId) return;
     let profileRow = null;
@@ -3924,6 +3937,64 @@ function getDeviceInfo() {
     } catch (e) {
         return { type: 'unknown' };
     }
+}
+
+function getAnalyticsSessionId() {
+    try {
+        const key = 'winjayAnalyticsSessionV1';
+        const existing = sessionStorage.getItem(key);
+        if (existing) return existing;
+        const id = crypto?.randomUUID ? crypto.randomUUID() : `sess_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+        sessionStorage.setItem(key, id);
+        return id;
+    } catch (e) {
+        return `sess_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
+}
+
+const analyticsDedupeKeys = new Set();
+
+async function trackAnalyticsEvent(eventName, { listingId = null, category = null, wilaya = null, meta = null, dedupeKey = '' } = {}) {
+    if (DEMO_MODE) return;
+    const name = String(eventName || '').trim();
+    if (!name) return;
+    const key = dedupeKey ? String(dedupeKey) : `${name}:${listingId ?? ''}`;
+    if (analyticsDedupeKeys.has(key)) return;
+    analyticsDedupeKeys.add(key);
+    const client = initSupabase();
+    if (!client) return;
+    const payload = {
+        event_name: name,
+        user_id: currentSupabaseUserId || null,
+        anon_id: currentSupabaseUserId ? null : getAnonVisitorId(),
+        session_id: getAnalyticsSessionId(),
+        section: getCurrentSectionId(),
+        listing_id: Number.isFinite(Number(listingId)) ? Number(listingId) : null,
+        category: category ? String(category) : null,
+        wilaya: wilaya ? String(wilaya) : null,
+        device: getDeviceInfo(),
+        meta: meta && typeof meta === 'object' ? meta : null
+    };
+    try {
+        const { error } = await client.from('analytics_events').insert(payload);
+        if (error) {
+            analyticsDedupeKeys.delete(key);
+        }
+    } catch (e) {
+        analyticsDedupeKeys.delete(key);
+    }
+}
+
+function trackListingContactAction(kind, listingId) {
+    const id = Number(listingId) || 0;
+    const item = listings.find((l) => l.id === id);
+    trackAnalyticsEvent('contact_click', {
+        listingId: id || null,
+        category: item?.category || null,
+        wilaya: item?.wilaya || null,
+        meta: { kind: String(kind || 'unknown') },
+        dedupeKey: `contact_click:${String(kind || 'unknown')}:${id || ''}:${getAnalyticsSessionId()}`
+    });
 }
 
 function updateLivePresence() {
@@ -8507,6 +8578,18 @@ async function adminCount(table, build) {
     return { count: Number(count) || 0, error };
 }
 
+async function adminFetchFunnelMetrics(days = 7) {
+    const client = initSupabase();
+    if (!client) return null;
+    try {
+        const { data, error } = await client.rpc('admin_funnel_metrics', { days: Number(days) || 7 });
+        if (error || !data) return null;
+        return data;
+    } catch (e) {
+        return null;
+    }
+}
+
 async function renderAdminKpis() {
     const el = document.getElementById('adminKpis');
     if (!el) return;
@@ -8521,10 +8604,15 @@ async function renderAdminKpis() {
     const verifiedPending = await adminCount('verified_applications', (q) => q.eq('status', 'pending'));
     const identityPending = await adminCount('identity_applications', (q) => q.eq('status', 'pending'));
     const submissionsPending = await adminCount('submissions', (q) => q.eq('status', 'pending'));
+    const funnel = await adminFetchFunnelMetrics(7);
+    const homeToChatRate = funnel?.rates?.home_to_chat ?? null;
+    const chatSessions = funnel?.sessions?.chat ?? null;
     const items = [
         { icon: 'activity', label: 'Online now', valueHtml: `<span id="adminKpiOnlineValue">${escapeHtml(String(onlineNow))}</span>` },
         { icon: 'users', label: 'Users', value: users.error ? '—' : users.count },
         { icon: 'layout-grid', label: 'Listings', value: listingsCount.error ? '—' : listingsCount.count },
+        { icon: 'trending-up', label: 'Home→Chat (7d)', value: homeToChatRate === null || homeToChatRate === undefined ? '—' : `${(Number(homeToChatRate) * 100).toFixed(1)}%` },
+        { icon: 'message-circle', label: 'Chat starts (7d)', value: chatSessions === null || chatSessions === undefined ? '—' : Number(chatSessions) || 0 },
         { icon: 'crown', label: 'VIP pending', value: vipPending.error ? '—' : vipPending.count },
         { icon: 'badge-check', label: 'Verified pending', value: verifiedPending.error ? '—' : verifiedPending.count },
         { icon: 'scan-face', label: 'Identity pending', value: identityPending.error ? '—' : identityPending.count },
@@ -8540,7 +8628,7 @@ async function renderAdminKpis() {
         `
         )
         .join('');
-    lucide.createIcons();
+    scheduleLucideCreateIcons();
 }
 
 async function fetchProfilesForAdmin(userIds) {
@@ -9687,6 +9775,9 @@ function showSection(sectionId) {
         localStorage.setItem('winjayLastSection', sectionId);
     }
     updateLivePresence();
+    if (sectionId === 'home-section') {
+        trackAnalyticsEvent('home_view', { dedupeKey: `home_view:${getAnalyticsSessionId()}` });
+    }
 
     if (sectionId === 'home-section') {
         clearSellerProfileRouteTag();
@@ -11452,6 +11543,12 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     const item = listings.find(l => l.id === listingId);
     if (!item) return;
     currentListingDetailId = listingId;
+    trackAnalyticsEvent('listing_open', {
+        listingId,
+        category: item?.category || null,
+        wilaya: item?.wilaya || null,
+        dedupeKey: `listing_open:${listingId || ''}:${getAnalyticsSessionId()}`
+    });
     if (pushState) {
         const from = getActiveSectionId();
         const url = new URL(window.location.href);
@@ -11627,11 +11724,11 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                     <i data-lucide="chevron-right"></i>
                 </div>
                 <div class="detail-contact-actions">
-                    <button class="message-contact-btn" onclick="startChatWithSellerByOwnerId('${item.owner_id}')">
+                    <button class="message-contact-btn" onclick="startChatWithSellerByOwnerId('${item.owner_id}', ${item.id})">
                         <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
                         Message
                     </button>
-                    ${item.contact_phone ? `<a class="call-contact-btn" href="tel:${String(item.contact_phone).replace(/[^0-9+]/g, '')}" onclick="event.stopPropagation();"><i data-lucide="phone-call" style="width: 18px; height: 18px;"></i> Appeler</a>` : ''}
+                    ${item.contact_phone ? `<a class="call-contact-btn" href="tel:${String(item.contact_phone).replace(/[^0-9+]/g, '')}" onclick="trackListingContactAction('call', ${item.id}); event.stopPropagation();"><i data-lucide="phone-call" style="width: 18px; height: 18px;"></i> Appeler</a>` : ''}
                 </div>
                 <div id="listingReviewHighlightWrap">
                     ${bestListingReview ? `
