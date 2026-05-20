@@ -4981,6 +4981,14 @@ function populateListingSubcategorySelect(selectEl, mainCategory, selectedValue 
 }
 
 const listingDynamicFieldSchemas = {
+    "Véhicules::*": [
+        { key: 'make', label: 'Marque', type: 'text', required: true, placeholder: 'ex: Renault' },
+        { key: 'model', label: 'Modèle', type: 'text', required: true, placeholder: 'ex: Clio' },
+        { key: 'year', label: 'Année', type: 'number', required: true, min: 1950, max: 2035 },
+        { key: 'mileage_km', label: 'Kilométrage (km)', type: 'number', required: false, min: 0, max: 4000000 },
+        { key: 'fuel', label: 'Carburant', type: 'select', required: false, options: ['Essence', 'Diesel', 'Hybride', 'Électrique', 'GPL'] },
+        { key: 'color', label: 'Couleur', type: 'text', required: false, placeholder: 'ex: Blanc' }
+    ],
     "Véhicules::Voitures": [
         { key: 'make', label: 'Marque', type: 'text', required: true, placeholder: 'ex: Renault' },
         { key: 'model', label: 'Modèle', type: 'text', required: true, placeholder: 'ex: Clio' },
@@ -4989,6 +4997,72 @@ const listingDynamicFieldSchemas = {
         { key: 'fuel', label: 'Carburant', type: 'select', required: true, options: ['Essence', 'Diesel', 'Hybride', 'Électrique', 'GPL'] },
         { key: 'gearbox', label: 'Boîte', type: 'select', required: false, options: ['Manuelle', 'Automatique'] },
         { key: 'color', label: 'Couleur', type: 'text', required: false, placeholder: 'ex: Blanc' }
+    ],
+    "Véhicules::Motos & Scooters": [
+        { key: 'make', label: 'Marque', type: 'text', required: true },
+        { key: 'model', label: 'Modèle', type: 'text', required: true },
+        { key: 'year', label: 'Année', type: 'number', required: true, min: 1950, max: 2035 },
+        { key: 'mileage_km', label: 'Kilométrage (km)', type: 'number', required: false, min: 0, max: 2000000 },
+        { key: 'engine_cc', label: 'Cylindrée (cc)', type: 'number', required: false, min: 30, max: 3000 }
+    ],
+    "Immobilier::*": [
+        { key: 'transaction', label: 'Transaction', type: 'select', required: false, options: ['Vente', 'Location'] },
+        { key: 'surface_m2', label: 'Surface (m²)', type: 'number', required: true, min: 5, max: 100000 },
+        { key: 'rooms', label: 'Pièces', type: 'number', required: false, min: 0, max: 50 },
+        { key: 'bathrooms', label: 'Salles de bain', type: 'number', required: false, min: 0, max: 30 },
+        { key: 'furnished', label: 'Meublé', type: 'select', required: false, options: ['Oui', 'Non'] }
+    ],
+    "Immobilier::Terrains": [
+        { key: 'transaction', label: 'Transaction', type: 'select', required: false, options: ['Vente', 'Location'] },
+        { key: 'surface_m2', label: 'Surface (m²)', type: 'number', required: true, min: 5, max: 10000000 },
+        { key: 'zone', label: 'Zone', type: 'select', required: false, options: ['Urbaine', 'Rurale', 'Industrielle', 'Agricole'] }
+    ],
+    "Téléphonie::*": [
+        { key: 'brand', label: 'Marque', type: 'text', required: true, placeholder: 'ex: Samsung' },
+        { key: 'model', label: 'Modèle', type: 'text', required: true, placeholder: 'ex: S22' },
+        { key: 'storage_gb', label: 'Stockage (GB)', type: 'number', required: false, min: 4, max: 2000 },
+        { key: 'ram_gb', label: 'RAM (GB)', type: 'number', required: false, min: 1, max: 128 },
+        { key: 'color', label: 'Couleur', type: 'text', required: false }
+    ],
+    "Informatique::*": [
+        { key: 'brand', label: 'Marque', type: 'text', required: false },
+        { key: 'model', label: 'Modèle', type: 'text', required: false },
+        { key: 'cpu', label: 'CPU', type: 'text', required: false, placeholder: 'ex: i5 10th gen' },
+        { key: 'ram_gb', label: 'RAM (GB)', type: 'number', required: false, min: 1, max: 512 },
+        { key: 'storage', label: 'Stockage', type: 'text', required: false, placeholder: 'ex: 512GB SSD' }
+    ],
+    "Informatique::PC Portables": [
+        { key: 'brand', label: 'Marque', type: 'text', required: true },
+        { key: 'model', label: 'Modèle', type: 'text', required: true },
+        { key: 'cpu', label: 'CPU', type: 'text', required: true },
+        { key: 'ram_gb', label: 'RAM (GB)', type: 'number', required: true, min: 1, max: 512 },
+        { key: 'storage', label: 'Stockage', type: 'text', required: true, placeholder: 'ex: 512GB SSD' },
+        { key: 'screen_inches', label: 'Écran (pouces)', type: 'number', required: false, min: 9, max: 30 },
+        { key: 'gpu', label: 'GPU', type: 'text', required: false }
+    ],
+    "Informatique::PC Bureau": [
+        { key: 'cpu', label: 'CPU', type: 'text', required: true },
+        { key: 'ram_gb', label: 'RAM (GB)', type: 'number', required: true, min: 1, max: 512 },
+        { key: 'storage', label: 'Stockage', type: 'text', required: true },
+        { key: 'gpu', label: 'GPU', type: 'text', required: false }
+    ],
+    "Électronique::*": [
+        { key: 'brand', label: 'Marque', type: 'text', required: true },
+        { key: 'model', label: 'Modèle', type: 'text', required: false },
+        { key: 'warranty', label: 'Garantie', type: 'select', required: false, options: ['Oui', 'Non'] }
+    ],
+    "Électronique::TV & Audio": [
+        { key: 'brand', label: 'Marque', type: 'text', required: true },
+        { key: 'model', label: 'Modèle', type: 'text', required: false },
+        { key: 'screen_inches', label: 'Taille écran (pouces)', type: 'number', required: false, min: 10, max: 200 },
+        { key: 'resolution', label: 'Résolution', type: 'select', required: false, options: ['HD', 'Full HD', '4K', '8K'] },
+        { key: 'smart_tv', label: 'Smart TV', type: 'select', required: false, options: ['Oui', 'Non'] }
+    ],
+    "Électronique::Consoles & Jeux": [
+        { key: 'platform', label: 'Plateforme', type: 'select', required: true, options: ['PlayStation', 'Xbox', 'Nintendo', 'PC'] },
+        { key: 'model', label: 'Modèle', type: 'text', required: true },
+        { key: 'storage_gb', label: 'Stockage (GB)', type: 'number', required: false, min: 4, max: 5000 },
+        { key: 'includes_games', label: 'Jeux inclus', type: 'select', required: false, options: ['Oui', 'Non'] }
     ],
     "Loisirs & Divertissement::Livres": [
         { key: 'book_type', label: 'Type', type: 'select', required: false, options: ['Livre', 'Manga', 'BD/Comic', 'Manuel scolaire'] },
@@ -5007,7 +5081,9 @@ function getListingDynamicSchema(category, subcategory) {
     const cat = String(category || '').trim();
     const sub = String(subcategory || '').trim();
     const key = `${cat}::${sub}`;
-    return Array.isArray(listingDynamicFieldSchemas[key]) ? listingDynamicFieldSchemas[key] : [];
+    if (Array.isArray(listingDynamicFieldSchemas[key])) return listingDynamicFieldSchemas[key];
+    const fallback = `${cat}::*`;
+    return Array.isArray(listingDynamicFieldSchemas[fallback]) ? listingDynamicFieldSchemas[fallback] : [];
 }
 
 function collectListingDynamicFieldValues() {
@@ -6799,6 +6875,11 @@ function setCreateListingStep(step = 'details') {
             null;
         }
         return;
+    }
+
+    if (createListingMode === 'create' && next === 'details') {
+        if (catGroup) catGroup.classList.add('create-listing-step-hidden');
+        if (subGroup) subGroup.classList.add('create-listing-step-hidden');
     }
 
     if (continueBtn) continueBtn.style.display = 'none';
