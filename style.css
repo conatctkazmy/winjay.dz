@@ -3598,6 +3598,12 @@ body.dark-mode .listing-status-badge {
     display: block !important;
 }
 
+@media (min-width: 769px) {
+    .modal {
+        z-index: 9200;
+    }
+}
+
 .modal-content {
     background-color: var(--bg-main);
     position: absolute;

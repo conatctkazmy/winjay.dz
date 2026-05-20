@@ -5762,6 +5762,9 @@ function openModal(modalId) {
 function closeModal(modalId) {
     const el = document.getElementById(modalId);
     if (el) el.classList.remove('active');
+    if (modalId === 'confirmModal') {
+        confirmCallback = null;
+    }
     if (modalId === 'otherCategoriesModal') {
         categoryPickerTargetSelectId = '';
         body.classList.remove('other-categories-open');
@@ -6357,12 +6360,26 @@ function setupImageEditorDrag() {
 }
 
 window.onclick = function(event) {
-    if (event.target.classList.contains('modal')) {
-        event.target.classList.remove('active');
-        if (event.target.id === 'confirmModal') {
-            confirmCallback = null;
-        }
+    const target = event.target;
+    if (!target?.classList?.contains?.('modal')) return;
+    const modalId = String(target.id || '').trim();
+    if (!modalId) return;
+    if (window.innerWidth > 768) {
+        const blockOutsideClose = [
+            'editProfileModal',
+            'editListingModal',
+            'changePasswordModal',
+            'identityVerificationModal',
+            'verifiedCodModal',
+            'codModal',
+            'vipModal',
+            'verifiedUpgradeModal',
+            'loginModal',
+            'registerModal'
+        ];
+        if (blockOutsideClose.includes(modalId)) return;
     }
+    closeModal(modalId);
 };
 
 window.addEventListener('scroll', () => {
