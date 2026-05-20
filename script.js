@@ -214,6 +214,7 @@ function mapSupabaseListingRow(row, profilesById = {}) {
         city: row.city || '',
         contact_phone: row.contact_phone || '',
         tags: Array.isArray(row.tags) ? row.tags.filter(Boolean) : [],
+        details: row.details && typeof row.details === 'object' ? row.details : {},
         location: row.city ? `${row.city}, ${row.wilaya || ''}`.replace(/,\s*$/, '') : (row.wilaya || ''),
         wilaya: row.wilaya || '',
         status: row.status || 'active',
@@ -232,7 +233,7 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = fal
     let query = client
         .from('listings')
         .select(
-            'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, listing_images(url, sort_order)'
+            'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, sort_order)'
         )
         .order('created_at', { ascending: false });
     const safeLimit = Number(limit) || 0;
@@ -4979,6 +4980,164 @@ function populateListingSubcategorySelect(selectEl, mainCategory, selectedValue 
     refreshSelectPicker(selectEl);
 }
 
+const listingDynamicFieldSchemas = {
+    "Véhicules::Voitures": [
+        { key: 'make', label: 'Marque', type: 'text', required: true, placeholder: 'ex: Renault' },
+        { key: 'model', label: 'Modèle', type: 'text', required: true, placeholder: 'ex: Clio' },
+        { key: 'year', label: 'Année', type: 'number', required: true, min: 1950, max: 2035 },
+        { key: 'mileage_km', label: 'Kilométrage (km)', type: 'number', required: true, min: 0, max: 2000000 },
+        { key: 'fuel', label: 'Carburant', type: 'select', required: true, options: ['Essence', 'Diesel', 'Hybride', 'Électrique', 'GPL'] },
+        { key: 'gearbox', label: 'Boîte', type: 'select', required: false, options: ['Manuelle', 'Automatique'] },
+        { key: 'color', label: 'Couleur', type: 'text', required: false, placeholder: 'ex: Blanc' }
+    ],
+    "Loisirs & Divertissement::Livres": [
+        { key: 'book_type', label: 'Type', type: 'select', required: false, options: ['Livre', 'Manga', 'BD/Comic', 'Manuel scolaire'] },
+        { key: 'author', label: 'Auteur', type: 'text', required: true, placeholder: 'Nom de l’auteur' },
+        { key: 'language', label: 'Langue', type: 'select', required: true, options: ['Français', 'Arabe', 'Anglais', 'Autre'] },
+        { key: 'genre', label: 'Genre', type: 'select', required: false, options: ['Roman', 'Histoire', 'Religion', 'Développement personnel', 'Enfant', 'Science', 'Autre'] },
+        { key: 'format', label: 'Format', type: 'select', required: false, options: ['Poche', 'Broché', 'Relié'] },
+        { key: 'pages', label: 'Pages', type: 'number', required: false, min: 1, max: 20000 },
+        { key: 'publisher', label: 'Éditeur', type: 'text', required: false },
+        { key: 'publication_year', label: 'Année de publication', type: 'number', required: false, min: 1500, max: 2035 },
+        { key: 'isbn', label: 'ISBN', type: 'text', required: false }
+    ]
+};
+
+function getListingDynamicSchema(category, subcategory) {
+    const cat = String(category || '').trim();
+    const sub = String(subcategory || '').trim();
+    const key = `${cat}::${sub}`;
+    return Array.isArray(listingDynamicFieldSchemas[key]) ? listingDynamicFieldSchemas[key] : [];
+}
+
+function collectListingDynamicFieldValues() {
+    const container = document.getElementById('listingDynamicFields');
+    if (!container) return {};
+    const out = {};
+    container.querySelectorAll('[data-dynamic-key]').forEach((el) => {
+        const key = String(el.getAttribute('data-dynamic-key') || '').trim();
+        if (!key) return;
+        const raw = String(el.value || '').trim();
+        if (!raw) return;
+        const kind = String(el.getAttribute('data-dynamic-type') || '').trim();
+        if (kind === 'number') {
+            const n = Number(raw);
+            if (Number.isFinite(n)) out[key] = n;
+            return;
+        }
+        out[key] = raw;
+    });
+    return out;
+}
+
+function renderListingDynamicFields(seedValues = null) {
+    const group = document.getElementById('listingDynamicFieldsGroup');
+    const container = document.getElementById('listingDynamicFields');
+    if (!group || !container) return;
+    const category = document.getElementById('listingCategory')?.value || '';
+    const subcategory = document.getElementById('listingSubcategory')?.value || '';
+    const schema = getListingDynamicSchema(category, subcategory);
+    const current = collectListingDynamicFieldValues();
+    const values = { ...(current || {}), ...((seedValues && typeof seedValues === 'object') ? seedValues : {}) };
+    if (!schema.length) {
+        group.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+    group.style.display = '';
+    container.innerHTML = schema
+        .map((f) => {
+            const key = String(f.key || '').trim();
+            if (!key) return '';
+            const label = escapeHtml(String(f.label || key));
+            const required = !!f.required;
+            const value = values[key] ?? '';
+            const placeholder = escapeHtml(String(f.placeholder || ''));
+            if (String(f.type || '') === 'select') {
+                const options = Array.isArray(f.options) ? f.options : [];
+                const opts = ['<option value="" disabled' + (!value ? ' selected' : '') + '>Sélectionnez</option>']
+                    .concat(
+                        options.map((o) => {
+                            const v = String(o || '');
+                            const sel = String(value) === v ? ' selected' : '';
+                            return `<option value="${escapeHtml(v)}"${sel}>${escapeHtml(v)}</option>`;
+                        })
+                    )
+                    .join('');
+                return `
+                    <div class="dynamic-field">
+                        <label>${label}${required ? ' *' : ''}</label>
+                        <select data-dynamic-key="${escapeHtml(key)}" data-dynamic-type="select">${opts}</select>
+                    </div>
+                `;
+            }
+            if (String(f.type || '') === 'number') {
+                const min = Number.isFinite(Number(f.min)) ? ` min="${Number(f.min)}"` : '';
+                const max = Number.isFinite(Number(f.max)) ? ` max="${Number(f.max)}"` : '';
+                const val = value === 0 || value ? String(value) : '';
+                return `
+                    <div class="dynamic-field">
+                        <label>${label}${required ? ' *' : ''}</label>
+                        <input type="number"${min}${max} data-dynamic-key="${escapeHtml(key)}" data-dynamic-type="number" value="${escapeHtml(val)}" placeholder="${placeholder}">
+                    </div>
+                `;
+            }
+            const val = value === 0 || value ? String(value) : '';
+            return `
+                <div class="dynamic-field">
+                    <label>${label}${required ? ' *' : ''}</label>
+                    <input type="text" data-dynamic-key="${escapeHtml(key)}" data-dynamic-type="text" value="${escapeHtml(val)}" placeholder="${placeholder}">
+                </div>
+            `;
+        })
+        .join('');
+}
+
+function validateListingDynamicFields() {
+    const category = document.getElementById('listingCategory')?.value || '';
+    const subcategory = document.getElementById('listingSubcategory')?.value || '';
+    const schema = getListingDynamicSchema(category, subcategory);
+    const values = collectListingDynamicFieldValues();
+    for (const f of schema) {
+        if (!f?.required) continue;
+        const k = String(f.key || '').trim();
+        const v = values[k];
+        if (v === undefined || v === null || String(v).trim() === '') {
+            showToast(`${String(f.label || k)} is required`, 'alert-circle');
+            return null;
+        }
+    }
+    return values;
+}
+
+function renderListingDynamicDetailRows(item) {
+    const schema = getListingDynamicSchema(item?.category, item?.subcategory);
+    const details = item?.details && typeof item.details === 'object' ? item.details : {};
+    if (!schema.length) return '';
+    const rows = schema
+        .map((f) => {
+            const k = String(f.key || '').trim();
+            if (!k) return '';
+            const v = details[k];
+            if (v === undefined || v === null || String(v).trim() === '') return '';
+            const label = escapeHtml(String(f.label || k));
+            let value = String(v);
+            if (k === 'mileage_km') {
+                const n = Number(v);
+                value = Number.isFinite(n) ? `${new Intl.NumberFormat('fr-DZ').format(n)} km` : String(v);
+            }
+            return `
+                <div class="kv-row">
+                    <div class="kv-label">${label}</div>
+                    <div class="kv-value">${escapeHtml(value)}</div>
+                </div>
+            `;
+        })
+        .filter(Boolean)
+        .join('');
+    return rows;
+}
+
 function setupListingSubcategorySelects() {
     const mainAdd = document.getElementById('listingCategory');
     const subAdd = document.getElementById('listingSubcategory');
@@ -4986,8 +5145,12 @@ function setupListingSubcategorySelects() {
     const subEdit = document.getElementById('editListingSubcategory');
 
     if (mainAdd && subAdd) {
-        const refresh = () => populateListingSubcategorySelect(subAdd, mainAdd.value, '');
+        const refresh = () => {
+            populateListingSubcategorySelect(subAdd, mainAdd.value, '');
+            renderListingDynamicFields();
+        };
         mainAdd.addEventListener('change', refresh);
+        subAdd.addEventListener('change', () => renderListingDynamicFields());
         refresh();
     }
     if (mainEdit && subEdit) {
@@ -5587,6 +5750,11 @@ function resetCreateListingDraft({ resetForm = true } = {}) {
         if (priceType && price) {
             price.disabled = priceType.value === 'Free';
             if (priceType.value === 'Free') price.value = '0';
+        }
+        try {
+            renderListingDynamicFields({});
+        } catch (e) {
+            null;
         }
     }
 }
@@ -6638,6 +6806,11 @@ function setCreateListingStep(step = 'details') {
     if (submitBtn) submitBtn.style.display = '';
     if (header && header.dataset.defaultText && createListingMode === 'create') header.textContent = header.dataset.defaultText;
     if (subtitle && subtitle.dataset.defaultText && createListingMode === 'create') subtitle.textContent = subtitle.dataset.defaultText;
+    try {
+        renderListingDynamicFields();
+    } catch (e) {
+        null;
+    }
 }
 
 function bindCreateListingStepFlow() {
@@ -6659,6 +6832,11 @@ function bindCreateListingStepFlow() {
                     null;
                 }
                 return;
+            }
+            try {
+                renderListingDynamicFields({});
+            } catch (e) {
+                null;
             }
             setCreateListingStep('details');
             try {
@@ -6789,6 +6967,9 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             return { kind: 'existing', url };
         }).filter(Boolean);
         const files = imagePlan.filter((x) => x.kind === 'new').map((x) => x.file);
+        const detailsRaw = validateListingDynamicFields();
+        if (detailsRaw === null) return;
+        const details = Object.keys(detailsRaw).length ? detailsRaw : null;
 
         if (!title) {
             showToast('Title is required', 'alert-circle');
@@ -6804,6 +6985,10 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         }
         if (priceType !== 'Free' && price <= 0) {
             showToast('Price is required', 'alert-circle');
+            return;
+        }
+        if (!category) {
+            showToast('Category is required', 'alert-circle');
             return;
         }
         if (!subcategory && Array.isArray(listingSubcategoriesByCategory[category]) && listingSubcategoriesByCategory[category].length) {
@@ -6897,7 +7082,8 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                         wilaya: wilaya || null,
                         city: city || null,
                         contact_phone: contactPhone || null,
-                        tags: tags.length ? tags : null
+                        tags: tags.length ? tags : null,
+                        details
                     })
                     .eq('id', listingId)
                     .eq('owner_id', userId),
@@ -6958,6 +7144,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                     city: city || null,
                     contact_phone: contactPhone || null,
                     tags: tags.length ? tags : null,
+                    details,
                     status: 'active'
                 })
                 .select('id')
@@ -9462,6 +9649,11 @@ function openEditListingPageById(id, { pushState = true } = {}) {
     if (categoryEl) categoryEl.value = item.category || '';
     const subEl = document.getElementById('listingSubcategory');
     populateListingSubcategorySelect(subEl, item.category || '', item.subcategory || '');
+    try {
+        renderListingDynamicFields(item.details || {});
+    } catch (e) {
+        null;
+    }
     const wilayaEl = document.getElementById('listingWilaya');
     if (wilayaEl) wilayaEl.value = item.wilaya || '';
     const cityEl = document.getElementById('listingCity');
@@ -10984,6 +11176,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                                 <div class="kv-label">Livraison</div>
                                 <div class="kv-value">${escapeHtml(item.delivery || '—')}</div>
                             </div>
+                            ${renderListingDynamicDetailRows(item)}
                         </div>
                     </div>
                     <div class="kv-card">

@@ -1716,6 +1716,35 @@ main.expanded {
     display: none;
 }
 
+.dynamic-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.dynamic-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dynamic-field label {
+    font-weight: 700;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.dynamic-field input,
+.dynamic-field select {
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .dynamic-fields {
+        grid-template-columns: 1fr;
+    }
+}
+
 .is-touch-device #create-listing-section,
 .is-touch-device #listing-detail-section {
     max-width: none;
