@@ -1388,6 +1388,9 @@ const profileFollowStateCache = new Map();
 const sellerProfileReviewsCache = new Map();
 let listingDetailViewRecordedListingId = null;
 let listingDetailViewRecorded = false;
+let sidebarFollowingExpanded = false;
+let sidebarFollowingLastLoadedAt = 0;
+let sidebarFollowingLoadToken = 0;
 
 let mockChats = DEMO_MODE ? {
     "@amine_dz": {
@@ -2792,8 +2795,139 @@ async function toggleSellerFollow(ownerId) {
         });
         renderSellerFollowButtonState(next);
         showToast(next ? 'Abonné.' : 'Désabonné.', 'users');
+        sidebarFollowingLastLoadedAt = 0;
+        refreshSidebarFollowing({ force: true });
     }
     if (btn) btn.disabled = false;
+}
+
+function getSidebarFollowingLimit() {
+    return sidebarFollowingExpanded ? 40 : 8;
+}
+
+function setSidebarFollowingEmptyState(message) {
+    const listEl = document.getElementById('sidebarFollowingList');
+    const emptyEl = document.getElementById('sidebarFollowingEmpty');
+    const moreBtn = document.getElementById('sidebarFollowingMoreBtn');
+    if (listEl) listEl.innerHTML = '';
+    if (emptyEl) {
+        emptyEl.textContent = String(message || '');
+        emptyEl.style.display = message ? '' : 'none';
+    }
+    if (moreBtn) moreBtn.style.display = 'none';
+}
+
+function getSidebarFollowingSkeletonHTML(count) {
+    const n = Math.max(1, Number(count) || 0);
+    const safe = Math.min(8, n);
+    return Array.from({ length: safe })
+        .map(
+            () => `
+            <li class="sidebar-following-skeleton">
+                <div class="sidebar-following-avatar skeleton-block"></div>
+                <div class="sidebar-following-meta">
+                    <div class="sidebar-following-name skeleton-block"></div>
+                    <div class="sidebar-following-tag skeleton-block"></div>
+                </div>
+            </li>
+        `
+        )
+        .join('');
+}
+
+function buildSidebarFollowingItemHTML(profileRow) {
+    const id = String(profileRow?.id || '').trim();
+    if (!id) return '';
+    const seller = mapProfileRowToSeller(profileRow?.id ? profileRow : { id });
+    const name = escapeHtml(seller.name || 'Seller');
+    const tag = escapeHtml(seller.tag || '');
+    const pic = seller.pic || seller.profilePic || '';
+    return `
+        <li>
+            <a href="#" class="sidebar-following-link" onclick="openSellerProfileByOwnerId('${id}'); closeSidebarOverlay(); return false;">
+                <img class="sidebar-following-avatar" src="${pic}" alt="">
+                <div class="sidebar-following-meta">
+                    <div class="sidebar-following-name">${name}</div>
+                    <div class="sidebar-following-tag">${tag}</div>
+                </div>
+            </a>
+        </li>
+    `;
+}
+
+function toggleSidebarFollowingExpanded() {
+    sidebarFollowingExpanded = !sidebarFollowingExpanded;
+    sidebarFollowingLastLoadedAt = 0;
+    refreshSidebarFollowing({ force: true });
+}
+
+async function refreshSidebarFollowing({ force = false } = {}) {
+    const section = document.getElementById('sidebarFollowingSection');
+    const divider = document.getElementById('sidebarFollowingDivider');
+    const listEl = document.getElementById('sidebarFollowingList');
+    const emptyEl = document.getElementById('sidebarFollowingEmpty');
+    const moreBtn = document.getElementById('sidebarFollowingMoreBtn');
+    if (!section || !listEl || !emptyEl) return;
+    section.style.display = '';
+    if (divider) divider.style.display = '';
+
+    if (!isLoggedIn()) {
+        setSidebarFollowingEmptyState('Connectez-vous pour voir vos abonnements.');
+        return;
+    }
+
+    const now = Date.now();
+    if (!force && sidebarFollowingLastLoadedAt && now - sidebarFollowingLastLoadedAt < 15000) return;
+    const token = ++sidebarFollowingLoadToken;
+    emptyEl.style.display = 'none';
+    listEl.innerHTML = getSidebarFollowingSkeletonHTML(getSidebarFollowingLimit());
+    if (moreBtn) moreBtn.style.display = 'none';
+
+    const client = initSupabase();
+    if (!client) {
+        setSidebarFollowingEmptyState('Supabase n’est pas configuré.');
+        return;
+    }
+
+    const limit = getSidebarFollowingLimit();
+    const res = await client
+        .from('profile_follows')
+        .select('following_id, created_at')
+        .eq('follower_id', currentSupabaseUserId)
+        .order('created_at', { ascending: false })
+        .limit(limit + 1);
+
+    if (token !== sidebarFollowingLoadToken) return;
+    if (res.error) {
+        setSidebarFollowingEmptyState(res.error.message || 'Impossible de charger vos abonnements.');
+        return;
+    }
+
+    const rows = Array.isArray(res.data) ? res.data : [];
+    const ids = rows.map((r) => String(r.following_id || '').trim()).filter(Boolean);
+    const hasMore = ids.length > limit;
+    const visibleIds = ids.slice(0, limit);
+    if (!visibleIds.length) {
+        setSidebarFollowingEmptyState('Aucun abonnement.');
+        return;
+    }
+
+    const profilesById = await fetchProfilesByIds(visibleIds);
+    if (token !== sidebarFollowingLoadToken) return;
+    listEl.innerHTML = visibleIds.map((id) => buildSidebarFollowingItemHTML(profilesById[id] || { id })).join('');
+    sidebarFollowingLastLoadedAt = now;
+
+    if (moreBtn) {
+        if (sidebarFollowingExpanded) {
+            moreBtn.style.display = '';
+            moreBtn.textContent = 'Réduire';
+        } else if (hasMore) {
+            moreBtn.style.display = '';
+            moreBtn.textContent = 'Voir tout';
+        } else {
+            moreBtn.style.display = 'none';
+        }
+    }
 }
 
 async function fetchListingReviews(listingId) {
@@ -6755,6 +6889,7 @@ function updateProfileUI() {
     updateNavbarAuthUI();
     lucide.createIcons();
     refreshMyProfileFollowCounts();
+    refreshSidebarFollowing();
 }
 
 async function refreshMyProfileFollowCounts() {
