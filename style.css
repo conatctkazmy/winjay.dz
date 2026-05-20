@@ -1133,7 +1133,7 @@ body.sidebar-open .mobile-footer-bar {
     position: fixed;
     height: calc(100vh - 60px);
     transition: transform 0.3s ease;
-    z-index: 1600;
+    z-index: 9000;
     overflow-y: auto;
 }
 
@@ -1159,9 +1159,15 @@ body.sidebar-open .mobile-footer-bar {
 
 .sidebar-overlay {
     position: fixed;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    min-height: 100vh;
+    height: 100dvh;
     background: rgba(0, 0, 0, 0.45);
-    z-index: 1550;
+    z-index: 8900;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease;
@@ -5876,7 +5882,7 @@ footer {
         transform: translateX(-100%);
         top: 0;
         height: 100vh;
-        height: 100svh;
+        height: 100dvh;
     }
 
     .sidebar.active {
