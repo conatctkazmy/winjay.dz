@@ -566,10 +566,18 @@ body.dropdown-open {
 
 body.sidebar-open {
     overflow: hidden;
+    touch-action: none;
+    overscroll-behavior: none;
+    height: 100%;
 }
 
 body.sidebar-open .mobile-footer-bar {
     display: none !important;
+}
+
+html.sidebar-open {
+    height: 100%;
+    overscroll-behavior: none;
 }
 
 .free-verified-modal {
@@ -1135,6 +1143,7 @@ body.sidebar-open .mobile-footer-bar {
     transition: transform 0.3s ease;
     z-index: 9000;
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .sidebar-mobile-header {
