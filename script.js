@@ -4974,6 +4974,11 @@ function populateAllExtraCategories() {
 
 function openOtherCategoriesModal(clearTarget = false) {
     if (clearTarget) categoryPickerTargetSelectId = '';
+    try {
+        closeSidebarOverlay();
+    } catch (e) {
+        null;
+    }
     openModal('otherCategoriesModal');
     try {
         const modal = document.getElementById('otherCategoriesModal');
@@ -4991,7 +4996,9 @@ function openOtherCategoriesModal(clearTarget = false) {
         if (input) {
             input.value = '';
             filterCategories();
-            setTimeout(() => input.focus(), 80);
+            if (!document.documentElement.classList.contains('is-touch-device')) {
+                setTimeout(() => input.focus(), 80);
+            }
         }
     } catch (e) {
         null;
@@ -7468,11 +7475,33 @@ function loginWithGoogle() {
         null;
     }
     showToast('Connecting with Google...', 'log-in');
-    client.auth.signInWithOAuth({
-        provider: 'google'
-    }).then(({ error }) => {
-        if (error) showToast(error.message || 'Google login failed', 'alert-circle');
-    });
+    const redirectTo = `${window.location.origin}${window.location.pathname}`;
+    client.auth
+        .signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo,
+                skipBrowserRedirect: true
+            }
+        })
+        .then(({ data, error }) => {
+            if (error) {
+                showToast(error.message || 'Google login failed', 'alert-circle');
+                return;
+            }
+            const url = data?.url ? String(data.url) : '';
+            if (url) {
+                window.location.replace(url);
+                return;
+            }
+            return client.auth.signInWithOAuth({
+                provider: 'google',
+                options: { redirectTo }
+            });
+        })
+        .then(({ error } = {}) => {
+            if (error) showToast(error.message || 'Google login failed', 'alert-circle');
+        });
 }
 
 function openForgotPassword() {

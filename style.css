@@ -3797,6 +3797,22 @@ body.dark-mode .listing-status-badge {
     overflow-y: auto;
 }
 
+.modal-content.modal-large {
+    max-height: 90dvh;
+}
+
+#otherCategoriesModal .modal-content {
+    display: flex;
+    flex-direction: column;
+}
+
+#otherCategoriesModal .categories-grid {
+    flex: 1;
+    max-height: none;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
 .is-touch-device #otherCategoriesModal.active {
     display: flex !important;
     align-items: flex-end;
@@ -3883,24 +3899,37 @@ body.dark-mode .listing-status-badge {
 }
 
 @media (max-width: 768px) {
-    #otherCategoriesModal .modal-content {
+    #otherCategoriesModal.active {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .is-touch-device #otherCategoriesModal.active {
+        align-items: center;
+        justify-content: center;
+    }
+
+    #otherCategoriesModal .modal-content,
+    .is-touch-device #otherCategoriesModal .modal-content {
         position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        top: auto;
-        transform: none;
-        width: 100%;
-        max-width: none;
-        border-radius: 22px 22px 0 0;
-        padding: 18px 16px calc(16px + env(safe-area-inset-bottom));
-        max-height: 88svh;
+        top: 50%;
+        left: 50%;
+        right: auto;
+        bottom: auto;
+        transform: translate(-50%, -50%);
+        width: calc(100vw - 24px);
+        max-width: 560px;
+        border-radius: 22px;
+        padding: 18px 16px;
+        max-height: calc(90dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
         overflow: hidden;
     }
 
     #otherCategoriesModal .categories-grid {
-        max-height: 62svh;
+        max-height: none;
         overflow-y: auto;
+        padding-right: 6px;
     }
 }
 
