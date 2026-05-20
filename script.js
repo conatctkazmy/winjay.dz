@@ -3821,6 +3821,24 @@ function getCurrentSectionId() {
     return el?.id || 'home-section';
 }
 
+function getDeviceInfo() {
+    try {
+        const ua = navigator.userAgent || '';
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) || (navigator.maxTouchPoints || 0) > 1;
+        const w = window.screen?.width || window.innerWidth || 0;
+        const h = window.screen?.height || window.innerHeight || 0;
+        const lang = navigator.language || '';
+        return {
+            type: isMobile ? 'mobile' : 'desktop',
+            ua: ua.slice(0, 220),
+            screen: `${w}x${h}`,
+            lang
+        };
+    } catch (e) {
+        return { type: 'unknown' };
+    }
+}
+
 function updateLivePresence() {
     if (DEMO_MODE) return;
     const client = initSupabase();
@@ -3829,6 +3847,7 @@ function updateLivePresence() {
     const payload = {
         user_id: currentSupabaseUserId || null,
         section: getCurrentSectionId(),
+        device: getDeviceInfo(),
         url: window.location.href,
         last_seen: new Date().toISOString()
     };
@@ -8771,13 +8790,17 @@ async function renderAdminLiveVisitors() {
             const label = v.user_id
                 ? `${escapeHtml(profile?.display_name || 'User')} <span class="meta">${escapeHtml(profile?.tag || '')}</span>`
                 : `anon:${escapeHtml(id)}`;
+            const deviceType = escapeHtml(String(v?.device?.type || ''));
+            const deviceScreen = escapeHtml(String(v?.device?.screen || ''));
+            const deviceLang = escapeHtml(String(v?.device?.lang || ''));
+            const deviceLine = [deviceType, deviceScreen, deviceLang].filter(Boolean).join(' · ');
             const section = escapeHtml(v.section || '');
             const seen = escapeHtml(formatAdminDate(v.last_seen));
             return `
                 <div class="admin-list-item">
                     <div>
                         <div style="font-weight:800;">${label}</div>
-                        <div class="meta">${section}</div>
+                        <div class="meta">${section}${deviceLine ? ` · ${deviceLine}` : ''}</div>
                     </div>
                     <div class="meta">${seen}</div>
                 </div>
