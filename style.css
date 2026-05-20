@@ -5803,12 +5803,46 @@ footer {
 .admin-chart {
     width: 100%;
     min-height: 240px;
+    position: relative;
 }
 
 .admin-chart svg {
     width: 100%;
     height: auto;
     display: block;
+}
+
+.admin-chart-tooltip {
+    position: absolute;
+    z-index: 5;
+    display: none;
+    min-width: 180px;
+    max-width: 260px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    color: var(--text-main);
+    box-shadow: 0 12px 28px rgba(15, 20, 25, 0.16);
+    pointer-events: none;
+}
+
+.admin-chart-tooltip-title {
+    font-weight: 900;
+    margin-bottom: 6px;
+}
+
+.admin-chart-tooltip-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 0.92rem;
+}
+
+.admin-chart-tooltip-row span {
+    color: var(--text-muted);
+    font-weight: 700;
 }
 
 .admin-card-head {

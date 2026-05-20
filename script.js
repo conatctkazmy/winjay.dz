@@ -8723,7 +8723,7 @@ function flattenPresenceState(state) {
     return entries;
 }
 
-function renderAdminLiveVisitors() {
+async function renderAdminLiveVisitors() {
     if (!isAdminAuthorized()) return;
     const el = document.getElementById('adminLiveList');
     if (!el) return;
@@ -8737,11 +8737,16 @@ function renderAdminLiveVisitors() {
         el.innerHTML = '<div class="muted">No active visitors.</div>';
         return;
     }
+    const userIds = Array.from(new Set(entries.map((v) => v.user_id).filter(Boolean)));
+    const profiles = await fetchProfilesForAdmin(userIds);
     el.innerHTML = entries
         .slice(0, 80)
         .map((v) => {
             const id = v.user_id ? String(v.user_id).slice(0, 8) : String(v.key || '').slice(0, 8);
-            const label = v.user_id ? `user:${escapeHtml(id)}` : `anon:${escapeHtml(id)}`;
+            const profile = v.user_id ? (profiles[v.user_id] || null) : null;
+            const label = v.user_id
+                ? `${escapeHtml(profile?.display_name || 'User')} <span class="meta">${escapeHtml(profile?.tag || '')}</span>`
+                : `anon:${escapeHtml(id)}`;
             const section = escapeHtml(v.section || '');
             const seen = escapeHtml(formatAdminDate(v.last_seen));
             return `
@@ -8761,14 +8766,15 @@ async function adminFetchSignupMetrics(days = 30) {
     if (DEMO_MODE) {
         const today = new Date();
         const series = [];
+        let running = 1200;
         for (let i = Math.max(1, Number(days) || 30) - 1; i >= 0; i--) {
             const d = new Date(today);
             d.setDate(today.getDate() - i);
             const v = Math.max(0, Math.round(10 + 6 * Math.sin(i / 2) + (Math.random() * 6 - 3)));
-            series.push({ date: d.toISOString().slice(0, 10), count: v });
+            running += v;
+            series.push({ date: d.toISOString().slice(0, 10), count: v, total: running });
         }
-        const total = series.reduce((sum, x) => sum + (Number(x.count) || 0), 0) + 1200;
-        return { series, total };
+        return { series, total: running };
     }
     const dayCount = Math.max(1, Math.min(180, Number(days) || 30));
     const client = initSupabase();
@@ -8816,12 +8822,25 @@ async function adminFetchSignupMetrics(days = 30) {
             if (res.ok) {
                 const payload = await res.json();
                 if (payload && Array.isArray(payload.series)) {
+                    let series = payload.series.map((x) => ({
+                        date: String(x?.date || ''),
+                        count: Number(x?.count) || 0,
+                        total: Number(x?.total) || 0
+                    }));
                     return {
                         total: Number(payload.total) || 0,
-                        series: payload.series.map((x) => ({
-                            date: String(x?.date || ''),
-                            count: Number(x?.count) || 0
-                        }))
+                        series: (() => {
+                            const total = Number(payload.total) || 0;
+                            const hasTotals = series.some((x) => Number(x.total) > 0);
+                            if (hasTotals) return series;
+                            const sum = series.reduce((acc, x) => acc + (Number(x.count) || 0), 0);
+                            let running = Math.max(0, total - sum);
+                            series = series.map((p) => {
+                                running += Number(p.count) || 0;
+                                return { ...p, total: running };
+                            });
+                            return series;
+                        })()
                     };
                 }
             }
@@ -8840,7 +8859,13 @@ async function adminFetchSignupMetrics(days = 30) {
             .order('created_at', { ascending: true })
             .limit(100000);
         if (error) return null;
-        const series = buildSeriesFromRows(data || []);
+        const seriesRaw = buildSeriesFromRows(data || []);
+        const sum = seriesRaw.reduce((acc, x) => acc + (Number(x.count) || 0), 0);
+        let running = Math.max(0, total - sum);
+        const series = seriesRaw.map((p) => {
+            running += Number(p.count) || 0;
+            return { ...p, total: running };
+        });
         return { total, series };
     } catch (e) {
         return null;
@@ -8881,10 +8906,96 @@ function renderAdminGrowthChartSvg(series) {
             </defs>
             <path d="${area}" fill="url(#adminGrowthFill)"></path>
             <path d="${path}" fill="none" stroke="var(--primary-color)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+            <line id="adminGrowthHoverLine" x1="0" y1="${padY}" x2="0" y2="${padY + h}" stroke="var(--border-color)" stroke-width="2" stroke-dasharray="5 5" opacity="0"></line>
+            <circle id="adminGrowthHoverDot" cx="0" cy="0" r="7" fill="var(--primary-color)" stroke="var(--bg-main)" stroke-width="3" opacity="0"></circle>
+            <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" style="pointer-events:all;"></rect>
             <text x="${padX}" y="${height - 10}" fill="var(--text-muted)" font-size="12" font-weight="700">${escapeHtml(firstLabel)}</text>
             <text x="${padX + w}" y="${height - 10}" fill="var(--text-muted)" font-size="12" font-weight="700" text-anchor="end">${escapeHtml(lastLabel)}</text>
         </svg>
     `.trim();
+}
+
+function setupAdminGrowthChartHover(containerEl, series) {
+    const svg = containerEl?.querySelector?.('svg');
+    if (!svg) return;
+    const width = 900;
+    const height = 260;
+    const padX = 34;
+    const padY = 26;
+    const w = width - padX * 2;
+    const h = height - padY * 2;
+    const points = Array.isArray(series) ? series.slice() : [];
+    if (!points.length) return;
+    const maxVal = Math.max(1, ...points.map((x) => Number(x.count) || 0));
+    const step = points.length <= 1 ? 0 : w / (points.length - 1);
+    const lineEl = svg.querySelector('#adminGrowthHoverLine');
+    const dotEl = svg.querySelector('#adminGrowthHoverDot');
+    let tooltip = containerEl.querySelector('.admin-chart-tooltip');
+    if (!tooltip) {
+        tooltip = document.createElement('div');
+        tooltip.className = 'admin-chart-tooltip';
+        containerEl.appendChild(tooltip);
+    }
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const hide = () => {
+        if (lineEl) lineEl.setAttribute('opacity', '0');
+        if (dotEl) dotEl.setAttribute('opacity', '0');
+        tooltip.style.display = 'none';
+    };
+    const showAt = (evt) => {
+        const rect = svg.getBoundingClientRect();
+        const cx = evt.clientX;
+        const cy = evt.clientY;
+        const x = ((cx - rect.left) / rect.width) * width;
+        const raw = step > 0 ? Math.round((x - padX) / step) : 0;
+        const idx = clamp(raw, 0, points.length - 1);
+        const p = points[idx] || {};
+        const px = padX + idx * step;
+        const py = padY + (1 - (Number(p.count) || 0) / maxVal) * h;
+        if (lineEl) {
+            lineEl.setAttribute('x1', px.toFixed(2));
+            lineEl.setAttribute('x2', px.toFixed(2));
+            lineEl.setAttribute('opacity', '1');
+        }
+        if (dotEl) {
+            dotEl.setAttribute('cx', px.toFixed(2));
+            dotEl.setAttribute('cy', py.toFixed(2));
+            dotEl.setAttribute('opacity', '1');
+        }
+        const date = escapeHtml(String(p.date || ''));
+        const count = Number(p.count) || 0;
+        const total = Number(p.total) || 0;
+        tooltip.innerHTML = `
+            <div class="admin-chart-tooltip-title">${date}</div>
+            <div class="admin-chart-tooltip-row"><span>New users</span><strong>+${escapeHtml(String(count))}</strong></div>
+            <div class="admin-chart-tooltip-row"><span>Total users</span><strong>${escapeHtml(String(total))}</strong></div>
+        `.trim();
+        tooltip.style.display = 'block';
+        const containerRect = containerEl.getBoundingClientRect();
+        const mx = cx - containerRect.left;
+        const my = cy - containerRect.top;
+        const tw = tooltip.offsetWidth || 220;
+        const th = tooltip.offsetHeight || 72;
+        let left = mx + 14;
+        let top = my - th - 14;
+        left = clamp(left, 8, containerRect.width - tw - 8);
+        top = clamp(top, 8, containerRect.height - th - 8);
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+    };
+    hide();
+    svg.addEventListener('mousemove', showAt);
+    svg.addEventListener('mouseenter', showAt);
+    svg.addEventListener('mouseleave', hide);
+    svg.addEventListener('touchstart', (e) => {
+        if (!e.touches?.length) return;
+        showAt(e.touches[0]);
+    }, { passive: true });
+    svg.addEventListener('touchmove', (e) => {
+        if (!e.touches?.length) return;
+        showAt(e.touches[0]);
+    }, { passive: true });
+    svg.addEventListener('touchend', hide, { passive: true });
 }
 
 async function renderAdminGrowthChart() {
@@ -8904,6 +9015,7 @@ async function renderAdminGrowthChart() {
     const lastDays = series.reduce((sum, x) => sum + (Number(x.count) || 0), 0);
     summaryEl.textContent = `Last ${days} days: +${lastDays} · Total: ${Number(data.total) || 0}`;
     chartEl.innerHTML = renderAdminGrowthChartSvg(series) || '<div class="muted">No data.</div>';
+    setupAdminGrowthChartHover(chartEl, series);
 }
 
 async function renderAdminOverviewLists() {
@@ -8963,7 +9075,7 @@ async function renderAdminDashboard(force = false) {
         await renderIdentityApplications();
     }
     if (adminActiveTab === 'submissions') await renderSubmissions();
-    if (adminActiveTab === 'live') renderAdminLiveVisitors();
+    if (adminActiveTab === 'live') await renderAdminLiveVisitors();
     if (force) showToast('Updated', 'check-circle');
 }
 
