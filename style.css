@@ -1145,6 +1145,7 @@ html.sidebar-open {
     transition: width 0.25s ease, transform 0.3s ease;
     z-index: 9000;
     overflow-y: auto;
+    overflow-x: hidden;
     overscroll-behavior: contain;
     touch-action: pan-y;
 }
