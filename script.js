@@ -8770,31 +8770,78 @@ async function adminFetchSignupMetrics(days = 30) {
         const total = series.reduce((sum, x) => sum + (Number(x.count) || 0), 0) + 1200;
         return { series, total };
     }
+    const dayCount = Math.max(1, Math.min(180, Number(days) || 30));
     const client = initSupabase();
     if (!client) return null;
     const { data: sessionData } = await client.auth.getSession();
     const token = sessionData?.session?.access_token || '';
-    if (!token) return null;
-    try {
-        const res = await fetch(`${SUPABASE_PROJECT_URL}/functions/v1/admin-signup-metrics`, {
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json',
-                apikey: SUPABASE_ANON_KEY,
-                authorization: `Bearer ${token}`
-            },
-            body: JSON.stringify({ days: Math.max(1, Math.min(180, Number(days) || 30)) })
+
+    const today = new Date();
+    const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    start.setUTCDate(start.getUTCDate() - (dayCount - 1));
+    const startIso = start.toISOString();
+
+    const buildSeriesFromRows = (rows) => {
+        const map = {};
+        for (let i = 0; i < dayCount; i++) {
+            const d = new Date(start);
+            d.setUTCDate(start.getUTCDate() + i);
+            map[d.toISOString().slice(0, 10)] = 0;
+        }
+        (Array.isArray(rows) ? rows : []).forEach((r) => {
+            const ts = r?.created_at ? String(r.created_at) : '';
+            if (!ts) return;
+            const d = new Date(ts);
+            if (Number.isNaN(d.getTime())) return;
+            const key = d.toISOString().slice(0, 10);
+            if (!(key in map)) return;
+            map[key] = (Number(map[key]) || 0) + 1;
         });
-        if (!res.ok) return null;
-        const payload = await res.json();
-        if (!payload || !Array.isArray(payload.series)) return null;
-        return {
-            total: Number(payload.total) || 0,
-            series: payload.series.map((x) => ({
-                date: String(x?.date || ''),
-                count: Number(x?.count) || 0
-            }))
-        };
+        return Object.keys(map)
+            .sort()
+            .map((date) => ({ date, count: Number(map[date]) || 0 }));
+    };
+
+    try {
+        if (token && SUPABASE_PROJECT_URL) {
+            const res = await fetch(`${SUPABASE_PROJECT_URL}/functions/v1/admin-signup-metrics`, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    apikey: SUPABASE_ANON_KEY,
+                    authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ days: dayCount })
+            });
+            if (res.ok) {
+                const payload = await res.json();
+                if (payload && Array.isArray(payload.series)) {
+                    return {
+                        total: Number(payload.total) || 0,
+                        series: payload.series.map((x) => ({
+                            date: String(x?.date || ''),
+                            count: Number(x?.count) || 0
+                        }))
+                    };
+                }
+            }
+        }
+    } catch (e) {
+        null;
+    }
+
+    try {
+        const totalRes = await adminCount('profiles');
+        const total = totalRes.error ? 0 : totalRes.count;
+        const { data, error } = await client
+            .from('profiles')
+            .select('created_at')
+            .gte('created_at', startIso)
+            .order('created_at', { ascending: true })
+            .limit(100000);
+        if (error) return null;
+        const series = buildSeriesFromRows(data || []);
+        return { total, series };
     } catch (e) {
         return null;
     }
