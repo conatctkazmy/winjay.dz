@@ -8733,13 +8733,20 @@ async function renderAdminLiveVisitors() {
     }
     const state = livePresenceChannel.presenceState?.() || {};
     const entries = flattenPresenceState(state).sort((a, b) => String(b.last_seen || '').localeCompare(String(a.last_seen || '')));
-    if (!entries.length) {
+    const seen = new Set();
+    const uniqueEntries = entries.filter((v) => {
+        const k = v.user_id ? `u:${v.user_id}` : `a:${v.key || ''}`;
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+    });
+    if (!uniqueEntries.length) {
         el.innerHTML = '<div class="muted">No active visitors.</div>';
         return;
     }
-    const userIds = Array.from(new Set(entries.map((v) => v.user_id).filter(Boolean)));
+    const userIds = Array.from(new Set(uniqueEntries.map((v) => v.user_id).filter(Boolean)));
     const profiles = await fetchProfilesForAdmin(userIds);
-    el.innerHTML = entries
+    el.innerHTML = uniqueEntries
         .slice(0, 80)
         .map((v) => {
             const id = v.user_id ? String(v.user_id).slice(0, 8) : String(v.key || '').slice(0, 8);
