@@ -46,6 +46,8 @@ const USER_PROFILE_STORAGE_KEY = 'winjayUserProfileV1';
 const FREE_VERIFIED_PROGRAM_STORAGE_KEY = 'winjayFreeVerifiedProgramV1';
 const VERIFIED_QUEST_STORAGE_KEY = 'winjayVerifiedQuestV1';
 const THEME_STORAGE_KEY = 'winjayThemeV1';
+const LOGIN_FAIL_COUNT_STORAGE_KEY = 'winjayLoginFailCountV1';
+const LOGIN_COOLDOWN_UNTIL_STORAGE_KEY = 'winjayLoginCooldownUntilV1';
 const FREE_VERIFIED_TOTAL = 1000;
 const REFERRALS_REQUIRED = 10;
 const MARKETPLACE_LISTINGS_STORAGE_KEY = 'marketplaceListingsV1';
@@ -2648,15 +2650,54 @@ async function createNotificationFromClient({ recipientId, type, listingId = nul
     if (!client || !currentSupabaseUserId) return false;
     const recipient = String(recipientId || '').trim();
     if (!recipient || recipient === currentSupabaseUserId) return true;
-    const payload = {
-        recipient_id: recipient,
-        actor_id: currentSupabaseUserId,
-        type: String(type || '').trim() || 'notification',
-        meta: meta && typeof meta === 'object' ? meta : {}
-    };
-    if (listingId !== null && listingId !== undefined) payload.listing_id = Number(listingId);
-    if (targetProfileId) payload.target_profile_id = String(targetProfileId);
-    const { error } = await client.from('notifications').insert(payload);
+    const t = String(type || '').trim();
+    const m = meta && typeof meta === 'object' ? meta : {};
+    const reviewId = String(m.reviewId || m.review_id || '').trim();
+    let error = null;
+    if (t === 'message_received') {
+        const res = await client.rpc('notify_message_received', { receiver_id: recipient, meta: m });
+        error = res.error || null;
+    } else if (t === 'listing_like') {
+        const res = await client.rpc('notify_listing_like', { listing_id: Number(listingId) });
+        error = res.error || null;
+    } else if (t === 'listing_share') {
+        const res = await client.rpc('notify_listing_share', { listing_id: Number(listingId), platform: String(m.platform || '') || null });
+        error = res.error || null;
+    } else if (t === 'listing_review') {
+        const res = await client.rpc('notify_listing_review', { listing_id: Number(listingId), rating: Number(m.rating) || null });
+        error = res.error || null;
+    } else if (t === 'listing_review_comment') {
+        const res = await client.rpc('notify_listing_review_comment', { review_id: reviewId });
+        error = res.error || null;
+    } else if (t === 'listing_review_reply') {
+        const res = await client.rpc('notify_listing_review_reply', { review_id: reviewId });
+        error = res.error || null;
+    } else if (t === 'profile_review') {
+        const target = String(targetProfileId || recipient || '').trim();
+        const res = await client.rpc('notify_profile_review', { target_profile_id: target, rating: Number(m.rating) || null });
+        error = res.error || null;
+    } else if (t === 'profile_share') {
+        const target = String(targetProfileId || recipient || '').trim();
+        const res = await client.rpc('notify_profile_share', { target_profile_id: target, platform: String(m.platform || '') || null });
+        error = res.error || null;
+    } else if (t === 'profile_review_comment') {
+        const res = await client.rpc('notify_profile_review_comment', { review_id: reviewId });
+        error = res.error || null;
+    } else if (t === 'profile_review_reply') {
+        const res = await client.rpc('notify_profile_review_reply', { review_id: reviewId });
+        error = res.error || null;
+    } else if (t === 'listing_view_milestone') {
+        const res = await client.rpc('notify_listing_view_milestone', {
+            listing_id: Number(listingId),
+            milestone: m.milestone !== undefined ? Number(m.milestone) || null : null,
+            views: m.views !== undefined ? Number(m.views) || null : null
+        });
+        error = res.error || null;
+    } else if (t === 'identity_approved' || t === 'identity_rejected' || t === 'verified_granted') {
+        error = { message: 'Not allowed' };
+    } else {
+        return true;
+    }
     if (error) {
         if (isNotificationsBackendMissing(error)) showToast('Notifications backend is not set up yet', 'alert-circle');
         else showToast(error.message || 'Failed to create notification', 'alert-circle');
@@ -7714,6 +7755,18 @@ document.getElementById('contactForm').addEventListener('submit', async (e) => {
 
 document.getElementById('loginForm').addEventListener('submit', (e) => {
     e.preventDefault();
+    try {
+        const untilRaw = localStorage.getItem(LOGIN_COOLDOWN_UNTIL_STORAGE_KEY);
+        const until = Number(untilRaw) || 0;
+        const now = Date.now();
+        if (until && now < until) {
+            const seconds = Math.max(1, Math.ceil((until - now) / 1000));
+            showToast(`Too many attempts. Wait ${seconds}s`, 'alert-circle');
+            return;
+        }
+    } catch (e) {
+        null;
+    }
     const rememberMe = document.getElementById('rememberMe').checked;
     try {
         if (rememberMe) localStorage.setItem('winjayRememberMe', 'true');
@@ -7731,8 +7784,27 @@ document.getElementById('loginForm').addEventListener('submit', (e) => {
     const password = document.getElementById('loginPassword').value;
     client.auth.signInWithPassword({ email, password }).then(({ error }) => {
         if (error) {
+            try {
+                const raw = localStorage.getItem(LOGIN_FAIL_COUNT_STORAGE_KEY);
+                const next = (Number(raw) || 0) + 1;
+                if (next >= 5) {
+                    localStorage.removeItem(LOGIN_FAIL_COUNT_STORAGE_KEY);
+                    localStorage.setItem(LOGIN_COOLDOWN_UNTIL_STORAGE_KEY, String(Date.now() + 30_000));
+                    showToast('Too many attempts. Please wait 30s.', 'alert-circle');
+                    return;
+                }
+                localStorage.setItem(LOGIN_FAIL_COUNT_STORAGE_KEY, String(next));
+            } catch (e) {
+                null;
+            }
             showToast(error.message || 'Login failed', 'alert-circle');
             return;
+        }
+        try {
+            localStorage.removeItem(LOGIN_FAIL_COUNT_STORAGE_KEY);
+            localStorage.removeItem(LOGIN_COOLDOWN_UNTIL_STORAGE_KEY);
+        } catch (e) {
+            null;
         }
         showToast('Logged in!', 'check-circle');
         closeModal('loginModal');
@@ -7998,9 +8070,7 @@ function updateFreeVerifiedPrimaryAction() {
 function updateAdminDashboardButtonVisibility() {
     const btn = document.getElementById('adminDashboardDropdownItem');
     if (!btn) return;
-    const emailOk = String(currentSupabaseUserEmail || '').toLowerCase() === 'contactkazmy@gmail.com';
-    const allowed = !!userProfile?.isAdmin || emailOk;
-    btn.style.display = allowed ? '' : 'none';
+    btn.style.display = userProfile?.isAdmin ? '' : 'none';
 }
 
 function showVerifiedPopup(event) {
@@ -8630,8 +8700,7 @@ function adminBadge(status) {
 }
 
 function isAdminAuthorized() {
-    const emailOk = String(currentSupabaseUserEmail || '').toLowerCase() === 'contactkazmy@gmail.com';
-    return !!(userProfile && userProfile.isAdmin) || emailOk;
+    return !!(userProfile && userProfile.isAdmin);
 }
 
 function clearPendingAdminOpen() {
@@ -8954,7 +9023,7 @@ async function adminToggleVip(userId, next) {
     if (!isAdminAuthorized()) return;
     const client = initSupabase();
     if (!client) return;
-    const { error } = await client.from('profiles').update({ is_vip: !!next }).eq('id', String(userId));
+    const { error } = await client.rpc('admin_set_vip', { target_user_id: String(userId), next: !!next });
     if (error) {
         showToast(error.message || 'Failed', 'alert-circle');
         return;
@@ -8968,7 +9037,7 @@ async function adminToggleVerified(userId, next) {
     if (!isAdminAuthorized()) return;
     const client = initSupabase();
     if (!client) return;
-    const { error } = await client.from('profiles').update({ verified: !!next }).eq('id', String(userId));
+    const { error } = await client.rpc('admin_set_verified', { target_user_id: String(userId), next: !!next });
     if (error) {
         showToast(error.message || 'Failed', 'alert-circle');
         return;
@@ -9083,21 +9152,11 @@ async function adminApproveVip(appId, userId) {
     if (!isAdminAuthorized()) return;
     const client = initSupabase();
     if (!client) return;
-    const now = new Date().toISOString();
-    const { error: appErr } = await client
-        .from('vip_applications')
-        .update({ status: 'approved', decided_by: currentSupabaseUserId, decided_at: now })
-        .eq('id', String(appId));
-    if (appErr) {
-        showToast(appErr.message || 'Failed', 'alert-circle');
+    const { error } = await client.rpc('admin_approve_vip', { app_id: String(appId) });
+    if (error) {
+        showToast(error.message || 'Failed', 'alert-circle');
         return;
     }
-    const { error: profErr } = await client.from('profiles').update({ is_vip: true }).eq('id', String(userId));
-    if (profErr) {
-        showToast(profErr.message || 'Failed', 'alert-circle');
-        return;
-    }
-    client.from('admin_audit_log').insert({ admin_id: currentSupabaseUserId, action: 'vip_approved', target_user_id: userId, meta: { app_id: appId } });
     showToast('VIP approved', 'check-circle');
     renderVipApplications();
     renderAdminKpis();
@@ -9107,16 +9166,11 @@ async function adminRejectVip(appId) {
     if (!isAdminAuthorized()) return;
     const client = initSupabase();
     if (!client) return;
-    const now = new Date().toISOString();
-    const { error } = await client
-        .from('vip_applications')
-        .update({ status: 'rejected', decided_by: currentSupabaseUserId, decided_at: now })
-        .eq('id', String(appId));
+    const { error } = await client.rpc('admin_reject_vip', { app_id: String(appId) });
     if (error) {
         showToast(error.message || 'Failed', 'alert-circle');
         return;
     }
-    client.from('admin_audit_log').insert({ admin_id: currentSupabaseUserId, action: 'vip_rejected', target_user_id: null, meta: { app_id: appId } });
     showToast('Rejected', 'check-circle');
     renderVipApplications();
     renderAdminKpis();
@@ -9164,21 +9218,11 @@ async function adminApproveVerified(appId, userId) {
     if (!isAdminAuthorized()) return;
     const client = initSupabase();
     if (!client) return;
-    const now = new Date().toISOString();
-    const { error: appErr } = await client
-        .from('verified_applications')
-        .update({ status: 'approved', decided_by: currentSupabaseUserId, decided_at: now })
-        .eq('id', String(appId));
-    if (appErr) {
-        showToast(appErr.message || 'Failed', 'alert-circle');
+    const { error } = await client.rpc('admin_approve_verified', { app_id: String(appId) });
+    if (error) {
+        showToast(error.message || 'Failed', 'alert-circle');
         return;
     }
-    const { error: profErr } = await client.from('profiles').update({ verified: true }).eq('id', String(userId));
-    if (profErr) {
-        showToast(profErr.message || 'Failed', 'alert-circle');
-        return;
-    }
-    client.from('admin_audit_log').insert({ admin_id: currentSupabaseUserId, action: 'verified_approved', target_user_id: userId, meta: { app_id: appId } });
     showToast('Verified approved', 'check-circle');
     renderVerifiedApplications();
     renderAdminKpis();
@@ -9188,16 +9232,11 @@ async function adminRejectVerified(appId) {
     if (!isAdminAuthorized()) return;
     const client = initSupabase();
     if (!client) return;
-    const now = new Date().toISOString();
-    const { error } = await client
-        .from('verified_applications')
-        .update({ status: 'rejected', decided_by: currentSupabaseUserId, decided_at: now })
-        .eq('id', String(appId));
+    const { error } = await client.rpc('admin_reject_verified', { app_id: String(appId) });
     if (error) {
         showToast(error.message || 'Failed', 'alert-circle');
         return;
     }
-    client.from('admin_audit_log').insert({ admin_id: currentSupabaseUserId, action: 'verified_rejected', target_user_id: null, meta: { app_id: appId } });
     showToast('Rejected', 'check-circle');
     renderVerifiedApplications();
     renderAdminKpis();
@@ -9365,52 +9404,13 @@ async function adminApproveIdentity(appId, userId) {
     if (!isAdminAuthorized()) return;
     const client = initSupabase();
     if (!client) return;
-    const now = new Date().toISOString();
-    const { error: appErr } = await client
-        .from('identity_applications')
-        .update({ status: 'approved', decided_by: currentSupabaseUserId, decided_at: now })
-        .eq('id', String(appId));
-    if (appErr) {
-        showToast(appErr.message || 'Failed', 'alert-circle');
+    const { data, error } = await client.rpc('admin_approve_identity', { app_id: String(appId), referrals_required: REFERRALS_REQUIRED });
+    if (error) {
+        showToast(error.message || 'Failed', 'alert-circle');
         return;
     }
-    await createNotificationFromClient({ recipientId: userId, type: 'identity_approved', meta: { app_id: appId } });
-
-    let grantedVerified = false;
-    let eligibility = { eligible: false };
-    try {
-        const profRes = await client
-            .from('profiles')
-            .select('display_name, tag, phone, work_category')
-            .eq('id', String(userId))
-            .maybeSingle();
-        const prof = profRes?.data || {};
-        const hasBasics = !!String(prof.display_name || '').trim() && !!String(prof.tag || '').trim();
-        const hasPhone = !!String(prof.phone || '').trim();
-        const hasWork = !!String(prof.work_category || '').trim();
-        let refs = 0;
-        const refsRes = await client
-            .from('referrals')
-            .select('id', { count: 'exact', head: true })
-            .eq('referrer_id', String(userId));
-        if (!refsRes.error) refs = Number(refsRes.count) || 0;
-        const hasRefs = refs >= REFERRALS_REQUIRED;
-        eligibility = { eligible: hasBasics && hasPhone && hasWork && hasRefs, refs, hasBasics, hasPhone, hasWork, hasRefs };
-        if (eligibility.eligible) {
-            const { error: profErr } = await client.from('profiles').update({ verified: true }).eq('id', String(userId));
-            if (!profErr) {
-                grantedVerified = true;
-                await createNotificationFromClient({ recipientId: userId, type: 'verified_granted', meta: { source: 'free_verified_quest' } });
-            }
-        }
-    } catch (e) {
-        eligibility = { eligible: false, error: String(e?.message || e || '') };
-    }
-
-    client
-        .from('admin_audit_log')
-        .insert({ admin_id: currentSupabaseUserId, action: 'identity_approved', target_user_id: userId, meta: { app_id: appId, granted_verified: grantedVerified, eligibility } });
-    showToast(grantedVerified ? 'Approved + Verified granted' : 'Approved', 'check-circle');
+    const granted = !!(data && typeof data === 'object' && data.granted_verified);
+    showToast(granted ? 'Approved + Verified granted' : 'Approved', 'check-circle');
     renderIdentityApplications();
     renderAdminKpis();
 }
@@ -9419,17 +9419,11 @@ async function adminRejectIdentity(appId, userId) {
     if (!isAdminAuthorized()) return;
     const client = initSupabase();
     if (!client) return;
-    const now = new Date().toISOString();
-    const { error } = await client
-        .from('identity_applications')
-        .update({ status: 'rejected', decided_by: currentSupabaseUserId, decided_at: now })
-        .eq('id', String(appId));
+    const { error } = await client.rpc('admin_reject_identity', { app_id: String(appId) });
     if (error) {
         showToast(error.message || 'Failed', 'alert-circle');
         return;
     }
-    await createNotificationFromClient({ recipientId: userId, type: 'identity_rejected', meta: { app_id: appId } });
-    client.from('admin_audit_log').insert({ admin_id: currentSupabaseUserId, action: 'identity_rejected', target_user_id: userId, meta: { app_id: appId } });
     showToast('Rejected', 'check-circle');
     renderIdentityApplications();
     renderAdminKpis();

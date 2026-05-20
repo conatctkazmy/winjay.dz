@@ -28,10 +28,6 @@ function pickKeyFromJson(raw: string) {
   }
 }
 
-function isoDateUtc(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -66,20 +62,19 @@ Deno.serve(async (req) => {
   } catch {
     body = null;
   }
-  const daysRaw = Number(body?.days);
-  const days = Math.max(1, Math.min(180, Number.isFinite(daysRaw) ? daysRaw : 30));
+  const search = String(body?.search || "").trim().toLowerCase();
 
   const userClient = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: authHeader, apikey: anonKey } },
     auth: { persistSession: false },
   });
 
-  const { data: requesterData, error: requesterErr } = await userClient.auth.getUser();
+  const { data: requesterData, error: requesterErr } = await userClient.auth
+    .getUser();
   if (requesterErr || !requesterData?.user?.id) {
     return json(401, { error: "Invalid auth" });
   }
 
-  const requesterEmail = String(requesterData.user.email || "").toLowerCase();
   let isAdmin = false;
   try {
     const { data } = await userClient.rpc("is_admin");
@@ -87,60 +82,55 @@ Deno.serve(async (req) => {
   } catch {
     isAdmin = false;
   }
-  const emailOk = requesterEmail === "contactkazmy@gmail.com";
-  if (!isAdmin && !emailOk) return json(403, { error: "Not authorized" });
+  if (!isAdmin) return json(403, { error: "Not authorized" });
 
-  const authDb = createClient(supabaseUrl, serviceRoleKey, {
+  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
-    db: { schema: "auth" },
   });
 
-  const totalRes = await authDb.from("users").select("id", { count: "exact", head: true });
-  const total = Number(totalRes.count) || 0;
+  const { data: profilesData } = await adminClient
+    .from("profiles")
+    .select("id, display_name, tag, phone, is_vip, verified, created_at")
+    .order("created_at", { ascending: false })
+    .limit(500);
 
-  const today = new Date();
-  const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-  start.setUTCDate(start.getUTCDate() - (days - 1));
-
-  const baselineRes = await authDb
-    .from("users")
-    .select("id", { count: "exact", head: true })
-    .lt("created_at", start.toISOString());
-  const baseline = Number(baselineRes.count) || 0;
-
-  const seriesMap: Record<string, number> = {};
-  for (let i = 0; i < days; i++) {
-    const d = new Date(start);
-    d.setUTCDate(start.getUTCDate() + i);
-    seriesMap[isoDateUtc(d)] = 0;
-  }
-
-  const { data: createdRows, error: createdErr } = await authDb
-    .from("users")
-    .select("created_at")
-    .gte("created_at", start.toISOString())
-    .limit(100000);
-
-  if (createdErr) return json(500, { error: createdErr.message || "Query failed" });
-
-  for (const row of Array.isArray(createdRows) ? createdRows : []) {
-    const ts = String((row as any)?.created_at || "");
-    if (!ts) continue;
-    const d = new Date(ts);
-    if (Number.isNaN(d.getTime())) continue;
-    const key = isoDateUtc(d);
-    if (key in seriesMap) seriesMap[key] = (seriesMap[key] || 0) + 1;
-  }
-
-  const series = Object.keys(seriesMap)
-    .sort()
-    .map((date) => ({ date, count: seriesMap[date] || 0 }));
-
-  let running = baseline;
-  const seriesWithTotals = series.map((p) => {
-    running += Number(p.count) || 0;
-    return { ...p, total: running };
+  const profiles = Array.isArray(profilesData) ? profilesData : [];
+  const { data: usersData } = await adminClient.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
   });
 
-  return json(200, { total, days, baseline, series: seriesWithTotals });
+  const emailsById: Record<string, string> = {};
+  const users = Array.isArray(usersData?.users) ? usersData.users : [];
+  for (const u of users) {
+    const id = String((u as any)?.id || "").trim();
+    if (!id) continue;
+    const email = String((u as any)?.email || "").trim();
+    if (email) emailsById[id] = email;
+  }
+
+  const out = profiles
+    .map((p: any) => ({
+      id: p.id,
+      display_name: p.display_name || "User",
+      tag: p.tag || "",
+      email: emailsById[String(p.id)] || "",
+      phone: p.phone || "",
+      is_vip: !!p.is_vip,
+      verified: !!p.verified,
+      created_at: p.created_at,
+    }))
+    .filter((p: any) => {
+      if (!search) return true;
+      const hay = [
+        p.display_name,
+        p.tag,
+        p.email,
+        p.phone,
+      ].map((x: any) => String(x || "").toLowerCase());
+      return hay.some((x: string) => x.includes(search));
+    })
+    .slice(0, 120);
+
+  return json(200, { users: out });
 });
