@@ -322,16 +322,6 @@ html.app-loading main {
     background-color: var(--light-gray);
 }
 
-body.other-categories-open #sidebarToggle {
-    background-color: var(--primary-color);
-    color: #fff;
-}
-
-body.other-categories-open #sidebarToggle:hover {
-    background-color: var(--primary-hover);
-    color: #fff;
-}
-
 .notification-btn, .messages-btn {
     position: relative;
 }
