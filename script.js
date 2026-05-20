@@ -837,6 +837,13 @@ async function copyTextToClipboard(text) {
     }
 }
 
+async function copyPhoneNumber(phone) {
+    const text = String(phone || '').trim();
+    if (!text) return;
+    const ok = await copyTextToClipboard(text);
+    showToast(ok ? 'Numéro copié !' : 'Copie impossible', ok ? 'copy' : 'alert-circle');
+}
+
 function getReferralLink() {
     const base = `${window.location.origin}${window.location.pathname}`;
     if (currentSupabaseUserId) return `${base}?ref=${encodeURIComponent(currentSupabaseUserId)}`;
@@ -10523,7 +10530,12 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                         <div class="kv-rows">
                             <div class="kv-row">
                                 <div class="kv-label">Téléphone</div>
-                                <div class="kv-value">${escapeHtml(item.contact_phone)}</div>
+                                <div class="kv-value kv-value-actions kv-value-with-copy">
+                                    <span>${escapeHtml(item.contact_phone)}</span>
+                                    <button class="kv-copy-btn" type="button" onclick="event.stopPropagation(); copyPhoneNumber('${escapeJsString(item.contact_phone)}')" title="Copier le numéro">
+                                        <i data-lucide="copy"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>` : ''}
@@ -10552,7 +10564,6 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                     </button>
                     ${item.contact_phone ? `<a class="call-contact-btn" href="tel:${String(item.contact_phone).replace(/[^0-9+]/g, '')}" onclick="event.stopPropagation();"><i data-lucide="phone-call" style="width: 18px; height: 18px;"></i> Appeler</a>` : ''}
                 </div>
-                ${item.contact_phone ? `<div class="detail-phone"><i data-lucide="phone"></i> ${escapeHtml(item.contact_phone)}</div>` : ''}
                 <div id="listingReviewHighlightWrap">
                     ${bestListingReview ? `
                     <div class="review-highlight clickable" onclick="expandListingReviews(${item.id})">
