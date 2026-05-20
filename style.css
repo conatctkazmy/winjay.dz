@@ -2025,6 +2025,121 @@ main.expanded {
     cursor: zoom-in;
 }
 
+.card-carousel,
+.detail-carousel {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    overflow: hidden;
+    background: var(--bg-muted);
+}
+
+.detail-carousel {
+    height: 380px;
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+}
+
+.carousel-viewport {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    touch-action: pan-y;
+}
+
+.carousel-track {
+    display: flex;
+    height: 100%;
+    will-change: transform;
+    transition: transform 180ms ease;
+}
+
+.carousel-slide {
+    flex: 0 0 100%;
+    height: 100%;
+}
+
+.carousel-slide .card-img,
+.carousel-slide .detail-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    cursor: grab;
+    user-select: none;
+}
+
+.carousel-slide .detail-image {
+    cursor: zoom-in;
+}
+
+.carousel-dots {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 10px;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    z-index: 4;
+    pointer-events: auto;
+}
+
+.carousel-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    border: 0;
+    background: rgba(255, 255, 255, 0.65);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    padding: 0;
+    cursor: pointer;
+}
+
+.carousel-dot.active {
+    width: 18px;
+    background: var(--winjay-orange);
+}
+
+body.dark-mode .carousel-dot {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+body.dark-mode .carousel-dot.active {
+    background: var(--winjay-orange);
+}
+
+.carousel-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.85);
+    color: var(--text-main);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+}
+
+.carousel-arrow.prev {
+    left: 10px;
+}
+
+.carousel-arrow.next {
+    right: 10px;
+}
+
+@media (min-width: 769px) {
+    .detail-carousel .carousel-arrow {
+        display: inline-flex;
+    }
+}
+
 .card-status-badge {
     position: absolute;
     left: 12px;

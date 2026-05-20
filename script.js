@@ -8123,6 +8123,19 @@ function getSimilarListings(item) {
 function createMyListingCardHTML(item) {
     const isFavorite = favorites.includes(item.id);
     const pulse = pendingHeartPulses.has(item.id) && isFavorite;
+    const carouselImages = getListingImagesForDetail(item).slice(0, 8);
+    const mediaHTML = carouselImages.length > 1
+        ? `<div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
+                <div class="carousel-viewport">
+                    <div class="carousel-track">
+                        ${carouselImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low" draggable="false"></div>`).join('')}
+                    </div>
+                </div>
+                <div class="carousel-dots">
+                    ${carouselImages.map((_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
+                </div>
+            </div>`
+        : `<img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low">`;
     return `
         <div class="card my-listing-card" onclick="openListingDetail(${item.id})">
             <div class="listing-actions">
@@ -8136,7 +8149,7 @@ function createMyListingCardHTML(item) {
             <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
                 <i data-lucide="heart"></i>
             </button>
-            <img src="${item.image}" alt="${item.title}" class="card-img" loading="lazy" decoding="async" fetchpriority="low">
+            ${mediaHTML}
             <div class="card-content">
                 <div class="card-price">${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD</div>
                 <div class="card-title">${item.title}</div>
@@ -8335,6 +8348,7 @@ function renderMyListings() {
     myListingsGrid.innerHTML = myListings.length > 0 ?
         myListings.map(item => createMyListingCardHTML(item)).join('') :
         '<div class="empty-state"><i data-lucide="shopping-bag"></i><h3>Pas encore d\'annonces</h3><p>Publiez votre première annonce !</p></div>';
+    initCarouselsInContainer(myListingsGrid);
     scheduleLucideCreateIcons();
 }
 
@@ -10242,6 +10256,159 @@ function getSellerProfileSkeletonHTML() {
     `;
 }
 
+function setCarouselIndex(carouselEl, index, { animate = true, persist = false } = {}) {
+    if (!carouselEl) return;
+    const track = carouselEl.querySelector('.carousel-track');
+    const slides = carouselEl.querySelectorAll('.carousel-slide');
+    if (!track || slides.length === 0) return;
+    const max = slides.length - 1;
+    const next = Math.max(0, Math.min(max, Number(index) || 0));
+    carouselEl.dataset.index = String(next);
+    if (!animate) track.style.transition = 'none';
+    track.style.transform = `translateX(-${next * 100}%)`;
+    const dots = carouselEl.querySelectorAll('.carousel-dot');
+    dots.forEach((d) => {
+        const i = Number(d.getAttribute('data-dot-index')) || 0;
+        d.classList.toggle('active', i === next);
+    });
+    if (!animate) {
+        void track.offsetHeight;
+        track.style.transition = '';
+    }
+    if (persist && carouselEl.dataset.carousel === 'detail') {
+        const listingId = Number(carouselEl.dataset.listingId) || 0;
+        if (listingId) listingDetailImageIndex[listingId] = next;
+    }
+}
+
+function initCarouselElement(carouselEl) {
+    if (!carouselEl || carouselEl.dataset.bound) return;
+    carouselEl.dataset.bound = '1';
+    const viewport = carouselEl.querySelector('.carousel-viewport');
+    const track = carouselEl.querySelector('.carousel-track');
+    if (!viewport || !track) return;
+    const slides = carouselEl.querySelectorAll('.carousel-slide');
+    if (slides.length <= 1) return;
+
+    const applyIndex = (idx, opts) => setCarouselIndex(carouselEl, idx, opts);
+    const getIndex = () => Math.max(0, Math.min(slides.length - 1, Number(carouselEl.dataset.index) || 0));
+
+    carouselEl.querySelectorAll('.carousel-dot').forEach((dot) => {
+        if (dot.dataset.bound) return;
+        dot.dataset.bound = '1';
+        dot.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const idx = Number(dot.getAttribute('data-dot-index')) || 0;
+            applyIndex(idx, { animate: true, persist: carouselEl.dataset.carousel === 'detail' });
+        });
+    });
+
+    const prevBtn = carouselEl.querySelector('.carousel-arrow.prev');
+    const nextBtn = carouselEl.querySelector('.carousel-arrow.next');
+    if (prevBtn && !prevBtn.dataset.bound) {
+        prevBtn.dataset.bound = '1';
+        prevBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            applyIndex(getIndex() - 1, { animate: true, persist: true });
+        });
+    }
+    if (nextBtn && !nextBtn.dataset.bound) {
+        nextBtn.dataset.bound = '1';
+        nextBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            applyIndex(getIndex() + 1, { animate: true, persist: true });
+        });
+    }
+
+    let pointerId = null;
+    let startX = 0;
+    let startY = 0;
+    let startIndex = 0;
+    let dragging = false;
+
+    const endDrag = () => {
+        pointerId = null;
+        dragging = false;
+        carouselEl.dataset.dragging = '';
+    };
+
+    viewport.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        pointerId = e.pointerId;
+        startX = e.clientX;
+        startY = e.clientY;
+        startIndex = getIndex();
+        dragging = false;
+        carouselEl.dataset.dragged = '';
+        carouselEl.dataset.dragging = '1';
+        try {
+            viewport.setPointerCapture(pointerId);
+        } catch (err) {
+            null;
+        }
+    });
+
+    viewport.addEventListener('pointermove', (e) => {
+        if (pointerId === null || e.pointerId !== pointerId) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (!dragging) {
+            if (Math.abs(dx) < 10) return;
+            if (Math.abs(dy) > Math.abs(dx)) return;
+            dragging = true;
+            track.style.transition = 'none';
+        }
+        e.preventDefault();
+        const pct = (dx / Math.max(1, viewport.clientWidth)) * 100;
+        const base = -startIndex * 100;
+        track.style.transform = `translateX(${base + pct}%)`;
+    }, { passive: false });
+
+    const onPointerUp = (e) => {
+        if (pointerId === null || e.pointerId !== pointerId) return;
+        const dx = e.clientX - startX;
+        const threshold = Math.max(38, Math.min(72, viewport.clientWidth * 0.18));
+        let next = startIndex;
+        if (dragging) {
+            if (dx <= -threshold) next = startIndex + 1;
+            if (dx >= threshold) next = startIndex - 1;
+            carouselEl.dataset.dragged = '1';
+        }
+        track.style.transition = '';
+        applyIndex(next, { animate: true, persist: carouselEl.dataset.carousel === 'detail' });
+        endDrag();
+    };
+
+    viewport.addEventListener('pointerup', onPointerUp);
+    viewport.addEventListener('pointercancel', onPointerUp);
+    viewport.addEventListener('lostpointercapture', endDrag);
+
+    carouselEl.addEventListener('click', (e) => {
+        if (carouselEl.dataset.dragged === '1') {
+            e.stopPropagation();
+            e.preventDefault();
+            carouselEl.dataset.dragged = '';
+            return;
+        }
+        if (carouselEl.dataset.carousel === 'detail') {
+            const idx = getIndex();
+            const imgs = carouselEl.querySelectorAll('img');
+            const url = imgs[idx]?.getAttribute('data-src') || imgs[idx]?.src || '';
+            if (url) {
+                e.stopPropagation();
+                openLightbox(url);
+            }
+        }
+    }, true);
+
+    applyIndex(getIndex(), { animate: false });
+}
+
+function initCarouselsInContainer(container) {
+    if (!container) return;
+    container.querySelectorAll('.js-carousel').forEach((el) => initCarouselElement(el));
+}
+
 function renderListings() {
     const filtered = getFilteredListings();
     const totalItems = filtered.length;
@@ -10259,6 +10426,7 @@ function renderListings() {
     document.getElementById('listingsGrid').style.display = totalItems === 0 ? 'none' : 'grid';
     renderPagination(totalPages);
     updateLoadMoreListingsUI();
+    initCarouselsInContainer(listingsGrid);
     scheduleLucideCreateIcons();
 }
 
@@ -10269,6 +10437,7 @@ function renderFavorites() {
         favoriteListings.map(item => createCardHTML(item)).join('') :
         '';
     document.getElementById('favoritesEmpty').style.display = favoriteListings.length === 0 ? 'block' : 'none';
+    initCarouselsInContainer(grid);
     scheduleLucideCreateIcons();
 }
 
@@ -10277,13 +10446,26 @@ function createCardHTML(item) {
     const pulse = pendingHeartPulses.has(item.id) && isFavorite;
     const availability = String(item.availability || '').toLowerCase();
     const badgeText = availability === 'sold' ? 'Sold' : (availability === 'reserved' ? 'Reserved' : '');
+    const carouselImages = getListingImagesForDetail(item).slice(0, 8);
+    const mediaHTML = carouselImages.length > 1
+        ? `<div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
+                <div class="carousel-viewport">
+                    <div class="carousel-track">
+                        ${carouselImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low" draggable="false"></div>`).join('')}
+                    </div>
+                </div>
+                <div class="carousel-dots">
+                    ${carouselImages.map((_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
+                </div>
+            </div>`
+        : `<img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low">`;
     return `
         <div class="card" onclick="openListingDetail(${item.id})">
             <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
                 <i data-lucide="heart"></i>
             </button>
             ${badgeText ? `<div class="card-status-badge ${availability}">${badgeText}</div>` : ''}
-            <img src="${item.image}" alt="${item.title}" class="card-img" loading="lazy" decoding="async" fetchpriority="low">
+            ${mediaHTML}
             <div class="card-content">
                 <div class="card-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
                 <div class="card-title">${item.title}</div>
@@ -11250,19 +11432,20 @@ function getListingImagesForDetail(item) {
 }
 
 function setListingDetailImage(listingId, index) {
-    listingDetailImageIndex[listingId] = index;
-    const main = document.getElementById('detailMainImage');
     const urls = getListingImagesForDetail(listings.find((l) => l.id === listingId));
     const idx = Math.max(0, Math.min(urls.length - 1, Number(index) || 0));
+    listingDetailImageIndex[listingId] = idx;
+    const carousel = document.querySelector(`.js-carousel[data-carousel="detail"][data-listing-id="${Number(listingId) || 0}"]`);
+    if (carousel) {
+        setCarouselIndex(carousel, idx, { animate: true });
+        return;
+    }
+    const main = document.getElementById('detailMainImage');
     if (main && urls[idx]) {
         main.src = urls[idx];
         main.setAttribute('data-src', urls[idx]);
         main.onclick = () => openLightbox(urls[idx]);
     }
-    document.querySelectorAll('[data-detail-thumb]').forEach((btn) => {
-        const n = Number(btn.getAttribute('data-detail-thumb')) || 0;
-        btn.classList.toggle('active', n === idx);
-    });
 }
 
 function openListingDetail(listingId, { pushState = true } = {}) {
@@ -11292,14 +11475,20 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     const selectedIdx = Math.max(0, Math.min(detailImages.length - 1, Number(selectedIdxRaw) || 0));
     listingDetailImageIndex[listingId] = selectedIdx;
     const mainImageUrl = detailImages[selectedIdx] || item.image;
-    const thumbsHtml = detailImages.length > 1
-        ? `<div class="detail-thumbs">${detailImages
-              .map(
-                  (u, i) =>
-                      `<button type="button" class="detail-thumb ${i === selectedIdx ? 'active' : ''}" data-detail-thumb="${i}" onclick="setListingDetailImage(${listingId}, ${i})"><img src="${u}" alt=""></button>`
-              )
-              .join('')}</div>`
-        : '';
+    const detailCarouselHtml = detailImages.length > 1
+        ? `<div class="detail-carousel js-carousel" data-carousel="detail" data-listing-id="${listingId}" data-index="${selectedIdx}">
+                <button type="button" class="carousel-arrow prev" aria-label="Previous image"><i data-lucide="chevron-left"></i></button>
+                <div class="carousel-viewport">
+                    <div class="carousel-track">
+                        ${detailImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" class="detail-image" alt="${escapeHtml(item.title)}" loading="lazy" decoding="async" draggable="false"></div>`).join('')}
+                    </div>
+                </div>
+                <button type="button" class="carousel-arrow next" aria-label="Next image"><i data-lucide="chevron-right"></i></button>
+                <div class="carousel-dots">
+                    ${detailImages.map((_, i) => `<button type="button" class="carousel-dot ${i === selectedIdx ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
+                </div>
+            </div>`
+        : `<img id="detailMainImage" src="${mainImageUrl}" data-src="${mainImageUrl}" class="detail-image" alt="${escapeHtml(item.title)}" onclick="openLightbox('${mainImageUrl}')">`;
     const bestListingReview = item.reviewsData.length > 0 ? item.reviewsData[0] : null;
     const similarListings = getSimilarListings(item);
     const reviewsCount = item.reviewsData.length;
@@ -11322,8 +11511,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     content.innerHTML = `
         <div class="detail-container">
             <div class="detail-gallery">
-                <img id="detailMainImage" src="${mainImageUrl}" data-src="${mainImageUrl}" class="detail-image" alt="${item.title}" onclick="openLightbox('${mainImageUrl}')">
-                ${thumbsHtml}
+                ${detailCarouselHtml}
             </div>
             <div class="detail-info">
                 <h2>${item.title} <span class="listing-status-badge ${String(item.availability || 'Available').toLowerCase() === 'sold' ? 'sold' : (String(item.availability || 'Available').toLowerCase() === 'reserved' ? 'pending' : 'ok')}">${escapeHtml(item.availability || 'Available')}</span></h2>
@@ -11493,7 +11681,8 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                 </div>
             </div>
         </div>${similarHTML}`;
-    lucide.createIcons();
+    initCarouselsInContainer(content);
+    scheduleLucideCreateIcons();
     refreshListingReviewsForListingDetail(listingId, seller?.name || 'Vendeur');
     if (!listingDetailViewRecorded || listingDetailViewRecordedListingId !== listingId) {
         listingDetailViewRecordedListingId = listingId;
@@ -11506,7 +11695,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
             const sellerRatingEl = document.getElementById('listingSellerRating');
             if (!sellerRatingEl) return;
             sellerRatingEl.innerHTML = getRatingHTML(summary.rating, summary.reviews, { showEmpty: true });
-            lucide.createIcons();
+            scheduleLucideCreateIcons();
         });
     }
     hydrateListingSellerInfo(listingId);
@@ -11548,7 +11737,7 @@ async function hydrateListingSellerInfo(listingId) {
     }
     const tagEl = document.getElementById('listingSellerTag');
     if (tagEl) tagEl.textContent = item.seller.tag || '';
-    lucide.createIcons();
+    scheduleLucideCreateIcons();
 }
 
 function shareListing(platform, id) {
