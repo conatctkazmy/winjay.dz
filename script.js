@@ -8803,12 +8803,16 @@ function navigateBackFromSellerProfileFlow() {
         return;
     }
     clearSellerProfileRouteTag();
+    if (from === 'seller-profile-section') {
+        showSection('home-section');
+        return;
+    }
     if (from && from !== 'seller-profile-section') {
         showSection(from === 'create-listing-section' ? 'home-section' : from);
         return;
     }
     const last = (localStorage.getItem('winjayLastSection') || '').trim() || 'home-section';
-    showSection(last === 'listing-detail-section' || last === 'create-listing-section' ? 'home-section' : last);
+    showSection(last === 'listing-detail-section' || last === 'create-listing-section' || last === 'seller-profile-section' ? 'home-section' : last);
 }
 
 function navigateBackFromListingFlow() {
@@ -10739,8 +10743,19 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
         switchMyProfileSection(section);
         return;
     }
-    const from = getActiveSectionId();
-    const fromListingId = from === 'listing-detail-section' ? currentListingDetailId : null;
+    let from = getActiveSectionId();
+    let fromListingId = from === 'listing-detail-section' ? currentListingDetailId : null;
+    if (from === 'seller-profile-section') {
+        if (String(currentSellerProfileOwnerId || '') === String(ownerId || '')) {
+            closeSidebarOverlay();
+            return;
+        }
+        const state = history.state && typeof history.state === 'object' ? history.state : null;
+        const prevFrom = state?.from ? String(state.from) : '';
+        const prevListingId = Number(state?.fromListingId) || 0;
+        from = prevFrom && prevFrom !== 'seller-profile-section' ? prevFrom : 'home-section';
+        fromListingId = from === 'listing-detail-section' && prevListingId > 0 ? prevListingId : null;
+    }
     const content = document.getElementById('externalProfileContent');
     if (content) content.innerHTML = getSellerProfileSkeletonHTML();
     const profilesById = await fetchProfilesByIds([ownerId]);
@@ -10868,8 +10883,15 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         return;
     }
     const seller = mapProfileRowToSeller(profileRow);
-    const from = getActiveSectionId();
-    const fromListingId = from === 'listing-detail-section' ? currentListingDetailId : null;
+    let from = getActiveSectionId();
+    let fromListingId = from === 'listing-detail-section' ? currentListingDetailId : null;
+    if (from === 'seller-profile-section') {
+        const state = history.state && typeof history.state === 'object' ? history.state : null;
+        const prevFrom = state?.from ? String(state.from) : '';
+        const prevListingId = Number(state?.fromListingId) || 0;
+        from = prevFrom && prevFrom !== 'seller-profile-section' ? prevFrom : 'home-section';
+        fromListingId = from === 'listing-detail-section' && prevListingId > 0 ? prevListingId : null;
+    }
     setSellerProfileRouteTag(seller.tag || profileRow.tag || '', { pushState, from, fromListingId });
     currentSellerProfileOwnerId = String(profileRow.id || '');
     currentSellerProfileName = seller.name || '';
