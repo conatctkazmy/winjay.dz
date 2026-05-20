@@ -102,6 +102,12 @@ Deno.serve(async (req) => {
   const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   start.setUTCDate(start.getUTCDate() - (days - 1));
 
+  const baselineRes = await authDb
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .lt("created_at", start.toISOString());
+  const baseline = Number(baselineRes.count) || 0;
+
   const seriesMap: Record<string, number> = {};
   for (let i = 0; i < days; i++) {
     const d = new Date(start);
@@ -130,6 +136,11 @@ Deno.serve(async (req) => {
     .sort()
     .map((date) => ({ date, count: seriesMap[date] || 0 }));
 
-  return json(200, { total, days, series });
-});
+  let running = baseline;
+  const seriesWithTotals = series.map((p) => {
+    running += Number(p.count) || 0;
+    return { ...p, total: running };
+  });
 
+  return json(200, { total, days, baseline, series: seriesWithTotals });
+});
