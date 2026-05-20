@@ -4984,9 +4984,7 @@ function populateAllExtraCategories() {
 function openOtherCategoriesModal(clearTarget = false) {
     if (clearTarget) categoryPickerTargetSelectId = '';
     try {
-        if (window.innerWidth <= 768) {
-            setSidebarMobileOpen(false);
-        }
+        null;
     } catch (e) {
         null;
     }
