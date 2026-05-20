@@ -1383,6 +1383,8 @@ const listingReviewPanelState = {};
 const listingDetailImageIndex = {};
 const listingReviewsCache = new Map();
 const profileRatingSummaryCache = new Map();
+const profileFollowCountsCache = new Map();
+const profileFollowStateCache = new Map();
 const sellerProfileReviewsCache = new Map();
 let listingDetailViewRecordedListingId = null;
 let listingDetailViewRecorded = false;
@@ -2615,6 +2617,183 @@ async function fetchProfilesByIds(ids) {
         if (p?.id) out[p.id] = p;
     });
     return out;
+}
+
+async function fetchProfileFollowCountsByIds(ids) {
+    const clean = Array.from(new Set((ids || []).map((x) => String(x || '').trim()).filter(Boolean)));
+    if (!clean.length) return {};
+    const cached = {};
+    const missing = [];
+    clean.forEach((id) => {
+        if (profileFollowCountsCache.has(id)) {
+            cached[id] = profileFollowCountsCache.get(id);
+        } else {
+            missing.push(id);
+        }
+    });
+    if (!missing.length) return cached;
+    const client = initSupabase();
+    if (!client) return cached;
+    const { data, error } = await client.rpc('get_profile_follow_counts', { profile_ids: missing });
+    if (error) return cached;
+    (data || []).forEach((row) => {
+        const id = String(row.profile_id || '').trim();
+        if (!id) return;
+        const out = {
+            followers: Number(row.followers_count) || 0,
+            following: Number(row.following_count) || 0
+        };
+        profileFollowCountsCache.set(id, out);
+        cached[id] = out;
+    });
+    missing.forEach((id) => {
+        if (!cached[id]) {
+            const out = { followers: 0, following: 0 };
+            profileFollowCountsCache.set(id, out);
+            cached[id] = out;
+        }
+    });
+    return cached;
+}
+
+async function fetchIsFollowingProfile(targetProfileId) {
+    const targetId = String(targetProfileId || '').trim();
+    if (!targetId) return false;
+    if (!currentSupabaseUserId) return false;
+    const key = `${currentSupabaseUserId}:${targetId}`;
+    if (profileFollowStateCache.has(key)) return !!profileFollowStateCache.get(key);
+    const client = initSupabase();
+    if (!client) return false;
+    const { data, error } = await client
+        .from('profile_follows')
+        .select('follower_id')
+        .eq('follower_id', currentSupabaseUserId)
+        .eq('following_id', targetId)
+        .limit(1);
+    if (error) return false;
+    const isFollowing = Array.isArray(data) && data.length > 0;
+    profileFollowStateCache.set(key, isFollowing);
+    return isFollowing;
+}
+
+async function setFollowProfile(targetProfileId, shouldFollow) {
+    const targetId = String(targetProfileId || '').trim();
+    if (!targetId) return false;
+    if (!requireAuthOrPrompt()) return false;
+    if (targetId === currentSupabaseUserId) return false;
+    const client = initSupabase();
+    if (!client) return false;
+    if (shouldFollow) {
+        const { error } = await client.from('profile_follows').insert({
+            follower_id: currentSupabaseUserId,
+            following_id: targetId
+        });
+        if (error) {
+            showToast(error.message || 'Unable to follow', 'alert-circle');
+            return false;
+        }
+    } else {
+        const { error } = await client
+            .from('profile_follows')
+            .delete()
+            .eq('follower_id', currentSupabaseUserId)
+            .eq('following_id', targetId);
+        if (error) {
+            showToast(error.message || 'Unable to unfollow', 'alert-circle');
+            return false;
+        }
+    }
+    const key = `${currentSupabaseUserId}:${targetId}`;
+    profileFollowStateCache.set(key, !!shouldFollow);
+    return true;
+}
+
+function setProfileFollowCountUI({ followersElId, followingElId, counts }) {
+    const c = counts || { followers: 0, following: 0 };
+    if (followersElId) {
+        const el = document.getElementById(followersElId);
+        if (el) el.textContent = String(Number(c.followers) || 0);
+    }
+    if (followingElId) {
+        const el = document.getElementById(followingElId);
+        if (el) el.textContent = String(Number(c.following) || 0);
+    }
+}
+
+function renderSellerFollowButtonState(isFollowing) {
+    const btn = document.getElementById('sellerFollowBtn');
+    const label = document.getElementById('sellerFollowBtnLabel');
+    if (!btn || !label) return;
+    if (isFollowing) {
+        btn.innerHTML = `<i data-lucide="user-check"></i><span id="sellerFollowBtnLabel">Suivi</span>`;
+    } else {
+        btn.innerHTML = `<i data-lucide="user-plus"></i><span id="sellerFollowBtnLabel">Suivre</span>`;
+    }
+    lucide.createIcons();
+}
+
+async function initSellerProfileFollowUI(ownerId) {
+    const id = String(ownerId || '').trim();
+    const btn = document.getElementById('sellerFollowBtn');
+    if (!btn || !id) return;
+    if (!currentSupabaseUserId || id === currentSupabaseUserId) {
+        btn.style.display = 'none';
+        return;
+    }
+    btn.style.display = '';
+    btn.disabled = true;
+    const [countsById, isFollowing] = await Promise.all([
+        fetchProfileFollowCountsByIds([id]),
+        fetchIsFollowingProfile(id)
+    ]);
+    const counts = countsById?.[id] || { followers: 0, following: 0 };
+    setProfileFollowCountUI({
+        followersElId: 'sellerFollowersCount',
+        followingElId: 'sellerFollowingCount',
+        counts
+    });
+    renderSellerFollowButtonState(isFollowing);
+    btn.disabled = false;
+}
+
+async function toggleSellerFollow(ownerId) {
+    const id = String(ownerId || '').trim();
+    if (!id) return;
+    if (!requireAuthOrPrompt()) return;
+    if (id === currentSupabaseUserId) return;
+    const btn = document.getElementById('sellerFollowBtn');
+    if (btn) btn.disabled = true;
+    const isFollowing = await fetchIsFollowingProfile(id);
+    const next = !isFollowing;
+    const ok = await setFollowProfile(id, next);
+    if (ok) {
+        const sellerCounts = profileFollowCountsCache.get(id) || { followers: 0, following: 0 };
+        const meCounts = profileFollowCountsCache.get(currentSupabaseUserId) || { followers: 0, following: 0 };
+        const delta = next ? 1 : -1;
+        const nextSellerCounts = {
+            followers: Math.max(0, Number(sellerCounts.followers) + delta),
+            following: Number(sellerCounts.following) || 0
+        };
+        const nextMeCounts = {
+            followers: Number(meCounts.followers) || 0,
+            following: Math.max(0, Number(meCounts.following) + delta)
+        };
+        profileFollowCountsCache.set(id, nextSellerCounts);
+        profileFollowCountsCache.set(currentSupabaseUserId, nextMeCounts);
+        setProfileFollowCountUI({
+            followersElId: 'sellerFollowersCount',
+            followingElId: 'sellerFollowingCount',
+            counts: nextSellerCounts
+        });
+        setProfileFollowCountUI({
+            followersElId: 'profileFollowersCount',
+            followingElId: 'profileFollowingCount',
+            counts: nextMeCounts
+        });
+        renderSellerFollowButtonState(next);
+        showToast(next ? 'Abonné.' : 'Désabonné.', 'users');
+    }
+    if (btn) btn.disabled = false;
 }
 
 async function fetchListingReviews(listingId) {
@@ -6575,6 +6754,19 @@ function updateProfileUI() {
     updateAdminDashboardButtonVisibility();
     updateNavbarAuthUI();
     lucide.createIcons();
+    refreshMyProfileFollowCounts();
+}
+
+async function refreshMyProfileFollowCounts() {
+    if (!currentSupabaseUserId) return;
+    const out = await fetchProfileFollowCountsByIds([currentSupabaseUserId]);
+    const counts = out?.[currentSupabaseUserId] || { followers: 0, following: 0 };
+    setProfileFollowCountUI({
+        followersElId: 'profileFollowersCount',
+        followingElId: 'profileFollowingCount',
+        counts
+    });
+    lucide.createIcons();
 }
 
 function updateUpgradeOfferVisibility() {
@@ -10196,12 +10388,18 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
                             <div class="bio-item"><i data-lucide="map-pin"></i><span>${seller.location}</span></div>
                             <div class="bio-item"><i data-lucide="briefcase"></i><span>${seller.businessType}</span></div>
                             ${seller.joinedDate ? `<div class="bio-item"><i data-lucide="calendar"></i><span>Inscrit en ${seller.joinedDate}</span></div>` : ''}
+                            <div class="bio-item"><i data-lucide="users"></i><span><span id="sellerFollowersCount">0</span> abonnés</span></div>
+                            <div class="bio-item"><i data-lucide="user-plus"></i><span><span id="sellerFollowingCount">0</span> abonnements</span></div>
                         </div>
                     </div>
                     <div class="profile-actions-row">
                         <button class="message-contact-btn" type="button" onclick="startChatWithSellerByOwnerId('${ownerId}')">
                             <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
                             Message
+                        </button>
+                        <button id="sellerFollowBtn" class="follow-profile-btn" type="button" onclick="toggleSellerFollow('${ownerId}'); event.stopPropagation();">
+                            <i data-lucide="user-plus"></i>
+                            <span id="sellerFollowBtnLabel">Suivre</span>
                         </button>
                         <button class="share-profile-btn" type="button" onclick="shareSellerProfile('${ownerId}', '${seller.tag}', '${escapeHtml(seller.name || '')}'); event.stopPropagation();">
                             <i data-lucide="share-2"></i>
@@ -10246,6 +10444,7 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
         </div>`;
     showSection('seller-profile-section');
     switchSellerProfileSection(section);
+    initSellerProfileFollowUI(ownerId);
     fetchProfileRatingSummary(profileRow.id).then((summary) => {
         if (String(currentSellerProfileOwnerId || '') !== String(profileRow.id || '')) return;
         profileRatingSummaryCache.set(String(profileRow.id), summary);
@@ -10308,12 +10507,18 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
                             <div class="bio-item"><i data-lucide="map-pin"></i><span>${seller.location}</span></div>
                             <div class="bio-item"><i data-lucide="briefcase"></i><span>${seller.businessType}</span></div>
                             <div class="bio-item"><i data-lucide="calendar"></i><span>Inscrit en ${seller.joinedDate}</span></div>
+                            <div class="bio-item"><i data-lucide="users"></i><span><span id="sellerFollowersCount">0</span> abonnés</span></div>
+                            <div class="bio-item"><i data-lucide="user-plus"></i><span><span id="sellerFollowingCount">0</span> abonnements</span></div>
                         </div>
                     </div>
                     <div class="profile-actions-row">
                         <button class="message-contact-btn" type="button" onclick="startChatWithSellerByOwnerId('${profileRow.id}')">
                             <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
                             Message
+                        </button>
+                        <button id="sellerFollowBtn" class="follow-profile-btn" type="button" onclick="toggleSellerFollow('${profileRow.id}'); event.stopPropagation();">
+                            <i data-lucide="user-plus"></i>
+                            <span id="sellerFollowBtnLabel">Suivre</span>
                         </button>
                         <button class="share-profile-btn" type="button" onclick="shareSellerProfile('${profileRow.id}', '${seller.tag}', '${escapeHtml(seller.name || '')}'); event.stopPropagation();">
                             <i data-lucide="share-2"></i>
@@ -10358,6 +10563,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         </div>`;
     showSection('seller-profile-section');
     switchSellerProfileSection(section);
+    initSellerProfileFollowUI(profileRow.id);
     fetchProfileRatingSummary(profileRow.id).then((summary) => {
         if (String(currentSellerProfileOwnerId || '') !== String(profileRow.id || '')) return;
         profileRatingSummaryCache.set(String(profileRow.id), summary);
