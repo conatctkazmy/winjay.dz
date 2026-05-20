@@ -6185,6 +6185,7 @@ footer {
     .sidebar {
         transform: translateX(-100%);
         top: 0;
+        bottom: 0;
         height: 100vh;
         height: 100dvh;
     }
@@ -6288,8 +6289,9 @@ footer {
     .sidebar {
         transform: translateX(-100%);
         top: 0;
+        bottom: 0;
         height: 100vh;
-        height: 100svh;
+        height: 100dvh;
     }
 
     .sidebar.active {
