@@ -1784,6 +1784,17 @@ main.expanded {
     margin-bottom: 25px;
 }
 
+.load-more-wrap {
+    display: flex;
+    justify-content: center;
+    margin: 16px 0 6px;
+}
+
+.load-more-btn {
+    width: 100%;
+    max-width: 280px;
+}
+
 .filter-bar {
     display: flex;
     gap: 15px;

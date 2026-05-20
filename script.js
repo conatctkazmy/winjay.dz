@@ -55,6 +55,8 @@ const MESSAGE_MEDIA_BUCKET = 'message-media';
 const IDENTITY_DOCS_BUCKET = 'identity-docs';
 const FREE_LISTING_LIMIT = 4;
 const SELLER_PROFILE_LAST_TAG_STORAGE_KEY = 'winjayLastSellerProfileTagV1';
+const INITIAL_LISTINGS_FETCH_LIMIT = 30;
+const LISTINGS_FETCH_PAGE_SIZE = 30;
 
 function safeStorageFilename(name) {
     return String(name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -131,6 +133,77 @@ let myReferralCount = 0;
 let hasLoadedSupabaseProfile = false;
 let hasLoadedIdentityStatus = false;
 let myIdentityStatus = null;
+
+let listingsLoadedCount = 0;
+let listingsHasMore = true;
+let listingsLoadMoreBound = false;
+let lucideRenderTimer = null;
+let marketplaceRenderTimer = null;
+
+function scheduleLucideCreateIcons() {
+    if (lucideRenderTimer) {
+        try {
+            clearTimeout(lucideRenderTimer);
+        } catch (e) {
+            null;
+        }
+    }
+    lucideRenderTimer = setTimeout(() => {
+        lucideRenderTimer = null;
+        try {
+            lucide.createIcons();
+        } catch (e) {
+            null;
+        }
+    }, 50);
+}
+
+function scheduleMarketplaceRenders() {
+    if (marketplaceRenderTimer) {
+        try {
+            clearTimeout(marketplaceRenderTimer);
+        } catch (e) {
+            null;
+        }
+    }
+    marketplaceRenderTimer = setTimeout(() => {
+        marketplaceRenderTimer = null;
+        try {
+            syncMyListingsFromListings();
+        } catch (e) {
+            null;
+        }
+        try {
+            renderListings();
+        } catch (e) {
+            null;
+        }
+        try {
+            renderMyListings();
+        } catch (e) {
+            null;
+        }
+        try {
+            renderFavorites();
+        } catch (e) {
+            null;
+        }
+        try {
+            updateLoadMoreListingsUI();
+        } catch (e) {
+            null;
+        }
+        scheduleLucideCreateIcons();
+    }, 50);
+}
+
+function updateLoadMoreListingsUI() {
+    const wrap = document.getElementById('loadMoreListingsWrap');
+    const btn = document.getElementById('loadMoreListingsBtn');
+    if (!wrap || !btn) return;
+    const show = !DEMO_MODE && !!listingsHasMore && getActiveSectionId() === 'home-section';
+    wrap.style.display = show ? 'flex' : 'none';
+}
 
 function isLoggedIn() {
     return !!currentSupabaseUserId;
@@ -227,7 +300,7 @@ function mapSupabaseListingRow(row, profilesById = {}) {
     };
 }
 
-async function fetchListingsFromSupabase({ silent = false, includeProfiles = false, limit = 200 } = {}) {
+async function fetchListingsFromSupabase({ silent = false, includeProfiles = false, limit = undefined, offset = 0, append = false } = {}) {
     const client = initSupabase();
     if (!client) return;
     let query = client
@@ -236,8 +309,12 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = fal
             'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, sort_order)'
         )
         .order('created_at', { ascending: false });
-    const safeLimit = Number(limit) || 0;
-    if (safeLimit > 0) query = query.limit(safeLimit);
+    const safeLimitRaw = Number(limit);
+    const safeLimit = Number.isFinite(safeLimitRaw) && safeLimitRaw > 0
+        ? safeLimitRaw
+        : Math.max(INITIAL_LISTINGS_FETCH_LIMIT, Number(listingsLoadedCount) || 0);
+    const safeOffset = Math.max(0, Number(offset) || 0);
+    if (safeLimit > 0) query = query.range(safeOffset, safeOffset + safeLimit - 1);
     const { data, error } = await query;
     if (error) {
         if (!silent) showToast(error.message || 'Failed to load listings', 'alert-circle');
@@ -245,14 +322,22 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = fal
     }
     const ownerIds = includeProfiles ? Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean))) : [];
     const profilesById = includeProfiles && ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
-    listings = (data || []).map((row) => mapSupabaseListingRow(row, profilesById));
+    const mapped = (data || []).map((row) => mapSupabaseListingRow(row, profilesById));
+    if (append) {
+        const byId = new Map((listings || []).map((x) => [x.id, x]));
+        mapped.forEach((x) => byId.set(x.id, x));
+        listings = Array.from(byId.values()).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    } else {
+        listings = mapped;
+    }
+    if (!append) currentPage = 1;
+    const fetched = Array.isArray(data) ? data.length : 0;
+    if (!append) listingsLoadedCount = 0;
+    listingsLoadedCount = Math.max(listingsLoadedCount, safeOffset + fetched);
+    listingsHasMore = safeLimit > 0 ? fetched >= safeLimit : false;
     saveMarketplaceListingsToStorage();
-    syncMyListingsFromListings();
-    renderListings();
-    renderMyListings();
     await refreshFavoritesFromSupabase({ silent: true });
-    renderListings();
-    renderFavorites();
+    scheduleMarketplaceRenders();
 }
 
 function loadMarketplaceListingsFromStorage() {
@@ -3293,7 +3378,7 @@ async function refreshListingCountsFromSupabase(listingId) {
     }
 
     const render = arguments.length > 1 ? arguments[1]?.render !== false : true;
-    if (render) renderListings();
+    if (render) scheduleMarketplaceRenders();
     return data;
 }
 
@@ -4622,7 +4707,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (listingsGrid && (!Array.isArray(listings) || listings.length === 0)) {
         listingsGrid.innerHTML = getHomeListingsSkeletonHTML(12);
     }
-    const listingsPromise = fetchListingsFromSupabase({ silent: false, includeProfiles: false, limit: 200 });
+    if (!listingsLoadMoreBound) {
+        listingsLoadMoreBound = true;
+        const btn = document.getElementById('loadMoreListingsBtn');
+        if (btn && !btn.dataset.bound) {
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', async () => {
+                if (DEMO_MODE) return;
+                if (!listingsHasMore) return;
+                const wrap = document.getElementById('loadMoreListingsWrap');
+                try {
+                    btn.disabled = true;
+                    btn.textContent = 'Loading...';
+                    if (wrap) wrap.style.display = 'flex';
+                } catch (e) {
+                    null;
+                }
+                try {
+                    await fetchListingsFromSupabase({
+                        silent: false,
+                        includeProfiles: false,
+                        limit: LISTINGS_FETCH_PAGE_SIZE,
+                        offset: listingsLoadedCount,
+                        append: true
+                    });
+                } finally {
+                    try {
+                        btn.disabled = false;
+                        btn.textContent = 'Load more';
+                    } catch (e) {
+                        null;
+                    }
+                    updateLoadMoreListingsUI();
+                }
+            });
+        }
+    }
+    const listingsPromise = fetchListingsFromSupabase({ silent: false, includeProfiles: false, limit: INITIAL_LISTINGS_FETCH_LIMIT, offset: 0, append: false });
 
     if (profileParam) {
         const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
@@ -8214,7 +8335,7 @@ function renderMyListings() {
     myListingsGrid.innerHTML = myListings.length > 0 ?
         myListings.map(item => createMyListingCardHTML(item)).join('') :
         '<div class="empty-state"><i data-lucide="shopping-bag"></i><h3>Pas encore d\'annonces</h3><p>Publiez votre première annonce !</p></div>';
-    lucide.createIcons();
+    scheduleLucideCreateIcons();
 }
 
 function renderMyProfileReviews() {
@@ -10137,7 +10258,8 @@ function renderListings() {
     document.getElementById('emptyState').style.display = totalItems === 0 ? 'block' : 'none';
     document.getElementById('listingsGrid').style.display = totalItems === 0 ? 'none' : 'grid';
     renderPagination(totalPages);
-    lucide.createIcons();
+    updateLoadMoreListingsUI();
+    scheduleLucideCreateIcons();
 }
 
 function renderFavorites() {
@@ -10147,7 +10269,7 @@ function renderFavorites() {
         favoriteListings.map(item => createCardHTML(item)).join('') :
         '';
     document.getElementById('favoritesEmpty').style.display = favoriteListings.length === 0 ? 'block' : 'none';
-    lucide.createIcons();
+    scheduleLucideCreateIcons();
 }
 
 function createCardHTML(item) {
