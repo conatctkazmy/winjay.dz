@@ -2064,12 +2064,12 @@ main.expanded {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    cursor: grab;
+    cursor: pointer;
     user-select: none;
 }
 
 .carousel-slide .detail-image {
-    cursor: zoom-in;
+    cursor: pointer;
 }
 
 .carousel-dots {
