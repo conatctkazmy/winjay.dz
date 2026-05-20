@@ -4988,6 +4988,7 @@ function openOtherCategoriesModal(clearTarget = false) {
     } catch (e) {
         null;
     }
+    body.classList.add('other-categories-open');
     openModal('otherCategoriesModal');
     try {
         const modal = document.getElementById('otherCategoriesModal');
@@ -5737,6 +5738,7 @@ function closeModal(modalId) {
     if (el) el.classList.remove('active');
     if (modalId === 'otherCategoriesModal') {
         categoryPickerTargetSelectId = '';
+        body.classList.remove('other-categories-open');
     }
     if (modalId === 'selectPickerModal') {
         selectPickerTargetSelectId = '';
@@ -9416,16 +9418,17 @@ function createCardHTML(item) {
         </div>`;
 }
 
-function getRatingHTML(rating, reviews) {
+function getRatingHTML(rating, reviews, { showEmpty = false } = {}) {
     const reviewCount = Number(reviews) || 0;
     const safeRating = Number(rating) || 0;
-    if (reviewCount <= 0 || safeRating <= 0) return '';
+    if (!showEmpty && (reviewCount <= 0 || safeRating <= 0)) return '';
     const fullStars = Math.floor(safeRating);
     let starsHTML = '';
     for (let i = 0; i < 5; i++) {
         starsHTML += `<i data-lucide="star" style="${i < fullStars ? 'fill: #ffb400;' : ''} width: 14px; height: 14px;"></i>`;
     }
-    return `<div class="rating-container"><div class="stars">${starsHTML}</div><span class="rating-value">${safeRating}</span><span class="reviews-count">(${reviewCount} avis)</span></div>`;
+    const ratingLabel = safeRating > 0 ? String(safeRating) : '0';
+    return `<div class="rating-container"><div class="stars">${starsHTML}</div><span class="rating-value">${ratingLabel}</span><span class="reviews-count">(${reviewCount} avis)</span></div>`;
 }
 
 function makeSafeId(value) {
@@ -10548,11 +10551,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                         <div>
                             <div class="seller-name" id="listingSellerName">${seller.name} ${getUserBadgesHTML(seller)}</div>
                             <div class="seller-tag" id="listingSellerTag">${seller.tag}</div>
-                            <div id="listingSellerRating">${getRatingHTML(seller.rating || 0, seller.reviews || 0)}</div>
-                            <button class="see-reviews-btn" type="button" onclick="event.stopPropagation(); openSellerProfileByOwnerId('${item.owner_id}', 'reviews')">
-                                <i data-lucide="star"></i>
-                                Avis du vendeur
-                            </button>
+                            <div id="listingSellerRating">${getRatingHTML(seller.rating || 0, seller.reviews || 0, { showEmpty: true })}</div>
                         </div>
                     </div>
                     <i data-lucide="chevron-right"></i>
@@ -10624,7 +10623,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
             if (currentListingDetailId !== listingId) return;
             const sellerRatingEl = document.getElementById('listingSellerRating');
             if (!sellerRatingEl) return;
-            sellerRatingEl.innerHTML = getRatingHTML(summary.rating, summary.reviews);
+            sellerRatingEl.innerHTML = getRatingHTML(summary.rating, summary.reviews, { showEmpty: true });
             lucide.createIcons();
         });
     }

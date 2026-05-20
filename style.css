@@ -4420,6 +4420,13 @@ body.dark-mode .listing-status-badge {
     background-color: var(--border-color);
 }
 
+.other-categories-open #sidebar {
+    opacity: 0.45;
+    filter: grayscale(0.12);
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
 .detail-contact-actions {
     display: flex;
     flex-wrap: wrap;
