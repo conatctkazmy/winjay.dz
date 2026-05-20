@@ -1391,6 +1391,12 @@ let listingDetailViewRecorded = false;
 let sidebarFollowingExpanded = false;
 let sidebarFollowingLastLoadedAt = 0;
 let sidebarFollowingLoadToken = 0;
+let sidebarScrollLockTop = 0;
+let sidebarScrollLocked = false;
+let ambassadorsLeaderboardCache = [];
+let ambassadorsLeaderboardLoadedAt = 0;
+let ambassadorsFeaturedCache = null;
+let ambassadorsUIState = { sort: 'trust', wilaya: '' };
 
 let mockChats = DEMO_MODE ? {
     "@amine_dz": {
@@ -2928,6 +2934,216 @@ async function refreshSidebarFollowing({ force = false } = {}) {
             moreBtn.style.display = 'none';
         }
     }
+}
+
+function ensureAmbassadorWilayaOptions() {
+    const select = document.getElementById('ambassadorWilaya');
+    if (!select) return;
+    if (select.dataset.ready === '1') return;
+    const existing = new Set(Array.from(select.querySelectorAll('option')).map((o) => o.value));
+    wilayas.forEach((label) => {
+        const code = String(label || '').trim().slice(0, 2);
+        if (!code || existing.has(code)) return;
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = label;
+        select.appendChild(opt);
+        existing.add(code);
+    });
+    select.dataset.ready = '1';
+}
+
+function openAmbassadorsSection() {
+    showSection('ambassadors-section');
+    refreshAmbassadorsSection(false);
+}
+
+function handleAmbassadorControlsChange() {
+    const sortEl = document.getElementById('ambassadorSort');
+    const wilayaEl = document.getElementById('ambassadorWilaya');
+    const sort = String(sortEl?.value || 'trust');
+    const wilaya = String(wilayaEl?.value || '');
+    ambassadorsUIState = { sort, wilaya };
+    renderAmbassadorsFromCache();
+}
+
+function normalizeAmbassadorRow(row) {
+    const userId = String(row?.user_id || row?.id || '').trim();
+    if (!userId) return null;
+    const safeWilaya = String(row?.wilaya_code || '').trim();
+    const trust = Number(row?.trust_score) || 0;
+    const followers = Number(row?.followers_count) || 0;
+    const recs = Number(row?.total_recommendations) || 0;
+    const activeBadges = Number(row?.active_badge_count) || 0;
+    const appointedAt = row?.appointed_at || row?.appointedDate || null;
+    return {
+        user_id: userId,
+        display_name: row?.display_name || row?.name || 'Ambassador',
+        tag: row?.tag || '',
+        avatar_url: row?.avatar_url || row?.profilePic || '',
+        wilaya_code: safeWilaya,
+        trust_score: trust,
+        followers_count: followers,
+        total_recommendations: recs,
+        active_badge_count: activeBadges,
+        appointed_at: appointedAt,
+        status: row?.status || 'active'
+    };
+}
+
+function formatWilayaLabelFromCode(code) {
+    const c = String(code || '').trim();
+    if (!c) return '';
+    const found = wilayas.find((w) => String(w).startsWith(c + ' ')) || wilayas.find((w) => String(w).startsWith(c));
+    return found || c;
+}
+
+function trustPercent(score) {
+    const s = Number(score) || 0;
+    return Math.max(0, Math.min(100, s));
+}
+
+function buildAmbassadorCardHTML(a, { featured = false, badgeLabel = '' } = {}) {
+    const seller = mapProfileRowToSeller({
+        id: a.user_id,
+        display_name: a.display_name,
+        tag: a.tag,
+        avatar_url: a.avatar_url
+    });
+    const name = escapeHtml(seller.name || a.display_name || 'Ambassador');
+    const tag = escapeHtml(seller.tag || a.tag || '');
+    const pic = seller.pic || seller.profilePic || '';
+    const wilaya = escapeHtml(formatWilayaLabelFromCode(a.wilaya_code));
+    const pct = trustPercent(a.trust_score);
+    const badge = badgeLabel ? `<span class="ambassador-badge">${escapeHtml(badgeLabel)}</span>` : '';
+    const since = a.appointed_at ? formatRelativeDate(a.appointed_at) : '';
+    return `
+        <div class="ambassador-card ${featured ? 'featured' : ''}" onclick="openSellerProfileByOwnerId('${a.user_id}');">
+            <div class="ambassador-card-head">
+                <img class="ambassador-avatar" src="${pic}" alt="">
+                <div class="ambassador-meta">
+                    <div class="ambassador-name-row">
+                        <div class="ambassador-name">${name}</div>
+                        ${badge}
+                    </div>
+                    <div class="ambassador-sub">${tag}${wilaya ? ` • ${wilaya}` : ''}${since ? ` • ${escapeHtml(since)}` : ''}</div>
+                </div>
+            </div>
+            <div class="ambassador-stats">
+                <div class="ambassador-stat">
+                    <div class="ambassador-stat-label">Trust</div>
+                    <div class="ambassador-trust-bar"><div class="ambassador-trust-fill" style="width:${pct}%;"></div></div>
+                </div>
+                <div class="ambassador-stat-grid">
+                    <div class="ambassador-kpi"><span class="k">${Number(a.followers_count) || 0}</span><span class="l">followers</span></div>
+                    <div class="ambassador-kpi"><span class="k">${Number(a.total_recommendations) || 0}</span><span class="l">recs</span></div>
+                    <div class="ambassador-kpi"><span class="k">${Number(a.active_badge_count) || 0}</span><span class="l">badges</span></div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function fetchPresidentWinnerId() {
+    const client = initSupabase();
+    if (!client) return '';
+    const { data, error } = await client
+        .from('president_elections')
+        .select('id, winner_id, ended_at, started_at')
+        .not('winner_id', 'is', null)
+        .order('ended_at', { ascending: false })
+        .order('started_at', { ascending: false })
+        .limit(1);
+    if (error) return '';
+    const row = Array.isArray(data) ? data[0] : null;
+    return String(row?.winner_id || '').trim();
+}
+
+function renderAmbassadorsFromCache() {
+    ensureAmbassadorWilayaOptions();
+    const featuredEl = document.getElementById('ambassadorsFeatured');
+    const listEl = document.getElementById('ambassadorsList');
+    if (!featuredEl || !listEl) return;
+
+    let list = Array.isArray(ambassadorsLeaderboardCache) ? ambassadorsLeaderboardCache.slice() : [];
+    const wantedWilaya = String(ambassadorsUIState?.wilaya || '').trim();
+    if (wantedWilaya) list = list.filter((a) => String(a.wilaya_code || '').trim() === wantedWilaya);
+
+    const sort = String(ambassadorsUIState?.sort || 'trust');
+    if (sort === 'followers') list.sort((a, b) => (b.followers_count || 0) - (a.followers_count || 0));
+    else if (sort === 'recommendations') list.sort((a, b) => (b.total_recommendations || 0) - (a.total_recommendations || 0));
+    else if (sort === 'newest') list.sort((a, b) => new Date(b.appointed_at || 0) - new Date(a.appointed_at || 0));
+    else list.sort((a, b) => (b.trust_score || 0) - (a.trust_score || 0));
+
+    const featured = ambassadorsFeaturedCache && (!wantedWilaya || String(ambassadorsFeaturedCache.wilaya_code) === wantedWilaya)
+        ? ambassadorsFeaturedCache
+        : null;
+
+    if (featured) {
+        featuredEl.innerHTML = buildAmbassadorCardHTML(featured, { featured: true, badgeLabel: featured.__badgeLabel || '' });
+    } else {
+        featuredEl.innerHTML = '';
+    }
+
+    if (!list.length) {
+        listEl.innerHTML = `<div class="muted" style="padding: 12px 4px;">No ambassadors found.</div>`;
+        lucide.createIcons();
+        return;
+    }
+
+    listEl.innerHTML = list.map((a) => buildAmbassadorCardHTML(a)).join('');
+    lucide.createIcons();
+}
+
+async function refreshAmbassadorsSection(force = false) {
+    ensureAmbassadorWilayaOptions();
+    const sortEl = document.getElementById('ambassadorSort');
+    const wilayaEl = document.getElementById('ambassadorWilaya');
+    if (sortEl && !sortEl.value) sortEl.value = ambassadorsUIState.sort || 'trust';
+    if (wilayaEl && typeof ambassadorsUIState.wilaya === 'string') wilayaEl.value = ambassadorsUIState.wilaya;
+
+    const now = Date.now();
+    if (!force && ambassadorsLeaderboardLoadedAt && now - ambassadorsLeaderboardLoadedAt < 60000) {
+        renderAmbassadorsFromCache();
+        return;
+    }
+    const featuredEl = document.getElementById('ambassadorsFeatured');
+    const listEl = document.getElementById('ambassadorsList');
+    if (listEl) listEl.innerHTML = getHomeListingsSkeletonHTML(6);
+    if (featuredEl) featuredEl.innerHTML = '';
+
+    const client = initSupabase();
+    if (!client) {
+        if (listEl) listEl.innerHTML = `<div class="muted">Supabase n’est pas configuré.</div>`;
+        return;
+    }
+
+    const { data, error } = await client
+        .from('ambassador_leaderboard')
+        .select('user_id, display_name, tag, avatar_url, wilaya_code, trust_score, followers_count, total_recommendations, active_badge_count, appointed_at, status')
+        .limit(200);
+
+    if (error) {
+        if (listEl) listEl.innerHTML = `<div class="muted">Ambassadors backend not ready.</div>`;
+        showToast(error.message || 'Ambassadors backend not ready', 'alert-circle');
+        return;
+    }
+
+    const rows = Array.isArray(data) ? data : [];
+    ambassadorsLeaderboardCache = rows.map(normalizeAmbassadorRow).filter(Boolean);
+    ambassadorsLeaderboardLoadedAt = now;
+
+    const winnerId = await fetchPresidentWinnerId();
+    if (winnerId) {
+        const found = ambassadorsLeaderboardCache.find((a) => String(a.user_id) === String(winnerId));
+        if (found) ambassadorsFeaturedCache = { ...found, __badgeLabel: 'President' };
+        else ambassadorsFeaturedCache = null;
+    } else {
+        const top = ambassadorsLeaderboardCache.slice().sort((a, b) => (b.trust_score || 0) - (a.trust_score || 0))[0] || null;
+        ambassadorsFeaturedCache = top ? { ...top, __badgeLabel: 'Top ambassador' } : null;
+    }
+
+    renderAmbassadorsFromCache();
 }
 
 async function fetchListingReviews(listingId) {
@@ -5358,6 +5574,29 @@ function closeListingImagesModal() {
     updateListingImagesMiniPreview();
 }
 
+function lockDocumentScrollForSidebar() {
+    if (sidebarScrollLocked) return;
+    if (document.body.classList.contains('modal-open')) return;
+    sidebarScrollLockTop = window.scrollY || window.pageYOffset || 0;
+    sidebarScrollLocked = true;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${sidebarScrollLockTop}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+}
+
+function unlockDocumentScrollForSidebar() {
+    if (!sidebarScrollLocked) return;
+    sidebarScrollLocked = false;
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    window.scrollTo(0, sidebarScrollLockTop || 0);
+}
+
 function selectListingImageSlot(index) {
     currentListingImageSlotIndex = index;
     const input = document.getElementById('listingImageSlotInput');
@@ -5384,9 +5623,12 @@ function setSidebarMobileOpen(isOpen) {
     overlay?.classList?.toggle('active', !!isOpen);
     try {
         document.body.classList.toggle('sidebar-open', !!isOpen);
+        document.documentElement.classList.toggle('sidebar-open', !!isOpen);
     } catch (e) {
         null;
     }
+    if (isOpen) lockDocumentScrollForSidebar();
+    else unlockDocumentScrollForSidebar();
 }
 
 function closeSidebarOverlay() {
@@ -5401,6 +5643,20 @@ sidebarToggle.addEventListener('click', () => {
         contentArea.classList.toggle('expanded');
     }
 });
+
+if (!window.__winjaySidebarTouchLocked) {
+    window.__winjaySidebarTouchLocked = true;
+    document.addEventListener(
+        'touchmove',
+        (e) => {
+            if (!document.body.classList.contains('sidebar-open')) return;
+            const side = document.getElementById('sidebar');
+            if (side && side.contains(e.target)) return;
+            e.preventDefault();
+        },
+        { passive: false }
+    );
+}
 
 themeToggle.addEventListener('click', () => {
     setThemeMode(!isDarkMode);
@@ -8501,6 +8757,9 @@ function showSection(sectionId) {
             bootstrapMessages();
         }
         scheduleSyncMessagesContainerHeight();
+    } else if (sectionId === 'ambassadors-section') {
+        clearSellerProfileRouteTag();
+        refreshAmbassadorsSection(false);
     } else if (sectionId === 'admin-dashboard-section') {
         clearSellerProfileRouteTag();
         renderAdminDashboard();

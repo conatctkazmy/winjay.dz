@@ -149,6 +149,13 @@
                 </div>
                 <div class="sidebar-divider"></div>
                 <div class="sidebar-section">
+                    <h3>Communauté</h3>
+                    <ul>
+                        <li><a href="#" onclick="openAmbassadorsSection(); return false;"><i data-lucide="award"></i> Ambassadeurs</a></li>
+                    </ul>
+                </div>
+                <div class="sidebar-divider"></div>
+                <div class="sidebar-section">
                     <h3>My actions</h3>
                     <ul>
                         <li><a href="#" onclick="showSection('favorites-section'); return false;"><i data-lucide="heart"></i> Favorites</a></li>
@@ -233,6 +240,39 @@
                         <div class="skeleton-card"></div>
                         <div class="skeleton-card"></div>
                     </div>
+                </div>
+            </section>
+
+            <section id="ambassadors-section" class="content-section">
+                <div class="page-card ambassadors-card">
+                    <div class="page-card-head">
+                        <h2 style="margin:0;">Ambassadeurs</h2>
+                        <p style="margin:0; color: var(--text-muted);">Classement national + par wilaya</p>
+                    </div>
+
+                    <div class="ambassadors-controls">
+                        <div class="ambassadors-control">
+                            <label for="ambassadorSort" class="ambassadors-label">Trier</label>
+                            <select id="ambassadorSort" onchange="handleAmbassadorControlsChange()">
+                                <option value="trust">Trust score</option>
+                                <option value="followers">Most followers</option>
+                                <option value="recommendations">Most recommendations</option>
+                                <option value="newest">Newest</option>
+                            </select>
+                        </div>
+                        <div class="ambassadors-control">
+                            <label for="ambassadorWilaya" class="ambassadors-label">Wilaya</label>
+                            <select id="ambassadorWilaya" onchange="handleAmbassadorControlsChange()">
+                                <option value="">Toutes les wilayas</option>
+                            </select>
+                        </div>
+                        <button class="filter-btn" type="button" onclick="refreshAmbassadorsSection(true)">
+                            <i data-lucide="refresh-cw"></i> Actualiser
+                        </button>
+                    </div>
+
+                    <div class="ambassadors-featured" id="ambassadorsFeatured"></div>
+                    <div class="ambassadors-list" id="ambassadorsList"></div>
                 </div>
             </section>
 

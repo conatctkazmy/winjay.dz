@@ -1144,6 +1144,7 @@ html.sidebar-open {
     z-index: 9000;
     overflow-y: auto;
     overscroll-behavior: contain;
+    touch-action: pan-y;
 }
 
 .sidebar-mobile-header {
@@ -1185,6 +1186,8 @@ html.sidebar-open {
 .sidebar-overlay.active {
     opacity: 1;
     pointer-events: auto;
+    touch-action: none;
+    overscroll-behavior: none;
 }
 
 .listing-images-grid {
@@ -1461,6 +1464,185 @@ main.expanded {
     flex-direction: column;
     gap: 4px;
     margin-bottom: 18px;
+}
+
+.ambassadors-card {
+    max-width: 1040px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.ambassadors-controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 18px;
+}
+
+.ambassadors-control {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 180px;
+}
+
+.ambassadors-label {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--text-muted);
+}
+
+.ambassadors-controls select {
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-weight: 700;
+}
+
+.ambassadors-featured {
+    margin-top: 10px;
+    margin-bottom: 18px;
+}
+
+.ambassadors-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+}
+
+.ambassador-card {
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 16px;
+    background: var(--bg-main);
+    box-shadow: 0 12px 30px rgba(15, 20, 25, 0.06);
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.ambassador-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 18px 40px rgba(15, 20, 25, 0.09);
+}
+
+.ambassador-card.featured {
+    border-color: rgba(255, 107, 0, 0.55);
+    box-shadow: 0 20px 50px rgba(255, 107, 0, 0.14);
+}
+
+.ambassador-card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ambassador-avatar {
+    width: 54px;
+    height: 54px;
+    border-radius: 9999px;
+    object-fit: cover;
+    border: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.ambassador-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.ambassador-name-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.ambassador-name {
+    font-size: 1.05rem;
+    font-weight: 900;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ambassador-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 9999px;
+    background: rgba(255, 107, 0, 0.12);
+    color: var(--primary-color);
+    font-weight: 900;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.ambassador-sub {
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ambassador-stats {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ambassador-stat-label {
+    font-size: 0.82rem;
+    font-weight: 900;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.ambassador-trust-bar {
+    height: 10px;
+    border-radius: 9999px;
+    background: var(--light-gray);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.ambassador-trust-fill {
+    height: 100%;
+    background: linear-gradient(135deg, var(--primary-color), #ffb703);
+}
+
+.ambassador-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.ambassador-kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    background: var(--light-gray);
+}
+
+.ambassador-kpi .k {
+    font-weight: 900;
+    font-size: 1.02rem;
+    color: var(--text-main);
+}
+
+.ambassador-kpi .l {
+    font-weight: 800;
+    font-size: 0.78rem;
+    color: var(--text-muted);
 }
 
 #create-listing-section,
