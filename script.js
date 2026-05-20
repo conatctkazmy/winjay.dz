@@ -8736,7 +8736,15 @@ async function renderSubmissions() {
         .map((s) => {
             const p = s.user_id ? profiles[s.user_id] || {} : {};
             const userLabel = s.user_id ? `${escapeHtml(p.display_name || 'User')} ${p.tag ? `<span class="muted">${escapeHtml(p.tag)}</span>` : ''}` : '<span class="muted">Guest</span>';
-            const details = escapeHtml(JSON.stringify(s.payload || {}, null, 0)).slice(0, 160);
+            const payload = (s && typeof s.payload === 'object' && s.payload) ? s.payload : {};
+            const email = String(payload.email || payload.mail || '').trim();
+            const phone = String(payload.phone || payload.tel || '').trim();
+            const message = String(payload.message || payload.msg || payload.text || '').trim();
+            const summary = message ? message : escapeHtml(JSON.stringify(payload || {}, null, 0));
+            const summaryShort = escapeHtml(summary).slice(0, 140);
+            const extras = [email ? `Email: ${email}` : '', phone ? `Phone: ${phone}` : ''].filter(Boolean);
+            const extrasHtml = extras.length ? `<div class="admin-details-meta">${escapeHtml(extras.join(' · '))}</div>` : '';
+            const details = `<div class="admin-details"><div class="admin-details-main">${summaryShort}${summary.length > 140 ? '…' : ''}</div>${extrasHtml}</div>`;
             return `
                 <tr>
                     <td>${escapeHtml(s.type || '')}</td>

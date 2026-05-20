@@ -5910,6 +5910,23 @@ footer {
     vertical-align: middle;
 }
 
+.admin-details {
+    max-width: 520px;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.admin-details-main {
+    font-weight: 800;
+}
+
+.admin-details-meta {
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-weight: 700;
+    font-size: 0.86rem;
+}
+
 .admin-table th {
     color: var(--text-muted);
     font-weight: 800;
