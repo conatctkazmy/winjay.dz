@@ -7944,6 +7944,9 @@ function updateUpgradeOfferVisibility() {
     const profileReady = isLoggedIn() && hasLoadedSupabaseProfile;
     const likelyLoggedIn = isLoggedIn() || hasSupabaseAuthTokenLikely();
 
+    const sidebarVerified = document.getElementById('sidebarVerifiedCta');
+    if (sidebarVerified) sidebarVerified.style.display = likelyLoggedIn && !profileReady ? 'none' : verified ? 'none' : '';
+
     const sidebarVip = document.getElementById('sidebarVipCta');
     if (sidebarVip) sidebarVip.style.display = likelyLoggedIn && !profileReady ? 'none' : vip ? 'none' : '';
 
