@@ -4984,7 +4984,9 @@ function populateAllExtraCategories() {
 function openOtherCategoriesModal(clearTarget = false) {
     if (clearTarget) categoryPickerTargetSelectId = '';
     try {
-        closeSidebarOverlay();
+        if (window.innerWidth <= 768) {
+            setSidebarMobileOpen(false);
+        }
     } catch (e) {
         null;
     }

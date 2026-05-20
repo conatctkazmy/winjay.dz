@@ -4420,10 +4420,16 @@ body.dark-mode .listing-status-badge {
     background-color: var(--border-color);
 }
 
-.other-categories-open #sidebar {
-    opacity: 0.45;
-    filter: grayscale(0.12);
-    transition: opacity 0.2s ease;
+body.other-categories-open #sidebar {
+    position: relative;
+    pointer-events: none;
+}
+
+body.other-categories-open #sidebar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--modal-overlay);
     pointer-events: none;
 }
 
