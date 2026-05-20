@@ -208,45 +208,6 @@ html.app-loading main {
     padding: 7px;
 }
 
-.desktop-sidebar-toggle-floating {
-    position: fixed;
-    top: 12px;
-    left: 12px;
-    z-index: 9500;
-    width: 44px;
-    height: 44px;
-    border-radius: 14px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-main);
-    color: var(--text-main);
-    box-shadow: 0 12px 30px rgba(15, 20, 25, 0.14);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-}
-
-.desktop-sidebar-toggle-floating i,
-.desktop-sidebar-toggle-floating svg {
-    width: 22px;
-    height: 22px;
-}
-
-.desktop-sidebar-toggle-floating:hover {
-    background-color: var(--light-gray);
-    color: var(--primary-color);
-}
-
-@media (min-width: 769px) {
-    .desktop-sidebar-toggle-floating {
-        display: inline-flex;
-    }
-}
-
-.is-touch-device .desktop-sidebar-toggle-floating {
-    display: none !important;
-}
-
 .nav-login-btn {
     display: inline-flex;
     align-items: center;
@@ -1178,10 +1139,10 @@ html.sidebar-open {
     background-color: var(--sidebar-bg);
     border-right: 1px solid var(--border-color);
     position: fixed;
-    top: 0;
-    height: 100vh;
-    height: 100dvh;
-    transition: transform 0.3s ease;
+    top: 60px;
+    height: calc(100vh - 60px);
+    height: calc(100dvh - 60px);
+    transition: width 0.25s ease, transform 0.3s ease;
     z-index: 9000;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -1300,7 +1261,43 @@ html.sidebar-open {
 }
 
 .sidebar.collapsed {
-    transform: translateX(-100%);
+    width: 72px;
+    transform: none;
+}
+
+@media (min-width: 769px) {
+    .sidebar-mobile-header {
+        display: flex;
+    }
+
+    .sidebar.collapsed .sidebar-mobile-header {
+        display: none;
+    }
+
+    .sidebar.collapsed .sidebar-content {
+        padding: 14px 10px;
+    }
+
+    .sidebar.collapsed .sidebar-section h3 {
+        display: none;
+    }
+
+    .sidebar.collapsed .sidebar-section ul li a {
+        justify-content: center;
+        gap: 0;
+        font-size: 0;
+        padding: 12px 10px;
+    }
+
+    .sidebar.collapsed .sidebar-section ul li a i,
+    .sidebar.collapsed .sidebar-section ul li a svg {
+        margin: 0;
+    }
+
+    .sidebar.collapsed #sidebarFollowingSection,
+    .sidebar.collapsed #sidebarFollowingDivider {
+        display: none !important;
+    }
 }
 
 .sidebar-content {
@@ -1469,7 +1466,7 @@ main {
 }
 
 main.expanded {
-    margin-left: 0;
+    margin-left: 72px;
 }
 
 .is-touch-device main {

@@ -4629,7 +4629,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (DEMO_MODE) renderListings();
     updateProfileUI();
-    updateDesktopSidebarFloatingToggle();
     renderFavorites();
     setupChatFeatures();
     setupMessagesTwitterUI();
@@ -5664,30 +5663,13 @@ function setSidebarMobileOpen(isOpen) {
     else unlockDocumentScrollForSidebar();
 }
 
-function updateDesktopSidebarFloatingToggle() {
-    const btn = document.getElementById('desktopSidebarFloatingToggle');
-    if (!btn) return;
-    const isTouch = document.documentElement.classList.contains('is-touch-device');
-    const isDesktop = (window.innerWidth || 0) > 768 && !isTouch;
-    btn.style.display = isDesktop ? 'inline-flex' : 'none';
-    if (!isDesktop) return;
-    const collapsed = sidebar.classList.contains('collapsed');
-    btn.innerHTML = collapsed ? `<i data-lucide="menu"></i>` : `<i data-lucide="x"></i>`;
-    btn.setAttribute('aria-label', collapsed ? 'Open sidebar' : 'Close sidebar');
-    lucide.createIcons();
-}
-
-function toggleDesktopSidebarFromFloating() {
-    const isTouch = document.documentElement.classList.contains('is-touch-device');
-    if ((window.innerWidth || 0) <= 768 || isTouch) return;
-    const collapsed = sidebar.classList.contains('collapsed');
-    sidebar.classList.toggle('collapsed', !collapsed ? true : false);
-    contentArea.classList.toggle('expanded', !collapsed ? true : false);
-    updateDesktopSidebarFloatingToggle();
-}
-
 function closeSidebarOverlay() {
-    setSidebarMobileOpen(false);
+    if (window.innerWidth <= 768) {
+        setSidebarMobileOpen(false);
+        return;
+    }
+    sidebar.classList.add('collapsed');
+    contentArea.classList.add('expanded');
 }
 
 sidebarToggle.addEventListener('click', () => {
@@ -5696,12 +5678,7 @@ sidebarToggle.addEventListener('click', () => {
     } else {
         sidebar.classList.toggle('collapsed');
         contentArea.classList.toggle('expanded');
-        updateDesktopSidebarFloatingToggle();
     }
-});
-
-window.addEventListener('resize', () => {
-    updateDesktopSidebarFloatingToggle();
 });
 
 if (!window.__winjaySidebarTouchLocked) {
