@@ -2034,6 +2034,16 @@ main.expanded {
     background: var(--bg-muted);
 }
 
+.card-carousel {
+    height: auto;
+    aspect-ratio: 1 / 1;
+}
+
+.card .card-img {
+    aspect-ratio: 1 / 1;
+    height: auto;
+}
+
 .detail-carousel {
     height: 380px;
     border-radius: 16px;
