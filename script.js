@@ -6883,7 +6883,7 @@ function setCreateListingStep(step = 'details') {
     }
 
     if (continueBtn) continueBtn.style.display = 'none';
-    if (changeBtn) changeBtn.style.display = createListingMode === 'create' ? 'inline-flex' : 'none';
+    if (changeBtn) changeBtn.style.display = 'none';
     if (submitBtn) submitBtn.style.display = '';
     if (header && header.dataset.defaultText && createListingMode === 'create') header.textContent = header.dataset.defaultText;
     if (subtitle && subtitle.dataset.defaultText && createListingMode === 'create') subtitle.textContent = subtitle.dataset.defaultText;
@@ -6929,17 +6929,7 @@ function bindCreateListingStepFlow() {
         });
     }
 
-    if (changeBtn) {
-        changeBtn.addEventListener('click', () => {
-            if (!requireAuthOrPrompt()) return;
-            setCreateListingStep('category');
-            try {
-                openCategoryPicker('listingCategory');
-            } catch (e) {
-                null;
-            }
-        });
-    }
+    if (changeBtn) changeBtn.style.display = 'none';
 }
 
 function openShareModal(listingId) {
