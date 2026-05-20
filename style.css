@@ -1699,6 +1699,23 @@ main.expanded {
     margin-right: auto;
 }
 
+.create-listing-step-hidden {
+    display: none !important;
+}
+
+.create-listing-step-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 6px 0 18px;
+}
+
+.create-listing-step-actions #createListingContinueBtn,
+.create-listing-step-actions #createListingChangeCategoryBtn {
+    display: none;
+}
+
 .is-touch-device #create-listing-section,
 .is-touch-device #listing-detail-section {
     max-width: none;

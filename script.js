@@ -1381,6 +1381,7 @@ const pendingHeartPulses = new Set();
 let searchHistory = [];
 let editingListingId = null;
 let createListingMode = 'create';
+let createListingStep = 'details';
 let confirmCallback = null;
 let currentListingDetailId = null;
 let currentSellerProfileTag = null;
@@ -6578,6 +6579,110 @@ function reportUser() {
     showToast('Signalement envoyé. Merci de votre aide.', 'flag');
 }
 
+let createListingStepBound = false;
+
+function setCreateListingStep(step = 'details') {
+    const next = String(step || '').trim() || 'details';
+    createListingStep = next;
+    const section = document.getElementById('create-listing-section');
+    if (!section) return;
+    const form = document.getElementById('addListingForm');
+    if (!form) return;
+    const groups = Array.from(form.querySelectorAll('.form-group'));
+    const catGroup = document.getElementById('listingCategory')?.closest?.('.form-group') || null;
+    const subGroup = document.getElementById('listingSubcategory')?.closest?.('.form-group') || null;
+    const continueBtn = document.getElementById('createListingContinueBtn');
+    const changeBtn = document.getElementById('createListingChangeCategoryBtn');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const header = section.querySelector('.page-card-head h2');
+    const subtitle = section.querySelector('.page-card-head .muted');
+
+    groups.forEach((g) => g.classList.remove('create-listing-step-hidden'));
+
+    const isCategoryStep = createListingMode === 'create' && next === 'category';
+    if (isCategoryStep) {
+        groups.forEach((g) => {
+            if (g === catGroup || g === subGroup) return;
+            g.classList.add('create-listing-step-hidden');
+        });
+        if (continueBtn) continueBtn.style.display = 'inline-flex';
+        if (changeBtn) changeBtn.style.display = 'none';
+        if (submitBtn) submitBtn.style.display = 'none';
+        if (header) {
+            if (!header.dataset.defaultText) header.dataset.defaultText = header.textContent || '';
+            header.textContent = 'Choisir une catégorie';
+        }
+        if (subtitle) {
+            if (!subtitle.dataset.defaultText) subtitle.dataset.defaultText = subtitle.textContent || '';
+            subtitle.textContent = 'Sélectionnez une catégorie pour charger le bon formulaire';
+        }
+        try {
+            const priceType = document.getElementById('listingPriceType');
+            const priceEl = document.getElementById('listingPrice');
+            if (priceType && priceEl) {
+                priceEl.disabled = priceType.value === 'Free';
+            }
+        } catch (e) {
+            null;
+        }
+        try {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch (e) {
+            null;
+        }
+        return;
+    }
+
+    if (continueBtn) continueBtn.style.display = 'none';
+    if (changeBtn) changeBtn.style.display = createListingMode === 'create' ? 'inline-flex' : 'none';
+    if (submitBtn) submitBtn.style.display = '';
+    if (header && header.dataset.defaultText && createListingMode === 'create') header.textContent = header.dataset.defaultText;
+    if (subtitle && subtitle.dataset.defaultText && createListingMode === 'create') subtitle.textContent = subtitle.dataset.defaultText;
+}
+
+function bindCreateListingStepFlow() {
+    if (createListingStepBound) return;
+    createListingStepBound = true;
+
+    const continueBtn = document.getElementById('createListingContinueBtn');
+    const changeBtn = document.getElementById('createListingChangeCategoryBtn');
+    const categoryEl = document.getElementById('listingCategory');
+
+    if (continueBtn) {
+        continueBtn.addEventListener('click', () => {
+            if (!requireAuthOrPrompt()) return;
+            if (!categoryEl || !String(categoryEl.value || '').trim()) {
+                showToast('Choisissez une catégorie', 'alert-circle');
+                try {
+                    openCategoryPicker('listingCategory');
+                } catch (e) {
+                    null;
+                }
+                return;
+            }
+            setCreateListingStep('details');
+            try {
+                const titleEl = document.getElementById('listingTitle');
+                setTimeout(() => titleEl?.focus?.(), 50);
+            } catch (e) {
+                null;
+            }
+        });
+    }
+
+    if (changeBtn) {
+        changeBtn.addEventListener('click', () => {
+            if (!requireAuthOrPrompt()) return;
+            setCreateListingStep('category');
+            try {
+                openCategoryPicker('listingCategory');
+            } catch (e) {
+                null;
+            }
+        });
+    }
+}
+
 function openShareModal(listingId) {
     const listing = listings.find(l => l.id === listingId);
     if (!listing) return;
@@ -6592,6 +6697,10 @@ function openShareModal(listingId) {
 document.getElementById('addListingForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!requireAuthOrPrompt()) return;
+    if (createListingMode === 'create' && createListingStep === 'category') {
+        showToast('Choisissez une catégorie', 'alert-circle');
+        return;
+    }
     if (isAutoGeneratedTag(userProfile?.tag)) {
         showToast('Set your username before posting listings', 'alert-circle');
         openModal('editProfileModal');
@@ -9265,6 +9374,10 @@ function navigateBackFromSellerProfileFlow() {
 }
 
 function navigateBackFromListingFlow() {
+    if (createListingMode === 'create' && getActiveSectionId() === 'create-listing-section' && createListingStep === 'details') {
+        setCreateListingStep('category');
+        return;
+    }
     if (createListingMode === 'edit') {
         editingListingId = null;
         createListingMode = 'create';
@@ -9318,6 +9431,8 @@ function openEditListingPageById(id, { pushState = true } = {}) {
     if (!item) return;
     editingListingId = listingId;
     createListingMode = 'edit';
+    bindCreateListingStepFlow();
+    setCreateListingStep('details');
     setCreateListingPageMode('edit');
     if (pushState) {
         const from = getActiveSectionId();
@@ -9391,6 +9506,7 @@ function openCreateListingPage({ pushState = true } = {}) {
     }
     editingListingId = null;
     createListingMode = 'create';
+    bindCreateListingStepFlow();
     try {
         setCreateListingPageMode('create');
     } catch (e) {
@@ -9419,6 +9535,7 @@ function openCreateListingPage({ pushState = true } = {}) {
     } catch (e) {
         null;
     }
+    setCreateListingStep('category');
     lucide.createIcons();
 }
 
