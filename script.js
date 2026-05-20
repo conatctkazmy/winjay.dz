@@ -4983,6 +4983,11 @@ function openOtherCategoriesModal(clearTarget = false) {
     }
     openModal('otherCategoriesModal');
     try {
+        document.body.classList.add('other-categories-open');
+    } catch (e) {
+        null;
+    }
+    try {
         const modal = document.getElementById('otherCategoriesModal');
         const title = modal ? modal.querySelector('h2') : null;
         if (title && !title.dataset.boundClose) {
@@ -5730,6 +5735,11 @@ function closeModal(modalId) {
     if (el) el.classList.remove('active');
     if (modalId === 'otherCategoriesModal') {
         categoryPickerTargetSelectId = '';
+        try {
+            document.body.classList.remove('other-categories-open');
+        } catch (e) {
+            null;
+        }
     }
     if (modalId === 'selectPickerModal') {
         selectPickerTargetSelectId = '';
