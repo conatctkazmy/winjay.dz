@@ -8806,6 +8806,22 @@ async function adminFetchSignupMetrics(days = 30) {
     const { data: sessionData } = await client.auth.getSession();
     const token = sessionData?.session?.access_token || '';
 
+    try {
+        const { data, error } = await client.rpc('admin_signup_metrics', { days: dayCount });
+        if (!error && data && Array.isArray(data.series)) {
+            return {
+                total: Number(data.total) || 0,
+                series: data.series.map((x) => ({
+                    date: String(x?.date || ''),
+                    count: Number(x?.count) || 0,
+                    total: Number(x?.total) || 0
+                }))
+            };
+        }
+    } catch (e) {
+        null;
+    }
+
     const today = new Date();
     const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
     start.setUTCDate(start.getUTCDate() - (dayCount - 1));
