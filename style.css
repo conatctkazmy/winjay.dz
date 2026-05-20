@@ -6231,7 +6231,7 @@ footer {
 }
 
 .vip-modal {
-    max-width: 600px !important;
+    max-width: 820px !important;
 }
 
 .vip-header {
@@ -6259,6 +6259,35 @@ footer {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
+}
+
+.vip-plans.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.billing-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 0 auto 16px;
+    background: var(--bg-main);
+}
+
+.billing-btn {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    padding: 10px 16px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+}
+
+.billing-btn.active {
+    background: rgba(255, 107, 0, 0.12);
+    color: var(--primary-color);
 }
 
 .vip-plan {
@@ -6369,6 +6398,10 @@ footer {
     .vip-plans {
         grid-template-columns: 1fr;
         gap: 12px;
+    }
+
+    .vip-plans.three {
+        grid-template-columns: 1fr;
     }
 
     .vip-plan {

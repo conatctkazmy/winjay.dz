@@ -6854,6 +6854,123 @@ function scrollToTop() {
 
 let selectedVipPlan = null;
 let selectedVerifiedPlan = null;
+let vipSelectedOffer = 'pro';
+let verifiedSelectedOffer = 'pro';
+let vipBilling = 'monthly';
+let verifiedBilling = 'monthly';
+
+function formatDzd(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return String(value ?? '');
+    try {
+        return n.toLocaleString('en-US');
+    } catch (e) {
+        return String(n);
+    }
+}
+
+function billingLabel(billing) {
+    return String(billing) === 'yearly' ? 'Annuel' : 'Mensuel';
+}
+
+function billingUnit(billing) {
+    return String(billing) === 'yearly' ? 'DZD/an' : 'DZD/mois';
+}
+
+const VIP_PRICES = {
+    monthly: { basic: 900, pro: 1500, pro_plus: 2500 },
+    yearly: { basic: 6500, pro: 10800, pro_plus: 18000 }
+};
+
+const VERIFIED_PRICES = {
+    monthly: { basic: 600, pro: 900, pro_plus: 1400 },
+    yearly: { basic: 5000, pro: 7500, pro_plus: 11600 }
+};
+
+function getTierLabel(tier) {
+    const t = String(tier || '').trim();
+    if (t === 'pro_plus') return 'Pro+';
+    if (t === 'pro') return 'Pro';
+    return 'Basic';
+}
+
+function applyBillingToggleUI(prefix, billing) {
+    const monthlyBtn = document.getElementById(`${prefix}BillingMonthlyBtn`);
+    const yearlyBtn = document.getElementById(`${prefix}BillingYearlyBtn`);
+    const isYearly = String(billing) === 'yearly';
+    if (monthlyBtn) monthlyBtn.classList.toggle('active', !isYearly);
+    if (yearlyBtn) yearlyBtn.classList.toggle('active', !!isYearly);
+}
+
+function applyTierPricesUI(prefix, billing, prices) {
+    const b = String(billing) === 'yearly' ? 'yearly' : 'monthly';
+    const unit = billingUnit(b);
+    const tierMap = [
+        { tier: 'basic', priceId: `${prefix}PriceBasic`, unitId: `${prefix}UnitBasic` },
+        { tier: 'pro', priceId: `${prefix}PricePro`, unitId: `${prefix}UnitPro` },
+        { tier: 'pro_plus', priceId: `${prefix}PriceProPlus`, unitId: `${prefix}UnitProPlus` }
+    ];
+    tierMap.forEach((x) => {
+        const priceEl = document.getElementById(x.priceId);
+        const unitEl = document.getElementById(x.unitId);
+        if (priceEl) priceEl.textContent = formatDzd(prices?.[b]?.[x.tier]);
+        if (unitEl) unitEl.textContent = unit;
+    });
+}
+
+function setVipBilling(nextBilling) {
+    vipBilling = String(nextBilling) === 'yearly' ? 'yearly' : 'monthly';
+    applyBillingToggleUI('vip', vipBilling);
+    applyTierPricesUI('vip', vipBilling, VIP_PRICES);
+}
+
+function setVerifiedBilling(nextBilling) {
+    verifiedBilling = String(nextBilling) === 'yearly' ? 'yearly' : 'monthly';
+    applyBillingToggleUI('verified', verifiedBilling);
+    applyTierPricesUI('verified', verifiedBilling, VERIFIED_PRICES);
+}
+
+function openVipCodModalForSelection(offer, billing) {
+    vipSelectedOffer = String(offer) || 'pro';
+    vipBilling = String(billing) === 'yearly' ? 'yearly' : 'monthly';
+    selectedVipPlan = `${vipSelectedOffer}_${vipBilling}`;
+    closeModal('vipModal');
+
+    const tier = getTierLabel(vipSelectedOffer);
+    const planLabel = `${tier} • ${billingLabel(vipBilling)}`;
+    const amount = VIP_PRICES?.[vipBilling]?.[vipSelectedOffer];
+    const priceLabel = `${formatDzd(amount)} ${billingUnit(vipBilling)}`;
+
+    const planEl = document.getElementById('codPlanName');
+    const priceEl = document.getElementById('codPrice');
+    if (planEl) planEl.textContent = planLabel;
+    if (priceEl) priceEl.textContent = priceLabel;
+
+    populateWilayasSelect('codWilaya');
+    openModal('codModal');
+    lucide.createIcons();
+}
+
+function openVerifiedCodModalForSelection(offer, billing) {
+    verifiedSelectedOffer = String(offer) || 'pro';
+    verifiedBilling = String(billing) === 'yearly' ? 'yearly' : 'monthly';
+    selectedVerifiedPlan = `${verifiedSelectedOffer}_${verifiedBilling}`;
+    closeModal('verifiedUpgradeModal');
+
+    const tier = getTierLabel(verifiedSelectedOffer);
+    const planLabel = `${tier} • ${billingLabel(verifiedBilling)}`;
+    const amount = VERIFIED_PRICES?.[verifiedBilling]?.[verifiedSelectedOffer];
+    const priceLabel = `${formatDzd(amount)} ${billingUnit(verifiedBilling)}`;
+
+    const planEl = document.getElementById('verifiedPlanName');
+    const priceEl = document.getElementById('verifiedPrice');
+    if (planEl) planEl.textContent = planLabel;
+    if (priceEl) priceEl.textContent = priceLabel;
+
+    populateWilayasSelect('verifiedWilaya');
+    openModal('verifiedCodModal');
+    lucide.createIcons();
+}
 
 function openVipModal() {
     if (userProfile?.isVip) {
@@ -6862,6 +6979,7 @@ function openVipModal() {
         return;
     }
     openModal('vipModal');
+    setVipBilling(vipBilling);
     lucide.createIcons();
 }
 
@@ -6872,22 +6990,16 @@ function openVerifiedUpgradeModal() {
         return;
     }
     openModal('verifiedUpgradeModal');
+    setVerifiedBilling(verifiedBilling);
     lucide.createIcons();
 }
 
 function selectVipPlan(plan) {
-    selectedVipPlan = plan;
-    closeModal('vipModal');
-    if (plan === 'monthly') {
-        document.getElementById('codPlanName').textContent = 'Mensuel';
-        document.getElementById('codPrice').textContent = '1,500 DZD/mois';
-    } else {
-        document.getElementById('codPlanName').textContent = 'Annuel';
-        document.getElementById('codPrice').textContent = '10,800 DZD/an';
-    }
-    populateWilayasSelect('codWilaya');
-    openModal('codModal');
-    lucide.createIcons();
+    openVipCodModalForSelection('pro', plan);
+}
+
+function selectVipOffer(offer) {
+    openVipCodModalForSelection(offer, vipBilling);
 }
 
 function populateWilayasSelect(selectId) {
@@ -6921,14 +7033,15 @@ async function submitVipSubscription() {
         openModal('loginModal');
         return;
     }
-    const plan = selectedVipPlan || 'monthly';
-    const { error } = await client.from('vip_applications').insert({
-        user_id: userId,
-        plan,
-        phone,
-        wilaya,
-        status: 'pending'
-    });
+    const desiredPlan = selectedVipPlan || `${vipSelectedOffer}_${vipBilling}`;
+    const fallbackPlan = vipBilling || 'monthly';
+    const payload = { user_id: userId, plan: desiredPlan, phone, wilaya, status: 'pending' };
+    let { error } = await client.from('vip_applications').insert(payload);
+    if (error && desiredPlan !== fallbackPlan) {
+        const retryPayload = { ...payload, plan: fallbackPlan };
+        const retry = await client.from('vip_applications').insert(retryPayload);
+        error = retry.error || null;
+    }
     if (error) {
         showToast(error.message || 'Failed to submit', 'alert-circle');
         return;
@@ -6938,18 +7051,11 @@ async function submitVipSubscription() {
 }
 
 function selectVerifiedPlan(plan) {
-    selectedVerifiedPlan = plan;
-    closeModal('verifiedUpgradeModal');
-    if (plan === 'monthly') {
-        document.getElementById('verifiedPlanName').textContent = 'Mensuel';
-        document.getElementById('verifiedPrice').textContent = '900 DZD/mois';
-    } else {
-        document.getElementById('verifiedPlanName').textContent = 'Annuel';
-        document.getElementById('verifiedPrice').textContent = '7,500 DZD/an';
-    }
-    populateWilayasSelect('verifiedWilaya');
-    openModal('verifiedCodModal');
-    lucide.createIcons();
+    openVerifiedCodModalForSelection('pro', plan);
+}
+
+function selectVerifiedOffer(offer) {
+    openVerifiedCodModalForSelection(offer, verifiedBilling);
 }
 
 async function submitVerifiedSubscription() {
@@ -6972,14 +7078,15 @@ async function submitVerifiedSubscription() {
         openModal('loginModal');
         return;
     }
-    const plan = selectedVerifiedPlan || 'monthly';
-    const { error } = await client.from('verified_applications').insert({
-        user_id: userId,
-        plan,
-        phone,
-        wilaya,
-        status: 'pending'
-    });
+    const desiredPlan = selectedVerifiedPlan || `${verifiedSelectedOffer}_${verifiedBilling}`;
+    const fallbackPlan = verifiedBilling || 'monthly';
+    const payload = { user_id: userId, plan: desiredPlan, phone, wilaya, status: 'pending' };
+    let { error } = await client.from('verified_applications').insert(payload);
+    if (error && desiredPlan !== fallbackPlan) {
+        const retryPayload = { ...payload, plan: fallbackPlan };
+        const retry = await client.from('verified_applications').insert(retryPayload);
+        error = retry.error || null;
+    }
     if (error) {
         showToast(error.message || 'Failed to submit', 'alert-circle');
         return;

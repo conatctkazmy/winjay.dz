@@ -1339,27 +1339,40 @@
                 <h2>Devenir Vérifié</h2>
                 <p>Gagnez la confiance des acheteurs avec un badge Vérifié</p>
             </div>
-            <div class="vip-plans">
-                <div class="vip-plan" onclick="selectVerifiedPlan('monthly')">
-                    <div class="plan-badge">Populaire</div>
-                    <h3>Mensuel</h3>
-                    <div class="plan-price">900 <span>DZD/mois</span></div>
+            <div class="billing-toggle">
+                <button type="button" class="billing-btn active" id="verifiedBillingMonthlyBtn" onclick="setVerifiedBilling('monthly')">Mensuel</button>
+                <button type="button" class="billing-btn" id="verifiedBillingYearlyBtn" onclick="setVerifiedBilling('yearly')">Annuel</button>
+            </div>
+            <div class="vip-plans three">
+                <div class="vip-plan" onclick="selectVerifiedOffer('basic')">
+                    <div class="plan-badge">Basique</div>
+                    <h3>Basic</h3>
+                    <div class="plan-price"><span id="verifiedPriceBasic">600</span> <span id="verifiedUnitBasic">DZD/mois</span></div>
                     <ul>
                         <li><i data-lucide="check"></i> Badge Vérifié</li>
-                        <li><i data-lucide="check"></i> Confiance renforcée</li>
-                        <li><i data-lucide="check"></i> Support prioritaire</li>
-                        <li><i data-lucide="check"></i> Contrôle renouvelable</li>
+                        <li><i data-lucide="check"></i> Confirmation standard</li>
+                        <li><i data-lucide="check"></i> Assistance standard</li>
                     </ul>
                     <button class="vip-select-btn">Choisir</button>
                 </div>
-                <div class="vip-plan featured" onclick="selectVerifiedPlan('yearly')">
-                    <div class="plan-badge save">-30%</div>
-                    <h3>Annuel</h3>
-                    <div class="plan-price">7,500 <span>DZD/an</span></div>
+                <div class="vip-plan featured" onclick="selectVerifiedOffer('pro')">
+                    <div class="plan-badge">Recommandé</div>
+                    <h3>Pro</h3>
+                    <div class="plan-price"><span id="verifiedPricePro">900</span> <span id="verifiedUnitPro">DZD/mois</span></div>
                     <ul>
-                        <li><i data-lucide="check"></i> Tout du plan mensuel</li>
-                        <li><i data-lucide="check"></i> Vérification annuelle</li>
-                        <li><i data-lucide="check"></i> Priorité d’assistance</li>
+                        <li><i data-lucide="check"></i> Tout du plan Basic</li>
+                        <li><i data-lucide="check"></i> Priorité de vérification</li>
+                        <li><i data-lucide="check"></i> Support prioritaire</li>
+                    </ul>
+                    <button class="vip-select-btn">Choisir</button>
+                </div>
+                <div class="vip-plan" onclick="selectVerifiedOffer('pro_plus')">
+                    <div class="plan-badge save">Pro+</div>
+                    <h3>Pro+</h3>
+                    <div class="plan-price"><span id="verifiedPriceProPlus">1,400</span> <span id="verifiedUnitProPlus">DZD/mois</span></div>
+                    <ul>
+                        <li><i data-lucide="check"></i> Vérification accélérée</li>
+                        <li><i data-lucide="check"></i> Support dédié</li>
                         <li><i data-lucide="check"></i> Meilleure visibilité</li>
                     </ul>
                     <button class="vip-select-btn">Choisir</button>
@@ -1407,28 +1420,41 @@
                 <h2>Devenir VIP</h2>
                 <p>Profitez d'avantages exclusifs pour vos annonces</p>
             </div>
-            <div class="vip-plans">
-                <div class="vip-plan" onclick="selectVipPlan('monthly')">
+            <div class="billing-toggle">
+                <button type="button" class="billing-btn active" id="vipBillingMonthlyBtn" onclick="setVipBilling('monthly')">Mensuel</button>
+                <button type="button" class="billing-btn" id="vipBillingYearlyBtn" onclick="setVipBilling('yearly')">Annuel</button>
+            </div>
+            <div class="vip-plans three">
+                <div class="vip-plan" onclick="selectVipOffer('basic')">
+                    <div class="plan-badge">Basique</div>
+                    <h3>Basic</h3>
+                    <div class="plan-price"><span id="vipPriceBasic">900</span> <span id="vipUnitBasic">DZD/mois</span></div>
+                    <ul>
+                        <li><i data-lucide="check"></i> Badge VIP</li>
+                        <li><i data-lucide="check"></i> Boost léger</li>
+                        <li><i data-lucide="check"></i> Support standard</li>
+                    </ul>
+                    <button class="vip-select-btn">Choisir</button>
+                </div>
+                <div class="vip-plan featured" onclick="selectVipOffer('pro')">
                     <div class="plan-badge">Populaire</div>
-                    <h3>Mensuel</h3>
-                    <div class="plan-price">1,500 <span>DZD/mois</span></div>
+                    <h3>Pro</h3>
+                    <div class="plan-price"><span id="vipPricePro">1,500</span> <span id="vipUnitPro">DZD/mois</span></div>
                     <ul>
                         <li><i data-lucide="check"></i> Annonces en haut de liste</li>
-                        <li><i data-lucide="check"></i> 10 annonces premium</li>
-                        <li><i data-lucide="check"></i> Badge VIP sur le profil</li>
+                        <li><i data-lucide="check"></i> 10 boosts premium</li>
                         <li><i data-lucide="check"></i> Support prioritaire</li>
                     </ul>
                     <button class="vip-select-btn">Choisir</button>
                 </div>
-                <div class="vip-plan featured" onclick="selectVipPlan('yearly')">
-                    <div class="plan-badge save">-40%</div>
-                    <h3>Annuel</h3>
-                    <div class="plan-price">10,800 <span>DZD/an</span></div>
+                <div class="vip-plan" onclick="selectVipOffer('pro_plus')">
+                    <div class="plan-badge save">Pro+</div>
+                    <h3>Pro+</h3>
+                    <div class="plan-price"><span id="vipPriceProPlus">2,500</span> <span id="vipUnitProPlus">DZD/mois</span></div>
                     <ul>
-                        <li><i data-lucide="check"></i> Tout du plan mensuel</li>
-                        <li><i data-lucide="check"></i> Annonces illimitées premium</li>
-                        <li><i data-lucide="check"></i> Analytics détaillés</li>
-                        <li><i data-lucide="check"></i> Promotion sur la page d'accueil</li>
+                        <li><i data-lucide="check"></i> Boost maximum</li>
+                        <li><i data-lucide="check"></i> Mise en avant homepage</li>
+                        <li><i data-lucide="check"></i> Support dédié</li>
                     </ul>
                     <button class="vip-select-btn">Choisir</button>
                 </div>
