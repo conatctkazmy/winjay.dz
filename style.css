@@ -4421,15 +4421,9 @@ body.dark-mode .listing-status-badge {
 }
 
 body.other-categories-open #sidebar {
-    position: relative;
-    pointer-events: none;
-}
-
-body.other-categories-open #sidebar::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: var(--modal-overlay);
+    opacity: 0.45;
+    filter: grayscale(0.12);
+    transition: opacity 0.2s ease;
     pointer-events: none;
 }
 
