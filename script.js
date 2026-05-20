@@ -1402,6 +1402,8 @@ let sidebarScrollLockTop = 0;
 let sidebarScrollLocked = false;
 let modalScrollLockTop = 0;
 let modalScrollLocked = false;
+let modalScrollLockPrevBodyPaddingRight = '';
+let modalScrollLockBodyPaddingRightApplied = false;
 let ambassadorsLeaderboardCache = [];
 let ambassadorsLeaderboardLoadedAt = 0;
 let ambassadorsFeaturedCache = null;
@@ -4984,7 +4986,9 @@ function populateAllExtraCategories() {
 function openOtherCategoriesModal(clearTarget = false) {
     if (clearTarget) categoryPickerTargetSelectId = '';
     try {
-        closeSidebarOverlay();
+        if (window.innerWidth <= 768) {
+            setSidebarMobileOpen(false);
+        }
     } catch (e) {
         null;
     }
@@ -5614,9 +5618,25 @@ function unlockDocumentScrollForSidebar() {
     window.scrollTo(0, sidebarScrollLockTop || 0);
 }
 
-function lockDocumentScrollForModal() {
+function lockDocumentScrollForModal(modalId = '') {
     if (modalScrollLocked) return;
     if (document.body.classList.contains('sidebar-open')) return;
+    const id = String(modalId || '');
+    modalScrollLockPrevBodyPaddingRight = '';
+    modalScrollLockBodyPaddingRightApplied = false;
+    if (window.innerWidth > 768 && id === 'otherCategoriesModal') {
+        try {
+            const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+            if (scrollbarWidth > 0) {
+                modalScrollLockPrevBodyPaddingRight = document.body.style.paddingRight || '';
+                const computed = Number.parseFloat(window.getComputedStyle(document.body).paddingRight) || 0;
+                document.body.style.paddingRight = `${computed + scrollbarWidth}px`;
+                modalScrollLockBodyPaddingRightApplied = true;
+            }
+        } catch (e) {
+            null;
+        }
+    }
     modalScrollLockTop = window.scrollY || window.pageYOffset || 0;
     modalScrollLocked = true;
     document.body.style.position = 'fixed';
@@ -5634,6 +5654,11 @@ function unlockDocumentScrollForModal() {
     document.body.style.left = '';
     document.body.style.right = '';
     document.body.style.width = '';
+    if (modalScrollLockBodyPaddingRightApplied) {
+        document.body.style.paddingRight = modalScrollLockPrevBodyPaddingRight;
+        modalScrollLockBodyPaddingRightApplied = false;
+        modalScrollLockPrevBodyPaddingRight = '';
+    }
     window.scrollTo(0, modalScrollLockTop || 0);
 }
 
@@ -5721,7 +5746,7 @@ function openModal(modalId) {
     if (!el) return;
     el.classList.add('active');
     body.classList.add('modal-open');
-    lockDocumentScrollForModal();
+    lockDocumentScrollForModal(modalId);
     if (modalId === 'notificationsModal') {
         renderNotificationsModal().then(() => markAllNotificationsRead()).then(() => refreshUnreadNotificationCount());
     }
