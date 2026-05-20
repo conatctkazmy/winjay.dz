@@ -8789,10 +8789,6 @@ function navigateBackFromSellerProfileFlow() {
     const state = history.state && typeof history.state === 'object' ? history.state : null;
     const from = state?.from ? String(state.from) : '';
     const fromListingId = Number(state?.fromListingId) || 0;
-    if (history.length > 1) {
-        history.back();
-        return;
-    }
     if (from === 'listing-detail-section' && fromListingId > 0) {
         try {
             const url = new URL(window.location.href);
@@ -8807,6 +8803,10 @@ function navigateBackFromSellerProfileFlow() {
         return;
     }
     clearSellerProfileRouteTag();
+    if (from && from !== 'seller-profile-section') {
+        showSection(from === 'create-listing-section' ? 'home-section' : from);
+        return;
+    }
     const last = (localStorage.getItem('winjayLastSection') || '').trim() || 'home-section';
     showSection(last === 'listing-detail-section' || last === 'create-listing-section' ? 'home-section' : last);
 }
