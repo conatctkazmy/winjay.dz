@@ -362,6 +362,7 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = fal
         .select(
             'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, sort_order)'
         )
+        .neq('status', 'draft')
         .order('created_at', { ascending: false });
     const safeLimitRaw = Number(limit);
     const safeLimit = Number.isFinite(safeLimitRaw) && safeLimitRaw > 0
@@ -4796,6 +4797,8 @@ let selectedListingVideoObjectUrl = '';
 let listingVideoUploadXhr = null;
 let listingVideoUploadActive = false;
 let listingVideoUploadCancelHandler = null;
+let draftListingId = null;
+let listingVideoUploadedMeta = null;
 
 const VERIFIED_BADGE_HTML = `<span class="verified-badge" title="Vendeur Vérifié" onclick="showVerifiedPopup(event)"><img src="https://upload.wikimedia.org/wikipedia/commons/e/e4/Twitter_Verified_Badge.svg" alt="Vérifié" style="filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(1deg) brightness(102%) contrast(105%);"></span>`;
 const VIP_BADGE_HTML = `<span class="vip-badge" title="VIP" onclick="showVipPopup(event)"><span class="vip-star">★</span></span>`;
@@ -5235,11 +5238,23 @@ function setListingVideoUploadOverlay({ visible = false, percent = 0, loaded = 0
     if (bytesEl) bytesEl.textContent = `${formatUploadBytes(loaded)} / ${formatUploadBytes(total)}`;
 }
 
+function setListingSubmitVideoUploadState(active) {
+    const btn = document.querySelector('#addListingForm button[type="submit"]');
+    if (!btn) return;
+    if (!btn.dataset.defaultText) btn.dataset.defaultText = btn.textContent || '';
+    if (active) {
+        btn.textContent = 'Upload en cours…';
+        return;
+    }
+    btn.textContent = btn.dataset.defaultText || btn.textContent || '';
+}
+
 function clearListingVideoUploadState() {
     listingVideoUploadActive = false;
     listingVideoUploadXhr = null;
     listingVideoUploadCancelHandler = null;
     setListingVideoUploadOverlay({ visible: false, percent: 0, loaded: 0, total: 0 });
+    setListingSubmitVideoUploadState(false);
     const cancelBtn = document.getElementById('listingVideoUploadCancelBtn');
     if (cancelBtn) cancelBtn.disabled = false;
 }
@@ -5249,6 +5264,7 @@ function removeSelectedListingVideo() {
         try { listingVideoUploadCancelHandler(); } catch (e) { null; }
     }
     selectedListingVideoFile = null;
+    listingVideoUploadedMeta = null;
     if (selectedListingVideoObjectUrl) {
         try { URL.revokeObjectURL(selectedListingVideoObjectUrl); } catch (e) { null; }
     }
@@ -5266,7 +5282,11 @@ function removeSelectedListingVideo() {
     }
     clearListingVideoUploadState();
     const uploadBtn = document.getElementById('listingVideoUploadBtn');
-    if (uploadBtn) uploadBtn.style.display = 'none';
+    if (uploadBtn) {
+        uploadBtn.style.display = 'none';
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Réessayer';
+    }
     const btn = document.getElementById('listingVideoRemoveBtn');
     if (btn) btn.style.display = 'none';
 }
@@ -5339,9 +5359,14 @@ async function validateAndPreviewListingVideo(file) {
     const nameEl = document.getElementById('listingVideoFileName');
     if (nameEl) nameEl.textContent = String(file.name || 'video');
     const uploadBtn = document.getElementById('listingVideoUploadBtn');
-    if (uploadBtn) uploadBtn.style.display = '';
+    if (uploadBtn) {
+        uploadBtn.style.display = 'none';
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Réessayer';
+    }
     const btn = document.getElementById('listingVideoRemoveBtn');
     if (btn) btn.style.display = '';
+    setTimeout(() => startAutoListingVideoUpload({ source: 'select' }), 0);
     return true;
 }
 
@@ -5378,36 +5403,171 @@ async function saveUploadedListingVideoMeta({ listingId, video_path, video_url }
 }
 
 async function manualUploadSelectedListingVideo() {
+    startAutoListingVideoUpload({ source: 'retry' });
+}
+
+async function createDraftListingForVideoUpload({ client, userId, details } = {}) {
+    const title = document.getElementById('listingTitle')?.value?.trim?.() || '';
+    const description = document.getElementById('listingDescription')?.value?.trim?.() || '';
+    const condition = document.getElementById('listingCondition')?.value || '';
+    const priceType = document.getElementById('listingPriceType')?.value || '';
+    const price = Number(document.getElementById('listingPrice')?.value) || 0;
+    const category = document.getElementById('listingCategory')?.value || '';
+    const subcategory = document.getElementById('listingSubcategory')?.value || '';
+    const wilaya = document.getElementById('listingWilaya')?.value || '';
+    const city = document.getElementById('listingCity')?.value || '';
+    const delivery = document.getElementById('listingDelivery')?.value || '';
+    const contactPhone = document.getElementById('listingContactPhone')?.value?.trim?.() || '';
+    const availability = document.getElementById('listingAvailability')?.value || 'Available';
+    const tagsRaw = document.getElementById('listingTags')?.value || '';
+    const tags = Array.from(
+        new Map(
+            tagsRaw
+                .split(',')
+                .map((t) => String(t || '').trim())
+                .filter(Boolean)
+                .map((t) => [t.toLowerCase(), t])
+        ).values()
+    ).slice(0, 5);
+    const hasAnyPhoto = (selectedListingImageUrls || []).some((u) => !!u);
+
+    if (!title || !condition || !priceType || !category || !wilaya || !city || !delivery || !contactPhone || !hasAnyPhoto) {
+        showToast('Remplissez les champs obligatoires avant l’upload', 'alert-circle');
+        return { id: 0, error: 'missing_fields' };
+    }
+    if (priceType !== 'Free' && price <= 0) {
+        showToast('Ajoutez un prix valide avant l’upload', 'alert-circle');
+        return { id: 0, error: 'missing_price' };
+    }
+    if (!subcategory && Array.isArray(listingSubcategoriesByCategory[category]) && listingSubcategoriesByCategory[category].length) {
+        showToast('Choisissez une sous-catégorie avant l’upload', 'alert-circle');
+        return { id: 0, error: 'missing_subcategory' };
+    }
+
+    const payload = {
+        owner_id: userId,
+        title,
+        description: description || null,
+        condition: condition || null,
+        price_type: priceType || null,
+        subcategory: subcategory || null,
+        price,
+        delivery: delivery || null,
+        availability: availability || null,
+        category: category || null,
+        wilaya: wilaya || null,
+        city: city || null,
+        contact_phone: contactPhone || null,
+        tags: tags.length ? tags : null,
+        details: details && typeof details === 'object' ? details : null,
+        status: 'draft'
+    };
+
+    const { data: inserted, error } = await client
+        .from('listings')
+        .insert(payload)
+        .select('id')
+        .single();
+
+    if (error || !inserted?.id) {
+        const msg = error?.message || 'Impossible de créer le brouillon';
+        showToast(msg.includes('row-level security') ? 'Listings: permission refusée (RLS)' : msg, 'alert-circle');
+        return { id: 0, error: msg };
+    }
+
+    return { id: Number(inserted.id) || 0, error: '' };
+}
+
+function setListingVideoUploadButtonState({ mode = 'hidden' } = {}) {
+    const btn = document.getElementById('listingVideoUploadBtn');
+    if (!btn) return;
+    if (mode === 'hidden') {
+        btn.style.display = 'none';
+        btn.disabled = false;
+        btn.textContent = 'Réessayer';
+        return;
+    }
+    if (mode === 'retry') {
+        btn.style.display = '';
+        btn.disabled = false;
+        btn.textContent = 'Réessayer';
+        return;
+    }
+    if (mode === 'done') {
+        btn.style.display = '';
+        btn.disabled = true;
+        btn.textContent = 'Terminé';
+        return;
+    }
+}
+
+async function startAutoListingVideoUpload({ source = 'auto' } = {}) {
     if (listingVideoUploadActive) return;
-    if (!userProfile?.isVip) {
-        showToast('VIP requis pour la vidéo', 'crown');
+    if (!userProfile?.isVip) return;
+    if (!selectedListingVideoFile) return;
+    if (listingVideoUploadedMeta?.listingId && listingVideoUploadedMeta?.video_path) return;
+
+    const client = initSupabase();
+    if (!client) return;
+
+    const detailsRaw = validateListingDynamicFields();
+    if (detailsRaw === null) return;
+
+    const { data: userData, error: userErr } = await client.auth.getUser();
+    const userId = userData?.user?.id || null;
+    if (userErr || !userId) {
+        showToast('Veuillez vous reconnecter', 'log-in');
+        openModal('loginModal');
         return;
     }
-    if (!selectedListingVideoFile) {
-        showToast('Choisissez une vidéo', 'alert-circle');
+
+    let targetListingId = 0;
+    if (createListingMode === 'edit' && Number(editingListingId) > 0) targetListingId = Number(editingListingId);
+    if (!targetListingId && Number(draftListingId) > 0) targetListingId = Number(draftListingId);
+
+    if (!targetListingId && createListingMode === 'create') {
+        const draftRes = await createDraftListingForVideoUpload({ client, userId, details: detailsRaw });
+        if (!draftRes?.id) {
+            setListingVideoUploadButtonState({ mode: 'retry' });
+            return;
+        }
+        draftListingId = Number(draftRes.id) || null;
+        targetListingId = Number(draftListingId) || 0;
+    }
+
+    if (!targetListingId) {
+        setListingVideoUploadButtonState({ mode: 'retry' });
         return;
     }
-    const safeListingId = Number(editingListingId) || 0;
-    if (!safeListingId) {
-        showToast('Publiez d’abord l’annonce pour uploader la vidéo', 'alert-circle');
-        return;
-    }
-    const res = await uploadVipListingVideoToStorage({ listingId: safeListingId, file: selectedListingVideoFile });
+
+    setListingVideoUploadButtonState({ mode: 'hidden' });
+    const res = await uploadVipListingVideoToStorage({ listingId: targetListingId, file: selectedListingVideoFile });
     if (!res?.video_path) {
         showToast(res?.error || 'Upload vidéo échoué', 'alert-circle');
+        setListingVideoUploadButtonState({ mode: 'retry' });
         return;
     }
+
+    listingVideoUploadedMeta = {
+        listingId: targetListingId,
+        video_path: String(res.video_path || ''),
+        video_url: String(res.video_url || '')
+    };
+
     const saveRes = await saveUploadedListingVideoMeta({
-        listingId: safeListingId,
+        listingId: targetListingId,
         video_path: res.video_path,
         video_url: res.video_url
     });
     if (!saveRes.ok) {
         showToast(saveRes.error || 'Upload vidéo échoué', 'alert-circle');
+        setListingVideoUploadButtonState({ mode: 'retry' });
         return;
     }
+
     showToast('Vidéo uploadée', 'check-circle');
-    removeSelectedListingVideo();
+    selectedListingVideoFile = null;
+    setListingVideoUploadButtonState({ mode: 'done' });
 }
 
 function setupListingVideoUploader() {
@@ -7781,12 +7941,12 @@ async function reportVipVideoUploadDebugEvent(eventName, data) {
 
 async function requestVipListingVideoSignedUpload({ listingId, filename, contentType } = {}) {
     const client = initSupabase();
-    if (!client) return null;
+    if (!client) return { error: 'Supabase non configuré' };
     const { data: sessionData } = await client.auth.getSession();
     const token = sessionData?.session?.access_token || '';
-    if (!token) return null;
+    if (!token) return { error: 'Session expirée. Reconnectez-vous.' };
     const safeListingId = Number(listingId) || 0;
-    if (!safeListingId) return null;
+    if (!safeListingId) return { error: 'Annonce invalide' };
     reportVipVideoUploadDebugEvent('signed_upload_request_start', {
         listingId: safeListingId,
         hasToken: !!token,
@@ -7823,10 +7983,13 @@ async function requestVipListingVideoSignedUpload({ listingId, filename, content
             payload = null;
         }
         if (!res.ok) {
-            return { error: payload?.error || raw || `Video upload request failed (${res.status})` };
+            if (res.status === 404) {
+                return { error: "Fonction vidéo introuvable. Déployez 'vip-listing-video-upload' sur Supabase." };
+            }
+            return { error: payload?.error || raw || `Requête d'upload vidéo échouée (${res.status})` };
         }
         if (!payload || !payload.signedUrl || !payload.path) {
-            return { error: 'Invalid signed upload response' };
+            return { error: "Réponse d'upload invalide" };
         }
         return payload;
     } catch (e) {
@@ -7835,7 +7998,7 @@ async function requestVipListingVideoSignedUpload({ listingId, filename, content
             name: String(e?.name || ''),
             message: String(e?.message || e || '')
         });
-        return { error: 'Video upload request failed' };
+        return { error: "Requête d'upload vidéo échouée" };
     }
 }
 
@@ -7844,6 +8007,7 @@ async function uploadVipListingVideoToStorage({ listingId, file } = {}) {
     if (!f) return null;
     if (listingVideoUploadActive) return { error: 'Upload déjà en cours' };
     listingVideoUploadActive = true;
+    setListingSubmitVideoUploadState(true);
     setListingVideoUploadOverlay({ visible: true, percent: 0, loaded: 0, total: Number(f.size) || 0 });
     const cancelBtn = document.getElementById('listingVideoUploadCancelBtn');
     if (cancelBtn) cancelBtn.disabled = false;
@@ -7965,6 +8129,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
     const submitBtn = e.target?.querySelector?.('button[type="submit"]') || null;
     const originalBtnText = submitBtn?.textContent || '';
     const isEditMode = createListingMode === 'edit' && Number(editingListingId) > 0;
+    const isDraftMode = !isEditMode && createListingMode === 'create' && Number(draftListingId) > 0;
     if (submitBtn) {
         submitBtn.disabled = true;
         submitBtn.textContent = isEditMode ? 'Saving...' : 'Posting...';
@@ -7989,6 +8154,10 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
     }, 20000);
 
     try {
+        if (listingVideoUploadActive) {
+            showToast('Upload vidéo en cours…', 'loader');
+            return;
+        }
         const { data: userData, error: userErr } = await withTimeout(
             client.auth.getUser(),
             12000,
@@ -8010,7 +8179,9 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             !!(ensuredProfile?.is_vip ?? ensuredProfile?.vip ?? userProfile?.isVip) ||
             !!(ensuredProfile?.verified ?? ensuredProfile?.is_verified ?? userProfile?.verified);
         const isVipAccount = !!(ensuredProfile?.is_vip ?? ensuredProfile?.vip ?? userProfile?.isVip);
-        const existingListing = isEditMode ? listings.find((l) => l && l.id === Number(editingListingId)) : null;
+        const existingListing = (isEditMode || isDraftMode)
+            ? listings.find((l) => l && l.id === Number(isEditMode ? editingListingId : draftListingId))
+            : null;
 
         const title = document.getElementById('listingTitle').value.trim();
         const description = document.getElementById('listingDescription')?.value?.trim?.() || '';
@@ -8093,7 +8264,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             return;
         }
 
-        if (!isEditMode && !isPrivilegedAccount) {
+        if (!isEditMode && !isDraftMode && !isPrivilegedAccount) {
             const { data: existingUserListings, error: limitErr } = await withTimeout(
                 client.from('listings').select('id').eq('owner_id', userId).limit(FREE_LISTING_LIMIT + 1),
                 12000,
@@ -8109,8 +8280,8 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             }
         }
 
-        if (isEditMode) {
-            const listingId = Number(editingListingId);
+        if (isEditMode || isDraftMode) {
+            const listingId = Number(isEditMode ? editingListingId : draftListingId);
             const objectPaths = [];
             const finalUrls = [];
             for (let i = 0; i < imagePlan.length; i++) {
@@ -8143,44 +8314,58 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 }
                 finalUrls.push(publicUrl);
             }
-            if (isVipAccount && selectedListingVideoFile) {
-                const videoRes = await uploadVipListingVideoToStorage({ listingId, file: selectedListingVideoFile });
-                if (!videoRes?.video_path) {
-                    showToast(videoRes?.error || 'Video upload failed', 'alert-circle');
-                    return;
-                }
-                let videoUrl = String(videoRes.video_url || '').trim();
-                if (!videoUrl) {
-                    try {
-                        const { data: publicData } = client.storage.from(LISTING_VIDEOS_BUCKET).getPublicUrl(String(videoRes.video_path || '').trim());
-                        videoUrl = publicData?.publicUrl || '';
-                    } catch (e) {
-                        videoUrl = '';
+            if (isVipAccount) {
+                const uploaded = listingVideoUploadedMeta?.listingId === listingId ? listingVideoUploadedMeta : null;
+                if (uploaded?.video_path) {
+                    const posterUrl = finalUrls[0] || existingListing?.image || '';
+                    mergedDetails = {
+                        ...(mergedDetails || {}),
+                        video_path: String(uploaded.video_path || ''),
+                        video_url: String(uploaded.video_url || ''),
+                        video_poster_url: posterUrl || null
+                    };
+                    details = Object.keys(mergedDetails).length ? mergedDetails : null;
+                } else if (selectedListingVideoFile) {
+                    const videoRes = await uploadVipListingVideoToStorage({ listingId, file: selectedListingVideoFile });
+                    if (!videoRes?.video_path) {
+                        showToast(videoRes?.error || 'Upload vidéo échoué', 'alert-circle');
+                        return;
                     }
+                    let videoUrl = String(videoRes.video_url || '').trim();
+                    if (!videoUrl) {
+                        try {
+                            const { data: publicData } = client.storage.from(LISTING_VIDEOS_BUCKET).getPublicUrl(String(videoRes.video_path || '').trim());
+                            videoUrl = publicData?.publicUrl || '';
+                        } catch (e) {
+                            videoUrl = '';
+                        }
+                    }
+                    const posterUrl = finalUrls[0] || existingListing?.image || '';
+                    mergedDetails = { ...(mergedDetails || {}), video_path: String(videoRes.video_path || ''), video_url: videoUrl, video_poster_url: posterUrl || null };
+                    details = Object.keys(mergedDetails).length ? mergedDetails : null;
                 }
-                const posterUrl = finalUrls[0] || existingListing?.image || '';
-                mergedDetails = { ...(mergedDetails || {}), video_path: String(videoRes.video_path || ''), video_url: videoUrl, video_poster_url: posterUrl || null };
-                details = Object.keys(mergedDetails).length ? mergedDetails : null;
             }
+            const updatePayload = {
+                title,
+                description: description || null,
+                condition: condition || null,
+                price_type: priceType || null,
+                subcategory: subcategory || null,
+                price,
+                delivery: delivery || null,
+                availability: availability || null,
+                category: category || null,
+                wilaya: wilaya || null,
+                city: city || null,
+                contact_phone: contactPhone || null,
+                tags: tags.length ? tags : null,
+                details
+            };
+            if (isDraftMode) updatePayload.status = 'active';
             const { error: updateErr } = await withTimeout(
                 client
                     .from('listings')
-                    .update({
-                        title,
-                        description: description || null,
-                        condition: condition || null,
-                        price_type: priceType || null,
-                        subcategory: subcategory || null,
-                        price,
-                        delivery: delivery || null,
-                        availability: availability || null,
-                        category: category || null,
-                        wilaya: wilaya || null,
-                        city: city || null,
-                        contact_phone: contactPhone || null,
-                        tags: tags.length ? tags : null,
-                        details
-                    })
+                    .update(updatePayload)
                     .eq('id', listingId)
                     .eq('owner_id', userId),
                 15000,
@@ -8212,8 +8397,10 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 showToast(msg.includes('row-level security') ? 'Listing images: permission denied (RLS)' : msg, 'alert-circle');
                 return;
             }
-            showToast('Listing updated!', 'check-circle');
+            showToast(isDraftMode ? "Annonce publiée !" : "Annonce mise à jour !", 'check-circle');
             editingListingId = null;
+            draftListingId = null;
+            listingVideoUploadedMeta = null;
             createListingMode = 'create';
             setCreateListingPageMode('create');
             resetCreateListingDraft({ resetForm: true });
@@ -11083,7 +11270,7 @@ function handleSort() {
 }
 
 function getFilteredListings() {
-    let filtered = [...listings];
+    let filtered = [...listings].filter((l) => String(l?.status || '') !== 'draft');
     if (currentFilters.search) {
         filtered = filtered.filter(l => l.title.toLowerCase().includes(currentFilters.search) || l.category.toLowerCase().includes(currentFilters.search));
     }
@@ -12958,7 +13145,7 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
         seller.rating = 0;
         seller.reviews = 0;
     }
-    const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === ownerId);
+    const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === ownerId && String(l?.status || '') !== 'draft');
     if (!content) return;
     content.innerHTML = `
         <div class="profile-header">
@@ -13091,7 +13278,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         seller.reviews = 0;
     }
     if (!content) return;
-    const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === profileRow.id);
+    const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === profileRow.id && String(l?.status || '') !== 'draft');
     content.innerHTML = `
         <div class="profile-header">
             <div class="cover-photo-container">
