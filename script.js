@@ -11580,6 +11580,7 @@ function createVipVideoCardHTML(item) {
                 <div class="vip-video-loader" aria-hidden="true"></div>
                 <video class="card-img vip-video-preview" data-vip-video="1" data-listing-id="${item.id}" data-src="${videoUrl}" playsinline muted loop preload="none"></video>
                 <button type="button" class="vip-video-mute-btn" data-listing-id="${item.id}" data-muted="${muted ? '1' : '0'}" aria-label="${muted ? 'Activer le son' : 'Couper le son'}" onclick="toggleVipVideoMuted(event, ${item.id})"><i data-lucide="${muteIcon}"></i></button>
+                <button type="button" class="vip-video-pause-btn" data-listing-id="${item.id}" data-paused="0" aria-label="Pause" onclick="toggleVipVideoPaused(event, ${item.id})"><i data-lucide="pause"></i></button>
             </div>`
         : `<div class="card-media-wrap"><img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
     return `
@@ -11645,6 +11646,54 @@ function toggleVipVideoMuted(event, listingId) {
             }
         }
     }
+}
+
+function toggleVipVideoPaused(event, listingId) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const id = Number(listingId) || 0;
+    const v = document.querySelector(`video.vip-video-preview[data-vip-video="1"][data-listing-id="${id}"]`);
+    const btn = document.querySelector(`.vip-video-pause-btn[data-listing-id="${id}"]`);
+    if (!v || !btn) return;
+    const pausedNow = btn.dataset.paused === '1';
+    const nextPaused = !pausedNow;
+    btn.dataset.paused = nextPaused ? '1' : '0';
+    btn.setAttribute('aria-label', nextPaused ? 'Play' : 'Pause');
+    const icon = btn.querySelector('[data-lucide]');
+    if (icon) icon.setAttribute('data-lucide', nextPaused ? 'play' : 'pause');
+    if (nextPaused) {
+        v.dataset.userPaused = '1';
+        try {
+            v.pause();
+        } catch (e) {
+            null;
+        }
+    } else {
+        v.dataset.userPaused = '0';
+        try {
+            v.muted = getVipVideoMutedPreference();
+        } catch (e) {
+            null;
+        }
+        if (!v.getAttribute('src')) {
+            const src = v.dataset.src || '';
+            if (src) v.setAttribute('src', src);
+            try {
+                v.load();
+            } catch (e) {
+                null;
+            }
+        }
+        try {
+            const p = v.play();
+            if (p && typeof p.catch === 'function') p.catch(() => null);
+        } catch (e) {
+            null;
+        }
+    }
+    scheduleLucideCreateIcons();
 }
 
 function stopVipVideoAutoplayObserver() {
@@ -11734,12 +11783,13 @@ function setupVipVideoAutoplay(row) {
         const muted = getVipVideoMutedPreference();
         videos.forEach((v) => {
             const shouldPlay = best && v === best && bestRatio >= 0.55;
+            const userPaused = v.dataset.userPaused === '1';
             try {
                 v.muted = muted;
             } catch (e) {
                 null;
             }
-            if (shouldPlay) {
+            if (shouldPlay && !userPaused) {
                 if (!v.getAttribute('src')) {
                     const src = v.dataset.src || '';
                     if (src) v.setAttribute('src', src);

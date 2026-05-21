@@ -2151,6 +2151,7 @@ main.expanded {
     overflow: hidden;
     opacity: 1;
     transition: opacity 160ms ease;
+    pointer-events: none;
     background:
         radial-gradient(120px 120px at 30% 30%, rgba(255, 107, 0, 0.25), transparent 60%),
         radial-gradient(160px 160px at 70% 60%, rgba(255, 193, 7, 0.18), transparent 65%),
@@ -2194,6 +2195,35 @@ main.expanded {
 
 .vip-video-mute-btn:hover {
     background: rgba(0, 0, 0, 0.6);
+}
+
+.vip-video-pause-btn {
+    position: absolute;
+    top: 102px;
+    right: 15px;
+    width: 38px;
+    height: 38px;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
+    z-index: 9;
+}
+
+.vip-video-pause-btn:hover {
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.vip-video-pause-btn i,
+.vip-video-pause-btn svg {
+    width: 18px;
+    height: 18px;
 }
 
 .vip-video-mute-btn i,
