@@ -11218,8 +11218,8 @@ function getFilteredListings() {
     }
     if (currentFilters.sort === 'newest') {
         filtered.sort((a, b) => {
-            const av = (a?.seller?.vip || a?.seller?.isVip) && hasListingVideo(a) ? 1 : 0;
-            const bv = (b?.seller?.vip || b?.seller?.isVip) && hasListingVideo(b) ? 1 : 0;
+            const av = hasListingVideo(a) ? 1 : 0;
+            const bv = hasListingVideo(b) ? 1 : 0;
             if (av !== bv) return bv - av;
             const ta = new Date(a?.created_at || 0).getTime();
             const tb = new Date(b?.created_at || 0).getTime();
@@ -11509,10 +11509,7 @@ function scrollVipVideoRowIntoView() {
 function getVipVideoListingsForHome() {
     const items = (listings || []).filter((l) => {
         if (!l) return false;
-        if (!hasListingVideo(l)) return false;
-        const seller = l.seller || null;
-        const isVipSeller = !!(seller?.vip || seller?.isVip);
-        return isVipSeller;
+        return hasListingVideo(l);
     });
     items.sort((a, b) => {
         const ta = new Date(a?.created_at || 0).getTime();
