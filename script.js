@@ -11567,6 +11567,7 @@ function createVipVideoCardHTML(item) {
     const muteIcon = muted ? 'volume-x' : 'volume-2';
     const mediaHTML = videoUrl
         ? `<div class="card-media-wrap vip-video-card-media">
+                <img class="vip-video-poster" src="${poster}" alt="${escapeHtml(item.title)}" loading="lazy" decoding="async" fetchpriority="low">
                 <video class="card-img vip-video-preview" data-vip-video="1" data-listing-id="${item.id}" data-src="${videoUrl}" poster="${poster}" playsinline muted loop preload="none"></video>
                 <button type="button" class="vip-video-mute-btn" data-listing-id="${item.id}" data-muted="${muted ? '1' : '0'}" aria-label="${muted ? 'Activer le son' : 'Couper le son'}" onclick="toggleVipVideoMuted(event, ${item.id})"><i data-lucide="${muteIcon}"></i></button>
             </div>`
@@ -11661,6 +11662,32 @@ function setupVipVideoAutoplay(row) {
     if (!('IntersectionObserver' in window)) return;
     const videos = Array.from(row.querySelectorAll('video.vip-video-preview[data-vip-video="1"]'));
     if (!videos.length) return;
+    videos.forEach((v) => {
+        const wrap = v.closest('.vip-video-card-media');
+        if (wrap && !wrap.dataset.posterLoaded) wrap.dataset.posterLoaded = '0';
+        if (wrap && !wrap.dataset.videoReady) wrap.dataset.videoReady = '0';
+        const img = wrap ? wrap.querySelector('img.vip-video-poster') : null;
+        if (img) {
+            const done = () => {
+                if (!wrap) return;
+                wrap.dataset.posterLoaded = '1';
+            };
+            if (img.complete && img.naturalWidth > 0) {
+                done();
+            } else if (!img.dataset.bound) {
+                img.dataset.bound = '1';
+                img.addEventListener('load', done);
+            }
+        }
+        if (!v.dataset.readyBound) {
+            v.dataset.readyBound = '1';
+            v.addEventListener('canplay', () => {
+                const w = v.closest('.vip-video-card-media');
+                if (!w) return;
+                w.dataset.videoReady = '1';
+            }, { once: true });
+        }
+    });
     const visibility = new Map();
     vipVideoAutoplayObserver = new IntersectionObserver((entries) => {
         entries.forEach((entry) => {
