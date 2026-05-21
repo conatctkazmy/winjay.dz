@@ -10728,23 +10728,22 @@ function initCarouselElement(carouselEl) {
     let startX = 0;
     let startY = 0;
     let startIndex = 0;
+    let startTime = 0;
     let dragging = false;
-    let touchId = null;
 
     const endDrag = () => {
         pointerId = null;
-        touchId = null;
         dragging = false;
         carouselEl.dataset.dragging = '';
     };
 
     viewport.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
-        if (e.pointerType === 'touch') return;
         pointerId = e.pointerId;
         startX = e.clientX;
         startY = e.clientY;
         startIndex = getIndex();
+        startTime = performance.now();
         dragging = false;
         carouselEl.dataset.dragged = '';
         carouselEl.dataset.dragging = '1';
@@ -10760,8 +10759,8 @@ function initCarouselElement(carouselEl) {
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
         if (!dragging) {
-            if (Math.abs(dx) < 10) return;
-            if (Math.abs(dy) > Math.abs(dx)) return;
+            if (Math.abs(dx) < 6) return;
+            if (Math.abs(dx) <= Math.abs(dy) * 1.1) return;
             dragging = true;
             track.style.transition = 'none';
         }
@@ -10774,95 +10773,33 @@ function initCarouselElement(carouselEl) {
     const onPointerUp = (e) => {
         if (pointerId === null || e.pointerId !== pointerId) return;
         const dx = e.clientX - startX;
-        const threshold = Math.max(38, Math.min(72, viewport.clientWidth * 0.18));
+        const dt = Math.max(1, performance.now() - (startTime || performance.now()));
+        const vx = dx / dt;
         let next = startIndex;
         if (dragging) {
-            if (dx <= -threshold) next = startIndex + 1;
-            if (dx >= threshold) next = startIndex - 1;
+            const width = Math.max(1, viewport.clientWidth);
+            const floatIndex = startIndex - (dx / width) * columns;
+            const flick = Math.abs(vx) > 0.8 && Math.abs(dx) > 18;
+            if (flick) {
+                next = dx < 0 ? (startIndex + 1) : (startIndex - 1);
+            } else {
+                next = Math.round(floatIndex);
+            }
             carouselEl.dataset.dragged = '1';
             lastCarouselSwipeAt = Date.now();
+        } else {
+            const width = Math.max(1, viewport.clientWidth);
+            const smallHorizontal = Math.abs(dx) > Math.max(10, width * 0.04) && Math.abs(dx) > Math.abs(e.clientY - startY);
+            if (smallHorizontal) carouselEl.dataset.dragged = '1';
         }
         track.style.transition = '';
-        applyIndex(next, { animate: true, persist: carouselEl.dataset.carousel === 'detail' });
+        applyIndex(Math.max(0, Math.min(maxIndex, next)), { animate: true, persist: carouselEl.dataset.carousel === 'detail' });
         endDrag();
     };
 
     viewport.addEventListener('pointerup', onPointerUp);
     viewport.addEventListener('pointercancel', onPointerUp);
     viewport.addEventListener('lostpointercapture', endDrag);
-
-    let touchMoveBound = false;
-    const detachTouchTracking = () => {
-        if (!touchMoveBound) return;
-        touchMoveBound = false;
-        document.removeEventListener('touchmove', onDocTouchMove, { capture: true });
-        document.removeEventListener('touchend', onDocTouchEnd, { capture: true });
-        document.removeEventListener('touchcancel', onDocTouchEnd, { capture: true });
-    };
-
-    const findTouchById = (touchesList) => {
-        if (!touchesList || !touchesList.length) return null;
-        if (touchId === null) return touchesList[0];
-        for (let i = 0; i < touchesList.length; i++) {
-            if (touchesList[i].identifier === touchId) return touchesList[i];
-        }
-        return null;
-    };
-
-    const onDocTouchMove = (e) => {
-        if (touchId === null) return;
-        const t = findTouchById(e.touches);
-        if (!t) return;
-        const dx = t.clientX - startX;
-        const dy = t.clientY - startY;
-        if (!dragging) {
-            if (Math.abs(dx) < 6) return;
-            if (Math.abs(dx) <= Math.abs(dy) * 1.1) return;
-            dragging = true;
-            track.style.transition = 'none';
-        }
-        e.preventDefault();
-        const pct = (dx / Math.max(1, viewport.clientWidth)) * 100;
-        const base = -startIndex * step;
-        track.style.transform = `translateX(${base + pct}%)`;
-    };
-
-    const onDocTouchEnd = (e) => {
-        if (touchId === null) return;
-        const t = findTouchById(e.changedTouches);
-        const dx = t ? (t.clientX - startX) : 0;
-        const threshold = Math.max(26, Math.min(60, viewport.clientWidth * 0.14));
-        let next = startIndex;
-        if (dragging) {
-            if (dx <= -threshold) next = startIndex + 1;
-            if (dx >= threshold) next = startIndex - 1;
-            carouselEl.dataset.dragged = '1';
-            lastCarouselSwipeAt = Date.now();
-        }
-        track.style.transition = '';
-        applyIndex(next, { animate: true, persist: carouselEl.dataset.carousel === 'detail' });
-        detachTouchTracking();
-        endDrag();
-    };
-
-    viewport.addEventListener('touchstart', (e) => {
-        if (!e.touches || !e.touches.length) return;
-        const t = e.touches[0];
-        touchId = t.identifier;
-        startX = t.clientX;
-        startY = t.clientY;
-        startIndex = getIndex();
-        dragging = false;
-        carouselEl.dataset.dragged = '';
-        carouselEl.dataset.dragging = '1';
-        track.style.transition = '';
-        if (!touchMoveBound) {
-            touchMoveBound = true;
-            document.addEventListener('touchmove', onDocTouchMove, { passive: false, capture: true });
-            document.addEventListener('touchend', onDocTouchEnd, { passive: true, capture: true });
-            document.addEventListener('touchcancel', onDocTouchEnd, { passive: true, capture: true });
-        }
-    }, { passive: true });
 
     carouselEl.addEventListener('click', (e) => {
         if (carouselEl.dataset.dragged === '1') {
