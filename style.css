@@ -2148,12 +2148,8 @@ main.expanded {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    opacity: 0;
-    transition: opacity 180ms ease;
-}
-
-.vip-video-card-media[data-poster-loaded="1"] .vip-video-poster {
     opacity: 1;
+    transition: opacity 160ms ease;
 }
 
 .vip-video-preview {
@@ -2161,7 +2157,7 @@ main.expanded {
     pointer-events: none;
     background: rgba(0, 0, 0, 0.08);
     opacity: 0;
-    transition: opacity 180ms ease;
+    transition: opacity 160ms ease;
 }
 
 .vip-video-card-media[data-video-ready="1"] .vip-video-preview {

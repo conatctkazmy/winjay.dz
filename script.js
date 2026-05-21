@@ -11664,21 +11664,7 @@ function setupVipVideoAutoplay(row) {
     if (!videos.length) return;
     videos.forEach((v) => {
         const wrap = v.closest('.vip-video-card-media');
-        if (wrap && !wrap.dataset.posterLoaded) wrap.dataset.posterLoaded = '0';
         if (wrap && !wrap.dataset.videoReady) wrap.dataset.videoReady = '0';
-        const img = wrap ? wrap.querySelector('img.vip-video-poster') : null;
-        if (img) {
-            const done = () => {
-                if (!wrap) return;
-                wrap.dataset.posterLoaded = '1';
-            };
-            if (img.complete && img.naturalWidth > 0) {
-                done();
-            } else if (!img.dataset.bound) {
-                img.dataset.bound = '1';
-                img.addEventListener('load', done);
-            }
-        }
         if (!v.dataset.readyBound) {
             v.dataset.readyBound = '1';
             v.addEventListener('canplay', () => {
