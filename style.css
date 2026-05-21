@@ -2340,6 +2340,7 @@ main.expanded {
 
 .listing-video-wrap {
     margin: 14px 0 12px;
+    position: relative;
     border-radius: 18px;
     overflow: hidden;
     border: 1px solid var(--border-color);
@@ -2353,6 +2354,16 @@ main.expanded {
     display: block;
     background: #000;
     object-fit: cover;
+    opacity: 0;
+    transition: opacity 160ms ease;
+}
+
+.listing-video-wrap[data-video-ready="1"] video {
+    opacity: 1;
+}
+
+.listing-video-wrap[data-video-ready="1"] .vip-video-loader {
+    opacity: 0;
 }
 
 .carousel-slide .detail-image {

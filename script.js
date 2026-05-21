@@ -10710,6 +10710,7 @@ function showSection(sectionId) {
     if (sectionId === 'admin-dashboard-section' && !userProfile?.isAdmin) {
         sectionId = 'home-section';
     }
+    stopAllActiveVideos();
     try {
         document.activeElement?.blur?.();
     } catch {}
@@ -11646,6 +11647,39 @@ function stopVipVideoAutoplayObserver() {
     }
 }
 
+function stopVipVideoPreviews({ unload = true } = {}) {
+    stopVipVideoAutoplayObserver();
+    const videos = Array.from(document.querySelectorAll('video.vip-video-preview[data-vip-video="1"]'));
+    videos.forEach((v) => {
+        try {
+            v.pause();
+        } catch (e) {
+            null;
+        }
+        const wrap = v.closest('.vip-video-card-media');
+        if (wrap) wrap.dataset.videoReady = '0';
+        if (unload) {
+            try {
+                v.removeAttribute('src');
+                v.load();
+            } catch (e) {
+                null;
+            }
+        }
+    });
+}
+
+function stopAllActiveVideos() {
+    document.querySelectorAll('video').forEach((v) => {
+        try {
+            v.pause();
+        } catch (e) {
+            null;
+        }
+    });
+    stopVipVideoPreviews({ unload: true });
+}
+
 function setupVipVideoAutoplay(row) {
     stopVipVideoAutoplayObserver();
     if (!row) return;
@@ -11661,7 +11695,7 @@ function setupVipVideoAutoplay(row) {
                 const w = v.closest('.vip-video-card-media');
                 if (!w) return;
                 w.dataset.videoReady = '1';
-            }, { once: true });
+            });
         }
     });
     const visibility = new Map();
@@ -11736,7 +11770,8 @@ function renderVipVideoSection() {
 }
 
 function renderListings() {
-    const filtered = getFilteredListings();
+    const vipItems = getVipVideoListingsForHome();
+    const filtered = getFilteredListings().filter((l) => !hasListingVideo(l));
     const totalItems = filtered.length;
     const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
     if (totalPages > 0 && currentPage > totalPages) currentPage = totalPages;
@@ -11748,7 +11783,7 @@ function renderListings() {
     listingsGrid.innerHTML = totalItems > 0 ?
         pageItems.map(item => createCardHTML(item)).join('') :
         '';
-    document.getElementById('emptyState').style.display = totalItems === 0 ? 'block' : 'none';
+    document.getElementById('emptyState').style.display = totalItems === 0 && vipItems.length === 0 ? 'block' : 'none';
     document.getElementById('listingsGrid').style.display = totalItems === 0 ? 'none' : 'grid';
     renderPagination(totalPages);
     updateLoadMoreListingsUI();
@@ -12823,9 +12858,8 @@ function openListingDetail(listingId, { pushState = true } = {}) {
             listingVideoUrl = '';
         }
     }
-    const listingVideoPoster = videoMeta.poster || mainImageUrl || '';
     const listingVideoHtml = listingVideoUrl
-        ? `<div class="listing-video-wrap"><video src="${listingVideoUrl}" poster="${listingVideoPoster}" controls playsinline preload="metadata"></video></div>`
+        ? `<div class="listing-video-wrap" data-video-ready="0"><div class="vip-video-loader" aria-hidden="true"></div><video src="${listingVideoUrl}" controls playsinline preload="metadata"></video></div>`
         : '';
     const detailDotsCount = maxDetailIndex + 1;
     const detailCarouselHtml = detailImages.length > 1
@@ -13035,6 +13069,21 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                 </div>
             </div>
         </div>${similarHTML}`;
+    const detailVideoWrap = content.querySelector('.listing-video-wrap[data-video-ready]');
+    if (detailVideoWrap) {
+        const v = detailVideoWrap.querySelector('video');
+        if (v) {
+            v.addEventListener('canplay', () => {
+                detailVideoWrap.dataset.videoReady = '1';
+            }, { once: true });
+            v.addEventListener('loadeddata', () => {
+                detailVideoWrap.dataset.videoReady = '1';
+            }, { once: true });
+            v.addEventListener('error', () => {
+                detailVideoWrap.dataset.videoReady = '1';
+            }, { once: true });
+        }
+    }
     initCarouselsInContainer(content);
     scheduleLucideCreateIcons();
     refreshListingReviewsForListingDetail(listingId, seller?.name || 'Vendeur');
