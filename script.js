@@ -5217,6 +5217,8 @@ function removeSelectedListingVideo() {
     selectedListingVideoObjectUrl = '';
     const input = document.getElementById('listingVideoInput');
     if (input) input.value = '';
+    const nameEl = document.getElementById('listingVideoFileName');
+    if (nameEl) nameEl.textContent = 'Aucun fichier';
     const preview = document.getElementById('listingVideoPreview');
     if (preview) {
         preview.removeAttribute('src');
@@ -5290,6 +5292,8 @@ async function validateAndPreviewListingVideo(file) {
         preview.style.display = '';
         try { preview.load(); } catch (e) { null; }
     }
+    const nameEl = document.getElementById('listingVideoFileName');
+    if (nameEl) nameEl.textContent = String(file.name || 'video');
     const btn = document.getElementById('listingVideoRemoveBtn');
     if (btn) btn.style.display = '';
     return true;
@@ -5299,16 +5303,29 @@ function setupListingVideoUploader() {
     const input = document.getElementById('listingVideoInput');
     if (!input || input.dataset.bound) return;
     input.dataset.bound = '1';
+    const chooseBtn = document.getElementById('listingVideoChooseBtn');
+    if (chooseBtn && !chooseBtn.dataset.bound) {
+        chooseBtn.dataset.bound = '1';
+        chooseBtn.addEventListener('click', () => {
+            try { input.click(); } catch (e) { null; }
+        });
+    }
     input.addEventListener('change', async (e) => {
         const f = e?.target?.files?.[0] || null;
         if (!f) return;
         if (!userProfile?.isVip) {
             showToast('VIP required for video', 'crown');
             input.value = '';
+            const nameEl = document.getElementById('listingVideoFileName');
+            if (nameEl) nameEl.textContent = 'Aucun fichier';
             return;
         }
         const ok = await validateAndPreviewListingVideo(f);
-        if (!ok) input.value = '';
+        if (!ok) {
+            input.value = '';
+            const nameEl = document.getElementById('listingVideoFileName');
+            if (nameEl) nameEl.textContent = 'Aucun fichier';
+        }
     });
 }
 
@@ -7613,12 +7630,22 @@ async function requestVipListingVideoSignedUpload({ listingId, filename, content
                 contentType: String(contentType || 'video/mp4')
             })
         });
-        if (!res.ok) return null;
-        const payload = await res.json();
-        if (!payload || !payload.signedUrl || !payload.path) return null;
+        const raw = await res.text();
+        let payload = null;
+        try {
+            payload = raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            payload = null;
+        }
+        if (!res.ok) {
+            return { error: payload?.error || raw || `Video upload request failed (${res.status})` };
+        }
+        if (!payload || !payload.signedUrl || !payload.path) {
+            return { error: 'Invalid signed upload response' };
+        }
         return payload;
     } catch (e) {
-        return null;
+        return { error: 'Video upload request failed' };
     }
 }
 
@@ -7630,15 +7657,26 @@ async function uploadVipListingVideoToStorage({ listingId, file } = {}) {
         filename: f.name || 'video.mp4',
         contentType: f.type || 'video/mp4'
     });
-    if (!signed?.signedUrl || !signed?.path) return null;
-    const put = await fetch(String(signed.signedUrl), {
-        method: 'PUT',
-        headers: {
-            'content-type': String(f.type || 'video/mp4')
-        },
-        body: f
-    });
-    if (!put.ok) return null;
+    if (!signed?.signedUrl || !signed?.path) {
+        return { error: signed?.error || 'Signed upload URL missing' };
+    }
+    let put = null;
+    try {
+        put = await fetch(String(signed.signedUrl), {
+            method: 'PUT',
+            headers: {
+                'content-type': String(f.type || 'video/mp4')
+            },
+            body: f
+        });
+    } catch (e) {
+        put = null;
+    }
+    if (!put?.ok) {
+        let raw = '';
+        try { raw = put ? await put.text() : ''; } catch (e) { raw = ''; }
+        return { error: raw || `Video upload failed (${put?.status || 'network'})` };
+    }
     const videoUrl = String(signed.publicUrl || '').trim();
     return {
         video_path: String(signed.path || '').trim(),
@@ -7847,7 +7885,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             if (isVipAccount && selectedListingVideoFile) {
                 const videoRes = await uploadVipListingVideoToStorage({ listingId, file: selectedListingVideoFile });
                 if (!videoRes?.video_path) {
-                    showToast('Video upload failed', 'alert-circle');
+                    showToast(videoRes?.error || 'Video upload failed', 'alert-circle');
                     return;
                 }
                 let videoUrl = String(videoRes.video_url || '').trim();
@@ -8006,7 +8044,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         if (isVipAccount && selectedListingVideoFile) {
             const videoRes = await uploadVipListingVideoToStorage({ listingId, file: selectedListingVideoFile });
             if (!videoRes?.video_path) {
-                showToast('Video upload failed', 'alert-circle');
+                showToast(videoRes?.error || 'Video upload failed', 'alert-circle');
                 return;
             }
             let videoUrl = String(videoRes.video_url || '').trim();

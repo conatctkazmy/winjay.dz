@@ -963,8 +963,10 @@
                             <label>Vidéo (VIP)</label>
                             <p class="muted" style="margin-top: 6px;">1 vidéo par annonce (MP4 conseillé, 50MB max, 30s max).</p>
                             <div class="listing-video-uploader">
-                                <input type="file" id="listingVideoInput" accept="video/mp4,video/*">
-                                <button type="button" class="submit-btn" id="listingVideoRemoveBtn" style="display:none;" onclick="removeSelectedListingVideo()">Remove video</button>
+                                <input type="file" id="listingVideoInput" hidden accept="video/mp4,video/*">
+                                <button type="button" class="submit-btn small listing-video-choose-btn" id="listingVideoChooseBtn">Choisir une vidéo</button>
+                                <span class="listing-video-filename" id="listingVideoFileName">Aucun fichier</span>
+                                <button type="button" class="submit-btn small listing-video-remove-btn" id="listingVideoRemoveBtn" style="display:none;" onclick="removeSelectedListingVideo()">Retirer</button>
                             </div>
                             <video id="listingVideoPreview" class="listing-video-preview" style="display:none;" controls playsinline></video>
                         </div>
