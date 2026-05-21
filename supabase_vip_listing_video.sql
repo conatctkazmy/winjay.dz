@@ -33,8 +33,6 @@ $$;
 revoke all on function public.owns_listing(bigint) from public;
 grant execute on function public.owns_listing(bigint) to authenticated;
 
-alter table storage.objects enable row level security;
-
 drop policy if exists vip_videos_insert on storage.objects;
 drop policy if exists vip_videos_update on storage.objects;
 drop policy if exists vip_videos_delete on storage.objects;
@@ -131,4 +129,3 @@ begin
   execute 'drop trigger if exists trg_enforce_vip_video_details on public.listings';
   execute 'create trigger trg_enforce_vip_video_details before insert or update on public.listings for each row execute function public.enforce_vip_video_details()';
 end $$;
-
