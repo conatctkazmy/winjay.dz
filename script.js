@@ -10791,6 +10791,60 @@ function initCarouselElement(carouselEl) {
     viewport.addEventListener('pointercancel', onPointerUp);
     viewport.addEventListener('lostpointercapture', endDrag);
 
+    let touchMoveBound = false;
+    const detachTouchTracking = () => {
+        if (!touchMoveBound) return;
+        touchMoveBound = false;
+        document.removeEventListener('touchmove', onDocTouchMove, { capture: true });
+        document.removeEventListener('touchend', onDocTouchEnd, { capture: true });
+        document.removeEventListener('touchcancel', onDocTouchEnd, { capture: true });
+    };
+
+    const findTouchById = (touchesList) => {
+        if (!touchesList || !touchesList.length) return null;
+        if (touchId === null) return touchesList[0];
+        for (let i = 0; i < touchesList.length; i++) {
+            if (touchesList[i].identifier === touchId) return touchesList[i];
+        }
+        return null;
+    };
+
+    const onDocTouchMove = (e) => {
+        if (touchId === null) return;
+        const t = findTouchById(e.touches);
+        if (!t) return;
+        const dx = t.clientX - startX;
+        const dy = t.clientY - startY;
+        if (!dragging) {
+            if (Math.abs(dx) < 6) return;
+            if (Math.abs(dx) <= Math.abs(dy) * 1.1) return;
+            dragging = true;
+            track.style.transition = 'none';
+        }
+        e.preventDefault();
+        const pct = (dx / Math.max(1, viewport.clientWidth)) * 100;
+        const base = -startIndex * step;
+        track.style.transform = `translateX(${base + pct}%)`;
+    };
+
+    const onDocTouchEnd = (e) => {
+        if (touchId === null) return;
+        const t = findTouchById(e.changedTouches);
+        const dx = t ? (t.clientX - startX) : 0;
+        const threshold = Math.max(26, Math.min(60, viewport.clientWidth * 0.14));
+        let next = startIndex;
+        if (dragging) {
+            if (dx <= -threshold) next = startIndex + 1;
+            if (dx >= threshold) next = startIndex - 1;
+            carouselEl.dataset.dragged = '1';
+            lastCarouselSwipeAt = Date.now();
+        }
+        track.style.transition = '';
+        applyIndex(next, { animate: true, persist: carouselEl.dataset.carousel === 'detail' });
+        detachTouchTracking();
+        endDrag();
+    };
+
     viewport.addEventListener('touchstart', (e) => {
         if (!e.touches || !e.touches.length) return;
         const t = e.touches[0];
@@ -10802,54 +10856,13 @@ function initCarouselElement(carouselEl) {
         carouselEl.dataset.dragged = '';
         carouselEl.dataset.dragging = '1';
         track.style.transition = '';
+        if (!touchMoveBound) {
+            touchMoveBound = true;
+            document.addEventListener('touchmove', onDocTouchMove, { passive: false, capture: true });
+            document.addEventListener('touchend', onDocTouchEnd, { passive: true, capture: true });
+            document.addEventListener('touchcancel', onDocTouchEnd, { passive: true, capture: true });
+        }
     }, { passive: true });
-
-    viewport.addEventListener('touchmove', (e) => {
-        if (touchId === null || !e.touches || !e.touches.length) return;
-        let t = null;
-        for (let i = 0; i < e.touches.length; i++) {
-            if (e.touches[i].identifier === touchId) {
-                t = e.touches[i];
-                break;
-            }
-        }
-        if (!t) return;
-        const dx = t.clientX - startX;
-        const dy = t.clientY - startY;
-        if (!dragging) {
-            if (Math.abs(dx) < 10) return;
-            if (Math.abs(dy) > Math.abs(dx)) return;
-            dragging = true;
-            track.style.transition = 'none';
-        }
-        e.preventDefault();
-        const pct = (dx / Math.max(1, viewport.clientWidth)) * 100;
-        const base = -startIndex * step;
-        track.style.transform = `translateX(${base + pct}%)`;
-    }, { passive: false });
-
-    viewport.addEventListener('touchend', (e) => {
-        if (touchId === null) return;
-        const t = (e.changedTouches && e.changedTouches.length) ? e.changedTouches[0] : null;
-        if (!t) {
-            endDrag();
-            return;
-        }
-        const dx = t.clientX - startX;
-        const threshold = Math.max(38, Math.min(72, viewport.clientWidth * 0.18));
-        let next = startIndex;
-        if (dragging) {
-            if (dx <= -threshold) next = startIndex + 1;
-            if (dx >= threshold) next = startIndex - 1;
-            carouselEl.dataset.dragged = '1';
-            lastCarouselSwipeAt = Date.now();
-        }
-        track.style.transition = '';
-        applyIndex(next, { animate: true, persist: carouselEl.dataset.carousel === 'detail' });
-        endDrag();
-    }, { passive: true });
-
-    viewport.addEventListener('touchcancel', () => endDrag(), { passive: true });
 
     carouselEl.addEventListener('click', (e) => {
         if (carouselEl.dataset.dragged === '1') {
@@ -12471,6 +12484,12 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
             </div>
         </div>`;
     showSection('seller-profile-section');
+    try {
+        const sellerGrid = content.querySelector('#sellerListingsSection .listings-grid');
+        if (sellerGrid) initCarouselsInContainer(sellerGrid);
+    } catch (e) {
+        null;
+    }
     switchSellerProfileSection(section);
     initSellerProfileFollowUI(ownerId);
     fetchProfileRatingSummary(profileRow.id).then((summary) => {
@@ -12597,6 +12616,12 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
             </div>
         </div>`;
     showSection('seller-profile-section');
+    try {
+        const sellerGrid = content.querySelector('#sellerListingsSection .listings-grid');
+        if (sellerGrid) initCarouselsInContainer(sellerGrid);
+    } catch (e) {
+        null;
+    }
     switchSellerProfileSection(section);
     initSellerProfileFollowUI(profileRow.id);
     fetchProfileRatingSummary(profileRow.id).then((summary) => {
