@@ -966,9 +966,23 @@
                                 <input type="file" id="listingVideoInput" hidden accept="video/mp4,video/*">
                                 <button type="button" class="submit-btn small listing-video-choose-btn" id="listingVideoChooseBtn">Choisir une vidéo</button>
                                 <span class="listing-video-filename" id="listingVideoFileName">Aucun fichier</span>
+                                <button type="button" class="submit-btn small listing-video-upload-btn" id="listingVideoUploadBtn" style="display:none;">Uploader</button>
                                 <button type="button" class="submit-btn small listing-video-remove-btn" id="listingVideoRemoveBtn" style="display:none;" onclick="removeSelectedListingVideo()">Retirer</button>
                             </div>
-                            <video id="listingVideoPreview" class="listing-video-preview" style="display:none;" controls playsinline></video>
+                            <div class="listing-video-preview-wrap" id="listingVideoPreviewWrap" style="display:none;">
+                                <video id="listingVideoPreview" class="listing-video-preview" controls playsinline></video>
+                                <div class="listing-video-upload-overlay" id="listingVideoUploadOverlay" style="display:none;">
+                                    <div class="listing-video-upload-card">
+                                        <div class="upload-ring" id="listingVideoUploadRing" style="--p: 0;">
+                                            <div class="upload-ring-center">
+                                                <div class="upload-percent" id="listingVideoUploadPercent">0%</div>
+                                                <div class="upload-bytes" id="listingVideoUploadBytes">0 MB / 0 MB</div>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="submit-btn small listing-video-cancel-btn" id="listingVideoUploadCancelBtn">Annuler</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <button type="submit" class="submit-btn">Publier l'annonce</button>
                     </form>

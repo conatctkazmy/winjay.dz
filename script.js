@@ -4793,6 +4793,9 @@ let selectedListingImageSources = Array.from({ length: MAX_LISTING_IMAGES }, () 
 let currentListingImageSlotIndex = 0;
 let selectedListingVideoFile = null;
 let selectedListingVideoObjectUrl = '';
+let listingVideoUploadXhr = null;
+let listingVideoUploadActive = false;
+let listingVideoUploadCancelHandler = null;
 
 const VERIFIED_BADGE_HTML = `<span class="verified-badge" title="Vendeur Vérifié" onclick="showVerifiedPopup(event)"><img src="https://upload.wikimedia.org/wikipedia/commons/e/e4/Twitter_Verified_Badge.svg" alt="Vérifié" style="filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(1deg) brightness(102%) contrast(105%);"></span>`;
 const VIP_BADGE_HTML = `<span class="vip-badge" title="VIP" onclick="showVipPopup(event)"><span class="vip-star">★</span></span>`;
@@ -5209,7 +5212,42 @@ function updateListingVideoGroupVisibility() {
     if (!isVip) removeSelectedListingVideo();
 }
 
+function formatUploadBytes(bytes) {
+    const n = Number(bytes) || 0;
+    if (n <= 0) return '0 MB';
+    const mb = n / (1024 * 1024);
+    if (mb < 1024) return `${mb.toFixed(1)} MB`;
+    const gb = mb / 1024;
+    return `${gb.toFixed(2)} GB`;
+}
+
+function setListingVideoUploadOverlay({ visible = false, percent = 0, loaded = 0, total = 0 } = {}) {
+    const wrap = document.getElementById('listingVideoPreviewWrap');
+    const overlay = document.getElementById('listingVideoUploadOverlay');
+    const ring = document.getElementById('listingVideoUploadRing');
+    const percentEl = document.getElementById('listingVideoUploadPercent');
+    const bytesEl = document.getElementById('listingVideoUploadBytes');
+    if (wrap && visible) wrap.style.display = '';
+    if (overlay) overlay.style.display = visible ? '' : 'none';
+    const safeP = Math.max(0, Math.min(100, Number(percent) || 0));
+    if (ring) ring.style.setProperty('--p', String(safeP));
+    if (percentEl) percentEl.textContent = `${Math.round(safeP)}%`;
+    if (bytesEl) bytesEl.textContent = `${formatUploadBytes(loaded)} / ${formatUploadBytes(total)}`;
+}
+
+function clearListingVideoUploadState() {
+    listingVideoUploadActive = false;
+    listingVideoUploadXhr = null;
+    listingVideoUploadCancelHandler = null;
+    setListingVideoUploadOverlay({ visible: false, percent: 0, loaded: 0, total: 0 });
+    const cancelBtn = document.getElementById('listingVideoUploadCancelBtn');
+    if (cancelBtn) cancelBtn.disabled = false;
+}
+
 function removeSelectedListingVideo() {
+    if (listingVideoUploadCancelHandler) {
+        try { listingVideoUploadCancelHandler(); } catch (e) { null; }
+    }
     selectedListingVideoFile = null;
     if (selectedListingVideoObjectUrl) {
         try { URL.revokeObjectURL(selectedListingVideoObjectUrl); } catch (e) { null; }
@@ -5219,12 +5257,16 @@ function removeSelectedListingVideo() {
     if (input) input.value = '';
     const nameEl = document.getElementById('listingVideoFileName');
     if (nameEl) nameEl.textContent = 'Aucun fichier';
+    const wrap = document.getElementById('listingVideoPreviewWrap');
+    if (wrap) wrap.style.display = 'none';
     const preview = document.getElementById('listingVideoPreview');
     if (preview) {
         preview.removeAttribute('src');
-        preview.style.display = 'none';
         try { preview.load(); } catch (e) { null; }
     }
+    clearListingVideoUploadState();
+    const uploadBtn = document.getElementById('listingVideoUploadBtn');
+    if (uploadBtn) uploadBtn.style.display = 'none';
     const btn = document.getElementById('listingVideoRemoveBtn');
     if (btn) btn.style.display = 'none';
 }
@@ -5233,11 +5275,11 @@ async function validateAndPreviewListingVideo(file) {
     if (!file) return false;
     const type = String(file.type || '').toLowerCase();
     if (!type.startsWith('video/')) {
-        showToast('Invalid video file', 'alert-circle');
+        showToast('Fichier vidéo invalide', 'alert-circle');
         return false;
     }
     if (file.size > MAX_LISTING_VIDEO_BYTES) {
-        showToast('Video too large (50MB max)', 'alert-circle');
+        showToast('Vidéo trop grande (50MB max)', 'alert-circle');
         return false;
     }
 
@@ -5272,12 +5314,12 @@ async function validateAndPreviewListingVideo(file) {
 
     if (!Number.isFinite(duration) || duration <= 0) {
         try { URL.revokeObjectURL(objectUrl); } catch (e) { null; }
-        showToast('Could not read video duration', 'alert-circle');
+        showToast('Impossible de lire la durée de la vidéo', 'alert-circle');
         return false;
     }
     if (duration > MAX_LISTING_VIDEO_SECONDS) {
         try { URL.revokeObjectURL(objectUrl); } catch (e) { null; }
-        showToast('Video too long (30s max)', 'alert-circle');
+        showToast('Vidéo trop longue (30s max)', 'alert-circle');
         return false;
     }
 
@@ -5286,17 +5328,86 @@ async function validateAndPreviewListingVideo(file) {
         try { URL.revokeObjectURL(selectedListingVideoObjectUrl); } catch (e) { null; }
     }
     selectedListingVideoObjectUrl = objectUrl;
+    const wrap = document.getElementById('listingVideoPreviewWrap');
+    if (wrap) wrap.style.display = '';
     const preview = document.getElementById('listingVideoPreview');
     if (preview) {
         preview.src = objectUrl;
-        preview.style.display = '';
         try { preview.load(); } catch (e) { null; }
     }
+    clearListingVideoUploadState();
     const nameEl = document.getElementById('listingVideoFileName');
     if (nameEl) nameEl.textContent = String(file.name || 'video');
+    const uploadBtn = document.getElementById('listingVideoUploadBtn');
+    if (uploadBtn) uploadBtn.style.display = '';
     const btn = document.getElementById('listingVideoRemoveBtn');
     if (btn) btn.style.display = '';
     return true;
+}
+
+async function saveUploadedListingVideoMeta({ listingId, video_path, video_url } = {}) {
+    const safeListingId = Number(listingId) || 0;
+    if (!safeListingId) return { ok: false, error: 'Listing id manquant' };
+    const client = initSupabase();
+    if (!client) return { ok: false, error: 'Supabase is not configured' };
+    const { data: userData, error: userErr } = await client.auth.getUser();
+    const userId = userData?.user?.id || null;
+    if (userErr || !userId) return { ok: false, error: 'Please log in again' };
+    const existing = (listings || []).find((x) => Number(x?.id) === safeListingId) || null;
+    const posterUrl = existing?.images?.[0] || existing?.image || '';
+    const mergedDetails = {
+        ...((existing?.details && typeof existing.details === 'object') ? existing.details : {}),
+        video_path: String(video_path || ''),
+        video_url: String(video_url || ''),
+        video_poster_url: posterUrl || null
+    };
+    const { error: updateErr } = await client
+        .from('listings')
+        .update({ details: mergedDetails })
+        .eq('id', safeListingId)
+        .eq('owner_id', userId);
+    if (updateErr) {
+        const msg = updateErr?.message || 'Failed to save video';
+        return { ok: false, error: msg.includes('row-level security') ? 'Listings: permission denied (RLS)' : msg };
+    }
+    if (existing) {
+        existing.details = mergedDetails;
+        scheduleMarketplaceRenders();
+    }
+    return { ok: true, error: '' };
+}
+
+async function manualUploadSelectedListingVideo() {
+    if (listingVideoUploadActive) return;
+    if (!userProfile?.isVip) {
+        showToast('VIP requis pour la vidéo', 'crown');
+        return;
+    }
+    if (!selectedListingVideoFile) {
+        showToast('Choisissez une vidéo', 'alert-circle');
+        return;
+    }
+    const safeListingId = Number(editingListingId) || 0;
+    if (!safeListingId) {
+        showToast('Publiez d’abord l’annonce pour uploader la vidéo', 'alert-circle');
+        return;
+    }
+    const res = await uploadVipListingVideoToStorage({ listingId: safeListingId, file: selectedListingVideoFile });
+    if (!res?.video_path) {
+        showToast(res?.error || 'Upload vidéo échoué', 'alert-circle');
+        return;
+    }
+    const saveRes = await saveUploadedListingVideoMeta({
+        listingId: safeListingId,
+        video_path: res.video_path,
+        video_url: res.video_url
+    });
+    if (!saveRes.ok) {
+        showToast(saveRes.error || 'Upload vidéo échoué', 'alert-circle');
+        return;
+    }
+    showToast('Vidéo uploadée', 'check-circle');
+    removeSelectedListingVideo();
 }
 
 function setupListingVideoUploader() {
@@ -5310,11 +5421,25 @@ function setupListingVideoUploader() {
             try { input.click(); } catch (e) { null; }
         });
     }
+    const uploadBtn = document.getElementById('listingVideoUploadBtn');
+    if (uploadBtn && !uploadBtn.dataset.bound) {
+        uploadBtn.dataset.bound = '1';
+        uploadBtn.addEventListener('click', () => manualUploadSelectedListingVideo());
+    }
+    const cancelBtn = document.getElementById('listingVideoUploadCancelBtn');
+    if (cancelBtn && !cancelBtn.dataset.bound) {
+        cancelBtn.dataset.bound = '1';
+        cancelBtn.addEventListener('click', () => {
+            if (listingVideoUploadCancelHandler) {
+                try { cancelBtn.disabled = true; listingVideoUploadCancelHandler(); } catch (e) { null; }
+            }
+        });
+    }
     input.addEventListener('change', async (e) => {
         const f = e?.target?.files?.[0] || null;
         if (!f) return;
         if (!userProfile?.isVip) {
-            showToast('VIP required for video', 'crown');
+            showToast('VIP requis pour la vidéo', 'crown');
             input.value = '';
             const nameEl = document.getElementById('listingVideoFileName');
             if (nameEl) nameEl.textContent = 'Aucun fichier';
@@ -7717,12 +7842,27 @@ async function requestVipListingVideoSignedUpload({ listingId, filename, content
 async function uploadVipListingVideoToStorage({ listingId, file } = {}) {
     const f = file || null;
     if (!f) return null;
+    if (listingVideoUploadActive) return { error: 'Upload déjà en cours' };
+    listingVideoUploadActive = true;
+    setListingVideoUploadOverlay({ visible: true, percent: 0, loaded: 0, total: Number(f.size) || 0 });
+    const cancelBtn = document.getElementById('listingVideoUploadCancelBtn');
+    if (cancelBtn) cancelBtn.disabled = false;
+
+    let canceled = false;
+    listingVideoUploadCancelHandler = () => {
+        canceled = true;
+        try { listingVideoUploadXhr?.abort?.(); } catch (e) { null; }
+        clearListingVideoUploadState();
+    };
+
     const signed = await requestVipListingVideoSignedUpload({
         listingId,
         filename: f.name || 'video.mp4',
         contentType: f.type || 'video/mp4'
     });
+    if (canceled) return { error: 'Upload annulé' };
     if (!signed?.signedUrl || !signed?.path) {
+        clearListingVideoUploadState();
         return { error: signed?.error || 'Signed upload URL missing' };
     }
     reportVipVideoUploadDebugEvent('signed_put_start', {
@@ -7734,44 +7874,75 @@ async function uploadVipListingVideoToStorage({ listingId, file } = {}) {
         size: Number(f.size) || 0,
         type: String(f.type || '')
     });
-    let put = null;
-    try {
-        put = await fetch(String(signed.signedUrl), {
-            method: 'PUT',
-            headers: {
-                'content-type': String(f.type || 'video/mp4')
-            },
-            body: f
-        });
-    } catch (e) {
-        reportVipVideoUploadDebugEvent('signed_put_error', {
-            listingId: Number(listingId) || 0,
-            name: String(e?.name || ''),
-            message: String(e?.message || e || '')
-        });
-        put = null;
-    }
-    if (!put?.ok) {
-        let raw = '';
-        try { raw = put ? await put.text() : ''; } catch (e) { raw = ''; }
-        reportVipVideoUploadDebugEvent('signed_put_response', {
-            listingId: Number(listingId) || 0,
-            ok: false,
-            status: put?.status || null,
-            bodyPreview: String(raw || '').slice(0, 500)
-        });
-        return { error: raw || `Video upload failed (${put?.status || 'network'})` };
-    }
-    reportVipVideoUploadDebugEvent('signed_put_response', {
-        listingId: Number(listingId) || 0,
-        ok: true,
-        status: put?.status || null
+
+    const result = await new Promise((resolve) => {
+        let finished = false;
+        const done = (payload) => {
+            if (finished) return;
+            finished = true;
+            clearListingVideoUploadState();
+            resolve(payload);
+        };
+
+        const xhr = new XMLHttpRequest();
+        listingVideoUploadXhr = xhr;
+
+        xhr.upload.onprogress = (ev) => {
+            const total = Number(ev?.total) || Number(f.size) || 0;
+            const loaded = Number(ev?.loaded) || 0;
+            const pct = total > 0 ? (loaded / total) * 100 : 0;
+            setListingVideoUploadOverlay({ visible: true, percent: pct, loaded, total });
+        };
+
+        xhr.onerror = () => {
+            reportVipVideoUploadDebugEvent('signed_put_error', {
+                listingId: Number(listingId) || 0,
+                name: 'xhr-error',
+                message: 'network'
+            });
+            done({ error: 'Upload vidéo échoué (réseau)' });
+        };
+
+        xhr.onabort = () => {
+            done({ error: 'Upload annulé' });
+        };
+
+        xhr.onload = () => {
+            const ok = xhr.status >= 200 && xhr.status < 300;
+            const raw = String(xhr.responseText || '');
+            reportVipVideoUploadDebugEvent('signed_put_response', {
+                listingId: Number(listingId) || 0,
+                ok,
+                status: xhr.status || null,
+                bodyPreview: raw.slice(0, 500)
+            });
+            if (!ok) {
+                done({ error: raw || `Upload vidéo échoué (${xhr.status})` });
+                return;
+            }
+            setListingVideoUploadOverlay({ visible: true, percent: 100, loaded: Number(f.size) || 0, total: Number(f.size) || 0 });
+            const videoUrl = String(signed.publicUrl || '').trim();
+            done({
+                video_path: String(signed.path || '').trim(),
+                video_url: videoUrl
+            });
+        };
+
+        try {
+            xhr.open('PUT', String(signed.signedUrl), true);
+            xhr.setRequestHeader('content-type', String(f.type || 'video/mp4'));
+            xhr.send(f);
+        } catch (e) {
+            reportVipVideoUploadDebugEvent('signed_put_error', {
+                listingId: Number(listingId) || 0,
+                name: String(e?.name || ''),
+                message: String(e?.message || e || '')
+            });
+            done({ error: 'Upload vidéo échoué' });
+        }
     });
-    const videoUrl = String(signed.publicUrl || '').trim();
-    return {
-        video_path: String(signed.path || '').trim(),
-        video_url: videoUrl
-    };
+
+    return result;
 }
 
 document.getElementById('addListingForm').addEventListener('submit', async (e) => {
