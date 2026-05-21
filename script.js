@@ -11522,6 +11522,203 @@ function getVipVideoListingsForHome() {
     return items.slice(0, 10);
 }
 
+let vipVideoAutoplayObserver = null;
+let vipVideoAutoplayCleanupTimer = null;
+const VIP_VIDEO_MUTED_STORAGE_KEY = 'winjayVipVideoMutedV1';
+
+function getVipVideoMutedPreference() {
+    try {
+        const raw = localStorage.getItem(VIP_VIDEO_MUTED_STORAGE_KEY);
+        if (raw === null) return true;
+        return raw === 'true';
+    } catch (e) {
+        return true;
+    }
+}
+
+function setVipVideoMutedPreference(value) {
+    try {
+        localStorage.setItem(VIP_VIDEO_MUTED_STORAGE_KEY, value ? 'true' : 'false');
+    } catch (e) {
+        null;
+    }
+}
+
+function getListingVideoPublicUrl(item) {
+    const meta = getListingVideoMeta(item);
+    if (!meta.hasVideo) return '';
+    if (meta.url) return meta.url;
+    if (!meta.path) return '';
+    try {
+        const client = initSupabase();
+        const { data: publicData } = client.storage.from(LISTING_VIDEOS_BUCKET).getPublicUrl(meta.path);
+        return publicData?.publicUrl || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+function createVipVideoCardHTML(item) {
+    const isFavorite = favorites.includes(item.id);
+    const pulse = pendingHeartPulses.has(item.id) && isFavorite;
+    const availability = String(item.availability || '').toLowerCase();
+    const badgeText = availability === 'sold' ? 'Sold' : (availability === 'reserved' ? 'Reserved' : '');
+    const carouselImages = getListingImagesForDetail(item).slice(0, 2);
+    const poster = getListingVideoMeta(item).poster || carouselImages[0] || item.image || '';
+    const videoUrl = getListingVideoPublicUrl(item);
+    const muted = getVipVideoMutedPreference();
+    const muteIcon = muted ? 'volume-x' : 'volume-2';
+    const mediaHTML = videoUrl
+        ? `<div class="card-media-wrap vip-video-card-media">
+                <video class="card-img vip-video-preview" data-vip-video="1" data-listing-id="${item.id}" data-src="${videoUrl}" poster="${poster}" playsinline muted loop preload="none"></video>
+                <button type="button" class="vip-video-mute-btn" data-listing-id="${item.id}" data-muted="${muted ? '1' : '0'}" aria-label="${muted ? 'Activer le son' : 'Couper le son'}" onclick="toggleVipVideoMuted(event, ${item.id})"><i data-lucide="${muteIcon}"></i></button>
+            </div>`
+        : `<div class="card-media-wrap"><img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
+    return `
+        <div class="card" onclick="handleCardOpen(event, ${item.id})">
+            <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
+                <i data-lucide="heart"></i>
+            </button>
+            ${badgeText ? `<div class="card-status-badge ${availability}">${badgeText}</div>` : ''}
+            ${mediaHTML}
+            <div class="card-content">
+                <div class="card-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
+                <div class="card-title">${item.title}</div>
+                <div class="card-footer">
+                    <span><i data-lucide="map-pin" style="width:12px"></i> ${item.location}</span>
+                    <span>${item.date}</span>
+                </div>
+                <div class="card-stats">
+                    <span><i data-lucide="eye"></i> ${Number(item.views_count) || 0}</span>
+                    <span><i data-lucide="heart"></i> ${Number(item.likes_count) || 0}</span>
+                </div>
+            </div>
+        </div>`;
+}
+
+function applyVipVideoMutedPreferenceToAll() {
+    const muted = getVipVideoMutedPreference();
+    document.querySelectorAll('video.vip-video-preview[data-vip-video="1"]').forEach((v) => {
+        try {
+            v.muted = muted;
+        } catch (e) {
+            null;
+        }
+    });
+    document.querySelectorAll('.vip-video-mute-btn[data-listing-id]').forEach((btn) => {
+        try {
+            btn.dataset.muted = muted ? '1' : '0';
+            btn.setAttribute('aria-label', muted ? 'Activer le son' : 'Couper le son');
+            const icon = btn.querySelector('[data-lucide]');
+            if (icon) icon.setAttribute('data-lucide', muted ? 'volume-x' : 'volume-2');
+        } catch (e) {
+            null;
+        }
+    });
+    scheduleLucideCreateIcons();
+}
+
+function toggleVipVideoMuted(event, listingId) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const current = getVipVideoMutedPreference();
+    const next = !current;
+    setVipVideoMutedPreference(next);
+    applyVipVideoMutedPreferenceToAll();
+    if (!next) {
+        const v = document.querySelector(`video.vip-video-preview[data-vip-video="1"][data-listing-id="${Number(listingId) || 0}"]`);
+        if (v) {
+            try {
+                v.play();
+            } catch (e) {
+                null;
+            }
+        }
+    }
+}
+
+function stopVipVideoAutoplayObserver() {
+    if (vipVideoAutoplayCleanupTimer) {
+        try {
+            clearTimeout(vipVideoAutoplayCleanupTimer);
+        } catch (e) {
+            null;
+        }
+        vipVideoAutoplayCleanupTimer = null;
+    }
+    if (vipVideoAutoplayObserver) {
+        try {
+            vipVideoAutoplayObserver.disconnect();
+        } catch (e) {
+            null;
+        }
+        vipVideoAutoplayObserver = null;
+    }
+}
+
+function setupVipVideoAutoplay(row) {
+    stopVipVideoAutoplayObserver();
+    if (!row) return;
+    if (!('IntersectionObserver' in window)) return;
+    const videos = Array.from(row.querySelectorAll('video.vip-video-preview[data-vip-video="1"]'));
+    if (!videos.length) return;
+    const visibility = new Map();
+    vipVideoAutoplayObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            const v = entry.target;
+            visibility.set(v, entry.isIntersecting ? entry.intersectionRatio : 0);
+        });
+        let best = null;
+        let bestRatio = 0;
+        visibility.forEach((ratio, v) => {
+            if (ratio > bestRatio) {
+                bestRatio = ratio;
+                best = v;
+            }
+        });
+        const muted = getVipVideoMutedPreference();
+        videos.forEach((v) => {
+            const shouldPlay = best && v === best && bestRatio >= 0.55;
+            try {
+                v.muted = muted;
+            } catch (e) {
+                null;
+            }
+            if (shouldPlay) {
+                if (!v.getAttribute('src')) {
+                    const src = v.dataset.src || '';
+                    if (src) v.setAttribute('src', src);
+                    try {
+                        v.load();
+                    } catch (e) {
+                        null;
+                    }
+                }
+                const p = v.play();
+                if (p && typeof p.catch === 'function') p.catch(() => null);
+            } else {
+                try {
+                    v.pause();
+                } catch (e) {
+                    null;
+                }
+            }
+        });
+    }, { root: null, threshold: [0, 0.25, 0.55, 0.75, 1] });
+    videos.forEach((v) => vipVideoAutoplayObserver.observe(v));
+    vipVideoAutoplayCleanupTimer = setTimeout(() => {
+        try {
+            const activeSection = getActiveSectionId();
+            if (activeSection !== 'home-section') stopVipVideoAutoplayObserver();
+        } catch (e) {
+            null;
+        }
+    }, 3000);
+    applyVipVideoMutedPreferenceToAll();
+}
+
 function renderVipVideoSection() {
     const section = document.getElementById('vipVideoSection');
     const row = document.getElementById('vipVideoRow');
@@ -11530,11 +11727,12 @@ function renderVipVideoSection() {
     if (!items.length) {
         section.style.display = 'none';
         row.innerHTML = '';
+        stopVipVideoAutoplayObserver();
         return;
     }
     section.style.display = '';
-    row.innerHTML = items.map((x) => createCardHTML(x)).join('');
-    initCarouselsInContainer(row);
+    row.innerHTML = items.map((x) => createVipVideoCardHTML(x)).join('');
+    setupVipVideoAutoplay(row);
 }
 
 function renderListings() {

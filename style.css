@@ -2128,6 +2128,45 @@ main.expanded {
     scroll-snap-align: start;
 }
 
+.vip-video-card-media {
+    position: relative;
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.vip-video-preview {
+    cursor: pointer;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.vip-video-mute-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 38px;
+    height: 38px;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
+}
+
+.vip-video-mute-btn:hover {
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.vip-video-mute-btn i,
+.vip-video-mute-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
 .listing-video-uploader {
     display: flex;
     align-items: center;
