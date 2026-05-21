@@ -185,18 +185,6 @@
                     <h1>Trouvez ce dont vous avez besoin, localement.</h1>
                     <p>Le meilleur marché pour tout.</p>
                 </div>
-                <div class="vip-video-section" id="vipVideoSection" style="display: none;">
-                    <div class="vip-video-head">
-                        <div>
-                            <h3 class="vip-video-title">VIP Video</h3>
-                            <p class="vip-video-subtitle">Annonces VIP avec vidéo</p>
-                        </div>
-                        <button class="filter-btn" type="button" onclick="scrollVipVideoRowIntoView()">
-                            <i data-lucide="play"></i> Voir
-                        </button>
-                    </div>
-                    <div class="vip-video-row" id="vipVideoRow"></div>
-                </div>
                 <div class="listings-controls">
                     <div class="filter-bar">
                         <button class="filter-btn" onclick="toggleFilterPanel()">
@@ -211,6 +199,18 @@
                         </div>
                     </div>
                     <div class="active-filters" id="activeFilters"></div>
+                </div>
+                <div class="vip-video-section" id="vipVideoSection" style="display: none;">
+                    <div class="vip-video-head">
+                        <div>
+                            <h3 class="vip-video-title">VIP Video</h3>
+                            <p class="vip-video-subtitle">Annonces VIP avec vidéo</p>
+                        </div>
+                        <button class="filter-btn" type="button" onclick="scrollVipVideoRowIntoView()">
+                            <i data-lucide="play"></i> Voir
+                        </button>
+                    </div>
+                    <div class="vip-video-row" id="vipVideoRow"></div>
                 </div>
                 <div id="filterPanel" class="filter-panel">
                     <div class="filter-section">
