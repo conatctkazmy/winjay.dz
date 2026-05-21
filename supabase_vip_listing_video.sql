@@ -45,11 +45,14 @@ with check (
   bucket_id = 'listing-videos'
   and public.is_vip()
   and split_part(name, '/', 1) = auth.uid()::text
-  and public.owns_listing(
-    case
-      when split_part(name, '/', 2) ~ '^[0-9]+$' then split_part(name, '/', 2)::bigint
-      else null
-    end
+  and (
+    split_part(name, '/', 2) = 'tmp'
+    or public.owns_listing(
+      case
+        when split_part(name, '/', 2) ~ '^[0-9]+$' then split_part(name, '/', 2)::bigint
+        else null
+      end
+    )
   )
 );
 
@@ -61,22 +64,28 @@ using (
   bucket_id = 'listing-videos'
   and public.is_vip()
   and split_part(name, '/', 1) = auth.uid()::text
-  and public.owns_listing(
-    case
-      when split_part(name, '/', 2) ~ '^[0-9]+$' then split_part(name, '/', 2)::bigint
-      else null
-    end
+  and (
+    split_part(name, '/', 2) = 'tmp'
+    or public.owns_listing(
+      case
+        when split_part(name, '/', 2) ~ '^[0-9]+$' then split_part(name, '/',  2)::bigint
+        else null
+      end
+    )
   )
 )
 with check (
   bucket_id = 'listing-videos'
   and public.is_vip()
   and split_part(name, '/', 1) = auth.uid()::text
-  and public.owns_listing(
-    case
-      when split_part(name, '/', 2) ~ '^[0-9]+$' then split_part(name, '/', 2)::bigint
-      else null
-    end
+  and (
+    split_part(name, '/', 2) = 'tmp'
+    or public.owns_listing(
+      case
+        when split_part(name, '/', 2) ~ '^[0-9]+$' then split_part(name, '/', 2)::bigint
+        else null
+      end
+    )
   )
 );
 
@@ -88,11 +97,14 @@ using (
   bucket_id = 'listing-videos'
   and public.is_vip()
   and split_part(name, '/', 1) = auth.uid()::text
-  and public.owns_listing(
-    case
-      when split_part(name, '/', 2) ~ '^[0-9]+$' then split_part(name, '/', 2)::bigint
-      else null
-    end
+  and (
+    split_part(name, '/', 2) = 'tmp'
+    or public.owns_listing(
+      case
+        when split_part(name, '/', 2) ~ '^[0-9]+$' then split_part(name, '/', 2)::bigint
+        else null
+      end
+    )
   )
 );
 
