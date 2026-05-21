@@ -185,6 +185,18 @@
                     <h1>Trouvez ce dont vous avez besoin, localement.</h1>
                     <p>Le meilleur marché pour tout.</p>
                 </div>
+                <div class="vip-video-section" id="vipVideoSection" style="display: none;">
+                    <div class="vip-video-head">
+                        <div>
+                            <h3 class="vip-video-title">VIP Video</h3>
+                            <p class="vip-video-subtitle">Annonces VIP avec vidéo</p>
+                        </div>
+                        <button class="filter-btn" type="button" onclick="scrollVipVideoRowIntoView()">
+                            <i data-lucide="play"></i> Voir
+                        </button>
+                    </div>
+                    <div class="vip-video-row" id="vipVideoRow"></div>
+                </div>
                 <div class="listings-controls">
                     <div class="filter-bar">
                         <button class="filter-btn" onclick="toggleFilterPanel()">
@@ -946,6 +958,15 @@
                             <p class="muted" style="margin-top: 6px;">Ajoutez jusqu’à 10 photos. Touchez un emplacement pour ajouter une photo.</p>
                             <div id="listingImagesSlots" class="listing-images-grid"></div>
                             <input type="file" id="listingImageSlotInput" hidden accept="image/*">
+                        </div>
+                        <div class="form-group" id="listingVideoGroup" style="display: none;">
+                            <label>Vidéo (VIP)</label>
+                            <p class="muted" style="margin-top: 6px;">1 vidéo par annonce (MP4 conseillé, 50MB max, 30s max).</p>
+                            <div class="listing-video-uploader">
+                                <input type="file" id="listingVideoInput" accept="video/mp4,video/*">
+                                <button type="button" class="submit-btn" id="listingVideoRemoveBtn" style="display:none;" onclick="removeSelectedListingVideo()">Remove video</button>
+                            </div>
+                            <video id="listingVideoPreview" class="listing-video-preview" style="display:none;" controls playsinline></video>
                         </div>
                         <button type="submit" class="submit-btn">Publier l'annonce</button>
                     </form>

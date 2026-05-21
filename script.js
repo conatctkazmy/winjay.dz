@@ -52,6 +52,7 @@ const FREE_VERIFIED_TOTAL = 1000;
 const REFERRALS_REQUIRED = 10;
 const MARKETPLACE_LISTINGS_STORAGE_KEY = 'marketplaceListingsV1';
 const LISTING_IMAGES_BUCKET = 'listing-images';
+const LISTING_VIDEOS_BUCKET = 'listing-videos';
 const PROFILE_IMAGES_BUCKET = 'profile-images';
 const MESSAGE_MEDIA_BUCKET = 'message-media';
 const IDENTITY_DOCS_BUCKET = 'identity-docs';
@@ -62,6 +63,23 @@ const LISTINGS_FETCH_PAGE_SIZE = 24;
 
 function safeStorageFilename(name) {
     return String(name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function getListingVideoMeta(item) {
+    const d = item?.details && typeof item.details === 'object' ? item.details : {};
+    const url = String(d.video_url || '').trim();
+    const path = String(d.video_path || '').trim();
+    const poster = String(d.video_poster_url || '').trim();
+    return {
+        url,
+        path,
+        poster,
+        hasVideo: !!(url || path)
+    };
+}
+
+function hasListingVideo(item) {
+    return getListingVideoMeta(item).hasVideo;
 }
 
 function normalizeSupabaseProjectUrl(url) {
@@ -4773,6 +4791,8 @@ let selectedListingImages = Array.from({ length: MAX_LISTING_IMAGES }, () => nul
 let selectedListingImageUrls = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
 let selectedListingImageSources = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
 let currentListingImageSlotIndex = 0;
+let selectedListingVideoFile = null;
+let selectedListingVideoObjectUrl = '';
 
 const VERIFIED_BADGE_HTML = `<span class="verified-badge" title="Vendeur Vérifié" onclick="showVerifiedPopup(event)"><img src="https://upload.wikimedia.org/wikipedia/commons/e/e4/Twitter_Verified_Badge.svg" alt="Vérifié" style="filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(1deg) brightness(102%) contrast(105%);"></span>`;
 const VIP_BADGE_HTML = `<span class="vip-badge" title="VIP" onclick="showVipPopup(event)"><span class="vip-star">★</span></span>`;
@@ -4806,6 +4826,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!supabaseClient) {
         loadUserProfileFromStorage();
     }
+    setupListingVideoUploader();
+    updateListingVideoGroupVisibility();
     populateWilayas();
     loadAlgeriaCommunesData();
     populateCategories();
@@ -5174,6 +5196,120 @@ function setupListingCoreFieldBindings() {
         editPriceType.addEventListener('change', apply);
         apply();
     }
+}
+
+const MAX_LISTING_VIDEO_BYTES = 50 * 1024 * 1024;
+const MAX_LISTING_VIDEO_SECONDS = 30;
+
+function updateListingVideoGroupVisibility() {
+    const group = document.getElementById('listingVideoGroup');
+    if (!group) return;
+    const isVip = !!userProfile?.isVip;
+    group.style.display = isVip ? '' : 'none';
+    if (!isVip) removeSelectedListingVideo();
+}
+
+function removeSelectedListingVideo() {
+    selectedListingVideoFile = null;
+    if (selectedListingVideoObjectUrl) {
+        try { URL.revokeObjectURL(selectedListingVideoObjectUrl); } catch (e) { null; }
+    }
+    selectedListingVideoObjectUrl = '';
+    const input = document.getElementById('listingVideoInput');
+    if (input) input.value = '';
+    const preview = document.getElementById('listingVideoPreview');
+    if (preview) {
+        preview.removeAttribute('src');
+        preview.style.display = 'none';
+        try { preview.load(); } catch (e) { null; }
+    }
+    const btn = document.getElementById('listingVideoRemoveBtn');
+    if (btn) btn.style.display = 'none';
+}
+
+async function validateAndPreviewListingVideo(file) {
+    if (!file) return false;
+    const type = String(file.type || '').toLowerCase();
+    if (!type.startsWith('video/')) {
+        showToast('Invalid video file', 'alert-circle');
+        return false;
+    }
+    if (file.size > MAX_LISTING_VIDEO_BYTES) {
+        showToast('Video too large (50MB max)', 'alert-circle');
+        return false;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.muted = true;
+    probe.playsInline = true;
+
+    const duration = await new Promise((resolve) => {
+        let done = false;
+        const finish = (val) => {
+            if (done) return;
+            done = true;
+            resolve(val);
+        };
+        const timeout = setTimeout(() => finish(null), 5000);
+        probe.onloadedmetadata = () => {
+            clearTimeout(timeout);
+            const d = Number(probe.duration);
+            finish(Number.isFinite(d) ? d : null);
+        };
+        probe.onerror = () => {
+            clearTimeout(timeout);
+            finish(null);
+        };
+        probe.src = objectUrl;
+    });
+
+    try { probe.removeAttribute('src'); } catch (e) { null; }
+    try { probe.load(); } catch (e) { null; }
+
+    if (!Number.isFinite(duration) || duration <= 0) {
+        try { URL.revokeObjectURL(objectUrl); } catch (e) { null; }
+        showToast('Could not read video duration', 'alert-circle');
+        return false;
+    }
+    if (duration > MAX_LISTING_VIDEO_SECONDS) {
+        try { URL.revokeObjectURL(objectUrl); } catch (e) { null; }
+        showToast('Video too long (30s max)', 'alert-circle');
+        return false;
+    }
+
+    selectedListingVideoFile = file;
+    if (selectedListingVideoObjectUrl) {
+        try { URL.revokeObjectURL(selectedListingVideoObjectUrl); } catch (e) { null; }
+    }
+    selectedListingVideoObjectUrl = objectUrl;
+    const preview = document.getElementById('listingVideoPreview');
+    if (preview) {
+        preview.src = objectUrl;
+        preview.style.display = '';
+        try { preview.load(); } catch (e) { null; }
+    }
+    const btn = document.getElementById('listingVideoRemoveBtn');
+    if (btn) btn.style.display = '';
+    return true;
+}
+
+function setupListingVideoUploader() {
+    const input = document.getElementById('listingVideoInput');
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = '1';
+    input.addEventListener('change', async (e) => {
+        const f = e?.target?.files?.[0] || null;
+        if (!f) return;
+        if (!userProfile?.isVip) {
+            showToast('VIP required for video', 'crown');
+            input.value = '';
+            return;
+        }
+        const ok = await validateAndPreviewListingVideo(f);
+        if (!ok) input.value = '';
+    });
 }
 
 function populateFilterDropdowns() {
@@ -6195,6 +6331,7 @@ function resetCreateListingDraft({ resetForm = true } = {}) {
     selectedListingImageUrls = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
     selectedListingImageSources = Array.from({ length: MAX_LISTING_IMAGES }, () => '');
     currentListingImageSlotIndex = 0;
+    removeSelectedListingVideo();
     try {
         renderListingImagesSlots();
     } catch (e) {
@@ -7454,6 +7591,61 @@ function openShareModal(listingId) {
     window.open(`https://t.me/share/url?url=${url}&text=${shareText}`, '_blank');
 }
 
+async function requestVipListingVideoSignedUpload({ listingId, filename, contentType } = {}) {
+    const client = initSupabase();
+    if (!client) return null;
+    const { data: sessionData } = await client.auth.getSession();
+    const token = sessionData?.session?.access_token || '';
+    if (!token) return null;
+    const safeListingId = Number(listingId) || 0;
+    if (!safeListingId) return null;
+    try {
+        const res = await fetch(`${SUPABASE_PROJECT_URL}/functions/v1/vip-listing-video-upload`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                apikey: SUPABASE_ANON_KEY,
+                authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                listingId: safeListingId,
+                filename: safeStorageFilename(filename || 'video.mp4'),
+                contentType: String(contentType || 'video/mp4')
+            })
+        });
+        if (!res.ok) return null;
+        const payload = await res.json();
+        if (!payload || !payload.signedUrl || !payload.path) return null;
+        return payload;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function uploadVipListingVideoToStorage({ listingId, file } = {}) {
+    const f = file || null;
+    if (!f) return null;
+    const signed = await requestVipListingVideoSignedUpload({
+        listingId,
+        filename: f.name || 'video.mp4',
+        contentType: f.type || 'video/mp4'
+    });
+    if (!signed?.signedUrl || !signed?.path) return null;
+    const put = await fetch(String(signed.signedUrl), {
+        method: 'PUT',
+        headers: {
+            'content-type': String(f.type || 'video/mp4')
+        },
+        body: f
+    });
+    if (!put.ok) return null;
+    const videoUrl = String(signed.publicUrl || '').trim();
+    return {
+        video_path: String(signed.path || '').trim(),
+        video_url: videoUrl
+    };
+}
+
 document.getElementById('addListingForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!requireAuthOrPrompt()) return;
@@ -7518,6 +7710,8 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         const isPrivilegedAccount =
             !!(ensuredProfile?.is_vip ?? ensuredProfile?.vip ?? userProfile?.isVip) ||
             !!(ensuredProfile?.verified ?? ensuredProfile?.is_verified ?? userProfile?.verified);
+        const isVipAccount = !!(ensuredProfile?.is_vip ?? ensuredProfile?.vip ?? userProfile?.isVip);
+        const existingListing = isEditMode ? listings.find((l) => l && l.id === Number(editingListingId)) : null;
 
         const title = document.getElementById('listingTitle').value.trim();
         const description = document.getElementById('listingDescription')?.value?.trim?.() || '';
@@ -7551,7 +7745,9 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         const files = imagePlan.filter((x) => x.kind === 'new').map((x) => x.file);
         const detailsRaw = validateListingDynamicFields();
         if (detailsRaw === null) return;
-        const details = Object.keys(detailsRaw).length ? detailsRaw : null;
+        const baseDetails = existingListing?.details && typeof existingListing.details === 'object' ? existingListing.details : {};
+        let mergedDetails = { ...(baseDetails || {}), ...(detailsRaw || {}) };
+        let details = Object.keys(mergedDetails).length ? mergedDetails : null;
 
         if (!title) {
             showToast('Title is required', 'alert-circle');
@@ -7647,6 +7843,25 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                     return;
                 }
                 finalUrls.push(publicUrl);
+            }
+            if (isVipAccount && selectedListingVideoFile) {
+                const videoRes = await uploadVipListingVideoToStorage({ listingId, file: selectedListingVideoFile });
+                if (!videoRes?.video_path) {
+                    showToast('Video upload failed', 'alert-circle');
+                    return;
+                }
+                let videoUrl = String(videoRes.video_url || '').trim();
+                if (!videoUrl) {
+                    try {
+                        const { data: publicData } = client.storage.from(LISTING_VIDEOS_BUCKET).getPublicUrl(String(videoRes.video_path || '').trim());
+                        videoUrl = publicData?.publicUrl || '';
+                    } catch (e) {
+                        videoUrl = '';
+                    }
+                }
+                const posterUrl = finalUrls[0] || existingListing?.image || '';
+                mergedDetails = { ...(mergedDetails || {}), video_path: String(videoRes.video_path || ''), video_url: videoUrl, video_poster_url: posterUrl || null };
+                details = Object.keys(mergedDetails).length ? mergedDetails : null;
             }
             const { error: updateErr } = await withTimeout(
                 client
@@ -7786,6 +8001,36 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             const msg = imgErr?.message || 'Failed to save listing images';
             showToast(msg.includes('row-level security') ? 'Listing images: permission denied (RLS)' : msg, 'alert-circle');
             return;
+        }
+
+        if (isVipAccount && selectedListingVideoFile) {
+            const videoRes = await uploadVipListingVideoToStorage({ listingId, file: selectedListingVideoFile });
+            if (!videoRes?.video_path) {
+                showToast('Video upload failed', 'alert-circle');
+                return;
+            }
+            let videoUrl = String(videoRes.video_url || '').trim();
+            if (!videoUrl) {
+                try {
+                    const { data: publicData } = client.storage.from(LISTING_VIDEOS_BUCKET).getPublicUrl(String(videoRes.video_path || '').trim());
+                    videoUrl = publicData?.publicUrl || '';
+                } catch (e) {
+                    videoUrl = '';
+                }
+            }
+            const posterUrl = imageRows[0]?.url || '';
+            mergedDetails = { ...(mergedDetails || {}), video_path: String(videoRes.video_path || ''), video_url: videoUrl, video_poster_url: posterUrl || null };
+            details = Object.keys(mergedDetails).length ? mergedDetails : null;
+            const { error: videoSaveErr } = await withTimeout(
+                client.from('listings').update({ details }).eq('id', listingId).eq('owner_id', userId),
+                15000,
+                'Saving video timed out'
+            );
+            if (videoSaveErr) {
+                const msg = videoSaveErr?.message || 'Failed to save video';
+                showToast(msg.includes('row-level security') ? 'Listings: permission denied (RLS)' : msg, 'alert-circle');
+                return;
+            }
         }
 
         showToast('Listing posted!', 'check-circle');
@@ -8162,6 +8407,7 @@ function updateProfileUI() {
     updateFreeVerifiedPrimaryAction();
     updateAdminDashboardButtonVisibility();
     updateNavbarAuthUI();
+    updateListingVideoGroupVisibility();
     lucide.createIcons();
     refreshMyProfileFollowCounts();
     refreshSidebarFollowing();
@@ -10223,6 +10469,7 @@ function openEditListingPageById(id, { pushState = true } = {}) {
         }
     }
     resetCreateListingDraft({ resetForm: false });
+    updateListingVideoGroupVisibility();
     const titleEl = document.getElementById('listingTitle');
     if (titleEl) titleEl.value = item.title || '';
     const descEl = document.getElementById('listingDescription');
@@ -10301,6 +10548,7 @@ function openCreateListingPage({ pushState = true } = {}) {
     }
     resetCreateListingDraft({ resetForm: true });
     showSection('create-listing-section');
+    updateListingVideoGroupVisibility();
     try {
         renderListingImagesSlots();
     } catch (e) {
@@ -10552,7 +10800,16 @@ function getFilteredListings() {
     if (currentFilters.priceMax) {
         filtered = filtered.filter(l => l.price <= parseInt(currentFilters.priceMax));
     }
-    if (currentFilters.sort === 'price-asc') {
+    if (currentFilters.sort === 'newest') {
+        filtered.sort((a, b) => {
+            const av = (a?.seller?.vip || a?.seller?.isVip) && hasListingVideo(a) ? 1 : 0;
+            const bv = (b?.seller?.vip || b?.seller?.isVip) && hasListingVideo(b) ? 1 : 0;
+            if (av !== bv) return bv - av;
+            const ta = new Date(a?.created_at || 0).getTime();
+            const tb = new Date(b?.created_at || 0).getTime();
+            return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+        });
+    } else if (currentFilters.sort === 'price-asc') {
         filtered.sort((a, b) => a.price - b.price);
     } else if (currentFilters.sort === 'price-desc') {
         filtered.sort((a, b) => b.price - a.price);
@@ -10827,6 +11084,43 @@ function initCarouselsInContainer(container) {
     container.querySelectorAll('.js-carousel').forEach((el) => initCarouselElement(el));
 }
 
+function scrollVipVideoRowIntoView() {
+    const section = document.getElementById('vipVideoSection');
+    if (!section) return;
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function getVipVideoListingsForHome() {
+    const items = (listings || []).filter((l) => {
+        if (!l) return false;
+        if (!hasListingVideo(l)) return false;
+        const seller = l.seller || null;
+        const isVipSeller = !!(seller?.vip || seller?.isVip);
+        return isVipSeller;
+    });
+    items.sort((a, b) => {
+        const ta = new Date(a?.created_at || 0).getTime();
+        const tb = new Date(b?.created_at || 0).getTime();
+        return tb - ta;
+    });
+    return items.slice(0, 10);
+}
+
+function renderVipVideoSection() {
+    const section = document.getElementById('vipVideoSection');
+    const row = document.getElementById('vipVideoRow');
+    if (!section || !row) return;
+    const items = getVipVideoListingsForHome();
+    if (!items.length) {
+        section.style.display = 'none';
+        row.innerHTML = '';
+        return;
+    }
+    section.style.display = '';
+    row.innerHTML = items.map((x) => createCardHTML(x)).join('');
+    initCarouselsInContainer(row);
+}
+
 function renderListings() {
     const filtered = getFilteredListings();
     const totalItems = filtered.length;
@@ -10845,6 +11139,7 @@ function renderListings() {
     renderPagination(totalPages);
     updateLoadMoreListingsUI();
     initCarouselsInContainer(listingsGrid);
+    renderVipVideoSection();
     scheduleLucideCreateIcons();
 }
 
@@ -10865,18 +11160,20 @@ function createCardHTML(item) {
     const availability = String(item.availability || '').toLowerCase();
     const badgeText = availability === 'sold' ? 'Sold' : (availability === 'reserved' ? 'Reserved' : '');
     const carouselImages = getListingImagesForDetail(item).slice(0, 8);
+    const videoBadge = hasListingVideo(item) ? `<span class="video-play-badge"><i data-lucide="play"></i></span>` : '';
     const mediaHTML = carouselImages.length > 1
-        ? `<div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
+        ? `<div class="card-media-wrap"><div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
                 <div class="carousel-viewport">
                     <div class="carousel-track">
                         ${carouselImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low" draggable="false"></div>`).join('')}
                     </div>
                 </div>
+                ${videoBadge}
                 <div class="carousel-dots">
                     ${carouselImages.map((_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
                 </div>
-            </div>`
-        : `<img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low">`;
+            </div></div>`
+        : `<div class="card-media-wrap">${videoBadge}<img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
     return `
         <div class="card" onclick="handleCardOpen(event, ${item.id})">
             <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
@@ -11901,6 +12198,21 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     const selectedIdx = Math.max(0, Math.min(maxDetailIndex, Number(selectedIdxRaw) || 0));
     listingDetailImageIndex[listingId] = selectedIdx;
     const mainImageUrl = detailImages[0] || item.image;
+    const videoMeta = getListingVideoMeta(item);
+    let listingVideoUrl = videoMeta.url;
+    if (!listingVideoUrl && videoMeta.path) {
+        try {
+            const client = initSupabase();
+            const { data: publicData } = client.storage.from(LISTING_VIDEOS_BUCKET).getPublicUrl(videoMeta.path);
+            listingVideoUrl = publicData?.publicUrl || '';
+        } catch (e) {
+            listingVideoUrl = '';
+        }
+    }
+    const listingVideoPoster = videoMeta.poster || mainImageUrl || '';
+    const listingVideoHtml = listingVideoUrl
+        ? `<div class="listing-video-wrap"><video src="${listingVideoUrl}" poster="${listingVideoPoster}" controls playsinline preload="metadata"></video></div>`
+        : '';
     const detailDotsCount = maxDetailIndex + 1;
     const detailCarouselHtml = detailImages.length > 1
         ? `<div class="detail-carousel js-carousel" data-carousel="detail" data-columns="2" data-listing-id="${listingId}" data-index="${selectedIdx}">
@@ -11938,6 +12250,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     content.innerHTML = `
         <div class="detail-container">
             <div class="detail-gallery">
+                ${listingVideoHtml}
                 ${detailCarouselHtml}
             </div>
             <div class="detail-info">

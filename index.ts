@@ -21,11 +21,17 @@ function pickKeyFromJson(raw: string) {
     const anyObj = obj as Record<string, unknown>;
     const directDefault = anyObj["default"];
     if (typeof directDefault === "string" && directDefault) return directDefault;
-    const values = Object.values(anyObj).filter((v) => typeof v === "string") as string[];
+    const values = Object.values(anyObj).filter((v) =>
+      typeof v === "string"
+    ) as string[];
     return values[0] || "";
   } catch {
     return "";
   }
+}
+
+function safeName(name: string) {
+  return String(name || "video.mp4").replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
 Deno.serve(async (req) => {
@@ -62,7 +68,15 @@ Deno.serve(async (req) => {
   } catch {
     body = null;
   }
-  const search = String(body?.search || "").trim().toLowerCase();
+
+  const listingId = Number(body?.listingId) || 0;
+  const filename = safeName(String(body?.filename || "video.mp4"));
+  const contentType = String(body?.contentType || "video/mp4").toLowerCase();
+
+  if (!listingId) return json(400, { error: "Missing listingId" });
+  if (!contentType.startsWith("video/")) {
+    return json(400, { error: "Invalid content type" });
+  }
 
   const userClient = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: authHeader, apikey: anonKey } },
@@ -74,63 +88,49 @@ Deno.serve(async (req) => {
   if (requesterErr || !requesterData?.user?.id) {
     return json(401, { error: "Invalid auth" });
   }
-
-  let isAdmin = false;
-  try {
-    const { data } = await userClient.rpc("is_admin");
-    isAdmin = data === true;
-  } catch {
-    isAdmin = false;
-  }
-  if (!isAdmin) return json(403, { error: "Not authorized" });
+  const userId = requesterData.user.id;
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
 
-  const { data: profilesData } = await adminClient
+  const { data: profileRow } = await adminClient
     .from("profiles")
-    .select("id, display_name, tag, phone, is_vip, verified, created_at")
-    .order("created_at", { ascending: false })
-    .limit(500);
+    .select("id, is_vip")
+    .eq("id", userId)
+    .maybeSingle();
 
-  const profiles = Array.isArray(profilesData) ? profilesData : [];
-  const { data: usersData } = await adminClient.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000,
-  });
+  if (!profileRow?.is_vip) return json(403, { error: "VIP required" });
 
-  const emailsById: Record<string, string> = {};
-  const users = Array.isArray(usersData?.users) ? usersData.users : [];
-  for (const u of users) {
-    const id = String((u as any)?.id || "").trim();
-    if (!id) continue;
-    const email = String((u as any)?.email || "").trim();
-    if (email) emailsById[id] = email;
+  const { data: listingRow } = await adminClient
+    .from("listings")
+    .select("id, owner_id")
+    .eq("id", listingId)
+    .maybeSingle();
+
+  if (!listingRow?.id) return json(404, { error: "Listing not found" });
+  if (String(listingRow.owner_id || "") !== String(userId)) {
+    return json(403, { error: "Not owner" });
   }
 
-  const out = profiles
-    .map((p: any) => ({
-      id: p.id,
-      display_name: p.display_name || "User",
-      tag: p.tag || "",
-      email: emailsById[String(p.id)] || "",
-      phone: p.phone || "",
-      is_vip: !!p.is_vip,
-      verified: !!p.verified,
-      created_at: p.created_at,
-    }))
-    .filter((p: any) => {
-      if (!search) return true;
-      const hay = [
-        p.display_name,
-        p.tag,
-        p.email,
-        p.phone,
-      ].map((x: any) => String(x || "").toLowerCase());
-      return hay.some((x: string) => x.includes(search));
-    })
-    .slice(0, 120);
+  const objectPath = `${userId}/${listingId}/${Date.now()}_${filename}`;
+  const { data, error } = await adminClient.storage
+    .from("listing-videos")
+    .createSignedUploadUrl(objectPath);
 
-  return json(200, { users: out });
+  if (error || !data?.signedUrl) {
+    return json(500, { error: "Failed to create signed upload url" });
+  }
+
+  const { data: publicData } = adminClient.storage
+    .from("listing-videos")
+    .getPublicUrl(objectPath);
+
+  return json(200, {
+    path: objectPath,
+    signedUrl: data.signedUrl,
+    token: data.token,
+    publicUrl: publicData?.publicUrl || "",
+  });
 });
+
