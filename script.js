@@ -12781,6 +12781,52 @@ async function toggleFavorite(event, id) {
     const listingId = Number(id);
     if (!Number.isFinite(listingId)) return;
 
+    const getHomeCardContext = () => {
+        const activeSection = getActiveSectionId();
+        const card = btn?.closest?.('.card') || null;
+        const inHomeGrid = !!btn?.closest?.('#listingsGrid');
+        return {
+            activeSection,
+            card,
+            isHomeGridHeart: activeSection === 'home-section' && inHomeGrid
+        };
+    };
+
+    const updateHomeCardLikeUi = (count) => {
+        const ctx = getHomeCardContext();
+        if (!ctx.isHomeGridHeart || !ctx.card) return false;
+        const card = ctx.card;
+        try {
+            const heartSpan = Array.from(card.querySelectorAll('.card-stats span')).find((s) => {
+                if (!s) return false;
+                if (s.querySelector('i[data-lucide="heart"]')) return true;
+                if (s.querySelector('svg.lucide-heart')) return true;
+                if (s.querySelector('svg[data-lucide="heart"]')) return true;
+                return false;
+            });
+            if (!heartSpan) return true;
+            const icon =
+                heartSpan.querySelector('i[data-lucide="heart"]') ||
+                heartSpan.querySelector('svg.lucide-heart') ||
+                heartSpan.querySelector('svg[data-lucide="heart"]');
+            if (!icon) {
+                heartSpan.textContent = String(Number(count) || 0);
+                return true;
+            }
+            try {
+                icon.remove();
+            } catch (e) {
+                null;
+            }
+            heartSpan.textContent = '';
+            heartSpan.appendChild(icon);
+            heartSpan.append(` ${Number(count) || 0}`);
+        } catch (e) {
+            null;
+        }
+        return true;
+    };
+
     const pulseBtn = () => {
         if (!btn?.classList) return;
         btn.classList.add('pulse');
@@ -12791,18 +12837,23 @@ async function toggleFavorite(event, id) {
 
     if (DEMO_MODE) {
         const index = favorites.indexOf(listingId);
+        const item = listings.find((l) => l.id === listingId);
+        const prevLikesCount = Number(item?.likes_count) || 0;
         if (index > -1) {
             favorites.splice(index, 1);
             btn?.classList?.remove('active');
+            if (item) item.likes_count = Math.max(0, prevLikesCount - 1);
             showToast('Retiré des favoris', 'heart');
         } else {
             favorites.push(listingId);
             btn?.classList?.add('active');
-            if (isDetailHeart) pulseBtn();
+            if (item) item.likes_count = Math.max(0, prevLikesCount + 1);
+            if (isDetailHeart || isCardHeart) pulseBtn();
             showToast('Ajouté aux favoris', 'heart');
         }
         if (favorites.includes(listingId)) pendingHeartPulses.add(listingId);
-        renderListings();
+        const updated = updateHomeCardLikeUi(Number(item?.likes_count) || 0);
+        if (!updated) renderListings();
         renderFavorites();
         pendingHeartPulses.delete(listingId);
         return;
@@ -12825,10 +12876,11 @@ async function toggleFavorite(event, id) {
     const likesEl = document.getElementById('listingLikesCount');
     if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(optimisticLikesCount);
     if (optimisticLiked) {
-        if (isDetailHeart) pulseBtn();
+        if (isDetailHeart || isCardHeart) pulseBtn();
         if (isCardHeart) pendingHeartPulses.add(listingId);
     }
-    renderListings();
+    const updatedOptimistic = updateHomeCardLikeUi(optimisticLikesCount);
+    if (!updatedOptimistic) renderListings();
     renderFavorites();
     pendingHeartPulses.delete(listingId);
     showToast(optimisticLiked ? 'Liked' : 'Unliked', 'heart');
@@ -12849,7 +12901,8 @@ async function toggleFavorite(event, id) {
         btn?.classList?.toggle('active', wasLiked);
         if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(prevLikesCount);
         pendingHeartPulses.delete(listingId);
-        renderListings();
+        const updatedRollback = updateHomeCardLikeUi(prevLikesCount);
+        if (!updatedRollback) renderListings();
         renderFavorites();
         return;
     }
@@ -12866,7 +12919,8 @@ async function toggleFavorite(event, id) {
     if (likesEl && currentListingDetailId === listingId) likesEl.textContent = String(likesCount);
     btn?.classList?.toggle('active', likedNow);
     await refreshListingCountsFromSupabase(listingId, { render: false });
-    renderListings();
+    const updatedFinal = updateHomeCardLikeUi(likesCount);
+    if (!updatedFinal) renderListings();
     renderFavorites();
 }
 
