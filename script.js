@@ -160,6 +160,8 @@ let listingsLoadMoreBound = false;
 let lucideRenderTimer = null;
 let marketplaceRenderTimer = null;
 let lastCarouselSwipeAt = 0;
+let homeInitialListingsLoading = false;
+let homeInitialListingsLoaded = false;
 
 function scheduleLucideCreateIcons() {
     if (lucideRenderTimer) {
@@ -222,7 +224,7 @@ function updateLoadMoreListingsUI() {
     const wrap = document.getElementById('loadMoreListingsWrap');
     const btn = document.getElementById('loadMoreListingsBtn');
     if (!wrap || !btn) return;
-    const show = !DEMO_MODE && !!listingsHasMore && getActiveSectionId() === 'home-section';
+    const show = !DEMO_MODE && !!listingsHasMore && getActiveSectionId() === 'home-section' && homeInitialListingsLoaded && listingsLoadedCount > 0;
     wrap.style.display = show ? 'flex' : 'none';
 }
 
@@ -357,6 +359,12 @@ function mapSupabaseListingRow(row, profilesById = {}) {
 async function fetchListingsFromSupabase({ silent = false, includeProfiles = false, limit = undefined, offset = 0, append = false } = {}) {
     const client = initSupabase();
     if (!client) return;
+    const safeOffset = Math.max(0, Number(offset) || 0);
+    const initialLoad = !append && safeOffset === 0 && !silent && !homeInitialListingsLoaded;
+    if (initialLoad) {
+        homeInitialListingsLoading = true;
+        homeInitialListingsLoaded = false;
+    }
     let query = client
         .from('listings')
         .select(
@@ -367,11 +375,16 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = fal
     const safeLimit = Number.isFinite(safeLimitRaw) && safeLimitRaw > 0
         ? safeLimitRaw
         : Math.max(INITIAL_LISTINGS_FETCH_LIMIT, Number(listingsLoadedCount) || 0);
-    const safeOffset = Math.max(0, Number(offset) || 0);
     if (safeLimit > 0) query = query.range(safeOffset, safeOffset + safeLimit - 1);
     const { data, error } = await query;
     if (error) {
         if (!silent) showToast(error.message || 'Failed to load listings', 'alert-circle');
+        if (initialLoad) {
+            homeInitialListingsLoading = false;
+            homeInitialListingsLoaded = true;
+            listingsHasMore = false;
+            scheduleMarketplaceRenders();
+        }
         return;
     }
     const ownerIds = includeProfiles ? Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean))) : [];
@@ -389,6 +402,10 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = fal
     if (!append) listingsLoadedCount = 0;
     listingsLoadedCount = Math.max(listingsLoadedCount, safeOffset + fetched);
     listingsHasMore = safeLimit > 0 ? fetched >= safeLimit : false;
+    if (initialLoad) {
+        homeInitialListingsLoading = false;
+        homeInitialListingsLoaded = true;
+    }
     saveMarketplaceListingsToStorage();
     await refreshFavoritesFromSupabase({ silent: true });
     scheduleMarketplaceRenders();
@@ -4919,6 +4936,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
     }
+    homeInitialListingsLoading = true;
+    homeInitialListingsLoaded = false;
     const listingsPromise = fetchListingsFromSupabase({ silent: false, includeProfiles: false, limit: INITIAL_LISTINGS_FETCH_LIMIT, offset: 0, append: false });
 
     if (profileParam) {
@@ -11757,6 +11776,12 @@ function renderVipVideoSection() {
     const section = document.getElementById('vipVideoSection');
     const row = document.getElementById('vipVideoRow');
     if (!section || !row) return;
+    if (homeInitialListingsLoading && !homeInitialListingsLoaded) {
+        section.style.display = 'none';
+        row.innerHTML = '';
+        stopVipVideoAutoplayObserver();
+        return;
+    }
     const items = getVipVideoListingsForHome();
     if (!items.length) {
         section.style.display = 'none';
@@ -11770,6 +11795,18 @@ function renderVipVideoSection() {
 }
 
 function renderListings() {
+    if (getActiveSectionId() === 'home-section' && homeInitialListingsLoading && !homeInitialListingsLoaded) {
+        if (listingsGrid) listingsGrid.innerHTML = getHomeListingsSkeletonHTML(12);
+        const empty = document.getElementById('emptyState');
+        if (empty) empty.style.display = 'none';
+        const gridEl = document.getElementById('listingsGrid');
+        if (gridEl) gridEl.style.display = 'grid';
+        if (pagination) pagination.innerHTML = '';
+        updateLoadMoreListingsUI();
+        renderVipVideoSection();
+        scheduleLucideCreateIcons();
+        return;
+    }
     const vipItems = getVipVideoListingsForHome();
     const filtered = getFilteredListings().filter((l) => !hasListingVideo(l));
     const totalItems = filtered.length;
