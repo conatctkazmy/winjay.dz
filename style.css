@@ -2366,6 +2366,47 @@ main.expanded {
     opacity: 0;
 }
 
+.listing-video-sound-gate {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    backdrop-filter: blur(8px);
+    z-index: 6;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+}
+
+.listing-video-sound-gate i,
+.listing-video-sound-gate svg {
+    width: 18px;
+    height: 18px;
+}
+
+.listing-video-sound-gate span {
+    font-weight: 700;
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.listing-video-wrap[data-sound-gate="1"] .listing-video-sound-gate {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.listing-video-sound-gate:hover {
+    background: rgba(0, 0, 0, 0.68);
+}
+
 .carousel-slide .detail-image {
     cursor: pointer;
 }

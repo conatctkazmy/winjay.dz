@@ -12859,7 +12859,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
         }
     }
     const listingVideoHtml = listingVideoUrl
-        ? `<div class="listing-video-wrap" data-video-ready="0"><div class="vip-video-loader" aria-hidden="true"></div><video src="${listingVideoUrl}" controls playsinline preload="metadata"></video></div>`
+        ? `<div class="listing-video-wrap" data-video-ready="0" data-sound-gate="0"><div class="vip-video-loader" aria-hidden="true"></div><button type="button" class="listing-video-sound-gate" aria-label="Activer le son"><i data-lucide="volume-2"></i><span>Activer le son</span></button><video src="${listingVideoUrl}" controls playsinline preload="metadata"></video></div>`
         : '';
     const detailDotsCount = maxDetailIndex + 1;
     const detailCarouselHtml = detailImages.length > 1
@@ -13073,6 +13073,51 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     if (detailVideoWrap) {
         const v = detailVideoWrap.querySelector('video');
         if (v) {
+            const gateBtn = detailVideoWrap.querySelector('.listing-video-sound-gate');
+            if (gateBtn && !gateBtn.dataset.bound) {
+                gateBtn.dataset.bound = '1';
+                gateBtn.addEventListener('click', (e) => {
+                    try {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    } catch (err) {
+                        null;
+                    }
+                    try {
+                        v.muted = false;
+                        v.volume = 1;
+                    } catch (err) {
+                        null;
+                    }
+                    try {
+                        const p = v.play();
+                        if (p && typeof p.catch === 'function') p.catch(() => null);
+                    } catch (err) {
+                        null;
+                    }
+                    detailVideoWrap.dataset.soundGate = '0';
+                });
+            }
+            try {
+                v.muted = false;
+                v.volume = 1;
+            } catch (err) {
+                null;
+            }
+            try {
+                const p = v.play();
+                if (p && typeof p.then === 'function') {
+                    p.then(() => {
+                        if (currentListingDetailId !== listingId) return;
+                        detailVideoWrap.dataset.soundGate = '0';
+                    }).catch(() => {
+                        if (currentListingDetailId !== listingId) return;
+                        detailVideoWrap.dataset.soundGate = '1';
+                    });
+                }
+            } catch (err) {
+                detailVideoWrap.dataset.soundGate = '1';
+            }
             v.addEventListener('canplay', () => {
                 detailVideoWrap.dataset.videoReady = '1';
             }, { once: true });
