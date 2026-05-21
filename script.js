@@ -362,7 +362,6 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = fal
         .select(
             'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, sort_order)'
         )
-        .neq('status', 'draft')
         .order('created_at', { ascending: false });
     const safeLimitRaw = Number(limit);
     const safeLimit = Number.isFinite(safeLimitRaw) && safeLimitRaw > 0
@@ -4797,8 +4796,7 @@ let selectedListingVideoObjectUrl = '';
 let listingVideoUploadXhr = null;
 let listingVideoUploadActive = false;
 let listingVideoUploadCancelHandler = null;
-let draftListingId = null;
-let listingVideoUploadedMeta = null;
+let listingVideoTmpMeta = null;
 
 const VERIFIED_BADGE_HTML = `<span class="verified-badge" title="Vendeur Vérifié" onclick="showVerifiedPopup(event)"><img src="https://upload.wikimedia.org/wikipedia/commons/e/e4/Twitter_Verified_Badge.svg" alt="Vérifié" style="filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(1deg) brightness(102%) contrast(105%);"></span>`;
 const VIP_BADGE_HTML = `<span class="vip-badge" title="VIP" onclick="showVipPopup(event)"><span class="vip-star">★</span></span>`;
@@ -5264,7 +5262,8 @@ function removeSelectedListingVideo() {
         try { listingVideoUploadCancelHandler(); } catch (e) { null; }
     }
     selectedListingVideoFile = null;
-    listingVideoUploadedMeta = null;
+    const tmpPath = listingVideoTmpMeta?.path || '';
+    listingVideoTmpMeta = null;
     if (selectedListingVideoObjectUrl) {
         try { URL.revokeObjectURL(selectedListingVideoObjectUrl); } catch (e) { null; }
     }
@@ -5289,6 +5288,14 @@ function removeSelectedListingVideo() {
     }
     const btn = document.getElementById('listingVideoRemoveBtn');
     if (btn) btn.style.display = 'none';
+    if (tmpPath) {
+        try {
+            const client = initSupabase();
+            client?.storage?.from?.(LISTING_VIDEOS_BUCKET)?.remove?.([String(tmpPath)]);
+        } catch (e) {
+            null;
+        }
+    }
 }
 
 async function validateAndPreviewListingVideo(file) {
@@ -5370,112 +5377,75 @@ async function validateAndPreviewListingVideo(file) {
     return true;
 }
 
-async function saveUploadedListingVideoMeta({ listingId, video_path, video_url } = {}) {
-    const safeListingId = Number(listingId) || 0;
-    if (!safeListingId) return { ok: false, error: 'Listing id manquant' };
+async function requestVipListingVideoTmpSignedUpload({ filename, contentType } = {}) {
     const client = initSupabase();
-    if (!client) return { ok: false, error: 'Supabase is not configured' };
-    const { data: userData, error: userErr } = await client.auth.getUser();
-    const userId = userData?.user?.id || null;
-    if (userErr || !userId) return { ok: false, error: 'Please log in again' };
-    const existing = (listings || []).find((x) => Number(x?.id) === safeListingId) || null;
-    const posterUrl = existing?.images?.[0] || existing?.image || '';
-    const mergedDetails = {
-        ...((existing?.details && typeof existing.details === 'object') ? existing.details : {}),
-        video_path: String(video_path || ''),
-        video_url: String(video_url || ''),
-        video_poster_url: posterUrl || null
-    };
-    const { error: updateErr } = await client
-        .from('listings')
-        .update({ details: mergedDetails })
-        .eq('id', safeListingId)
-        .eq('owner_id', userId);
-    if (updateErr) {
-        const msg = updateErr?.message || 'Failed to save video';
-        return { ok: false, error: msg.includes('row-level security') ? 'Listings: permission denied (RLS)' : msg };
+    if (!client) return { error: 'Supabase non configuré' };
+    const { data: sessionData } = await client.auth.getSession();
+    const token = sessionData?.session?.access_token || '';
+    if (!token) return { error: 'Session expirée. Reconnectez-vous.' };
+    try {
+        const res = await fetch(`${SUPABASE_PROJECT_URL}/functions/v1/vip-listing-video-tmp-upload`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                apikey: SUPABASE_ANON_KEY,
+                authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                filename: safeStorageFilename(filename || 'video.mp4'),
+                contentType: String(contentType || 'video/mp4')
+            })
+        });
+        const raw = await res.text();
+        let payload = null;
+        try { payload = raw ? JSON.parse(raw) : null; } catch (e) { payload = null; }
+        if (!res.ok) {
+            if (res.status === 404) return { error: "Fonction vidéo introuvable. Déployez 'vip-listing-video-tmp-upload' sur Supabase." };
+            return { error: payload?.error || raw || `Requête d'upload vidéo échouée (${res.status})` };
+        }
+        if (!payload?.signedUrl || !payload?.path) return { error: "Réponse d'upload invalide" };
+        return payload;
+    } catch (e) {
+        return { error: "Requête d'upload vidéo échouée" };
     }
-    if (existing) {
-        existing.details = mergedDetails;
-        scheduleMarketplaceRenders();
+}
+
+async function requestVipListingVideoAttach({ listingId, tmpPath } = {}) {
+    const client = initSupabase();
+    if (!client) return { error: 'Supabase non configuré' };
+    const { data: sessionData } = await client.auth.getSession();
+    const token = sessionData?.session?.access_token || '';
+    if (!token) return { error: 'Session expirée. Reconnectez-vous.' };
+    const safeListingId = Number(listingId) || 0;
+    if (!safeListingId) return { error: 'Annonce invalide' };
+    const safeTmp = String(tmpPath || '').trim();
+    if (!safeTmp) return { error: 'Vidéo manquante' };
+    try {
+        const res = await fetch(`${SUPABASE_PROJECT_URL}/functions/v1/vip-listing-video-attach`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                apikey: SUPABASE_ANON_KEY,
+                authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ listingId: safeListingId, tmpPath: safeTmp })
+        });
+        const raw = await res.text();
+        let payload = null;
+        try { payload = raw ? JSON.parse(raw) : null; } catch (e) { payload = null; }
+        if (!res.ok) {
+            if (res.status === 404) return { error: "Fonction vidéo introuvable. Déployez 'vip-listing-video-attach' sur Supabase." };
+            return { error: payload?.error || raw || `Attachement vidéo échoué (${res.status})` };
+        }
+        if (!payload?.video_path) return { error: "Réponse d'attachement invalide" };
+        return payload;
+    } catch (e) {
+        return { error: "Attachement vidéo échoué" };
     }
-    return { ok: true, error: '' };
 }
 
 async function manualUploadSelectedListingVideo() {
     startAutoListingVideoUpload({ source: 'retry' });
-}
-
-async function createDraftListingForVideoUpload({ client, userId, details } = {}) {
-    const title = document.getElementById('listingTitle')?.value?.trim?.() || '';
-    const description = document.getElementById('listingDescription')?.value?.trim?.() || '';
-    const condition = document.getElementById('listingCondition')?.value || '';
-    const priceType = document.getElementById('listingPriceType')?.value || '';
-    const price = Number(document.getElementById('listingPrice')?.value) || 0;
-    const category = document.getElementById('listingCategory')?.value || '';
-    const subcategory = document.getElementById('listingSubcategory')?.value || '';
-    const wilaya = document.getElementById('listingWilaya')?.value || '';
-    const city = document.getElementById('listingCity')?.value || '';
-    const delivery = document.getElementById('listingDelivery')?.value || '';
-    const contactPhone = document.getElementById('listingContactPhone')?.value?.trim?.() || '';
-    const availability = document.getElementById('listingAvailability')?.value || 'Available';
-    const tagsRaw = document.getElementById('listingTags')?.value || '';
-    const tags = Array.from(
-        new Map(
-            tagsRaw
-                .split(',')
-                .map((t) => String(t || '').trim())
-                .filter(Boolean)
-                .map((t) => [t.toLowerCase(), t])
-        ).values()
-    ).slice(0, 5);
-    const hasAnyPhoto = (selectedListingImageUrls || []).some((u) => !!u);
-
-    if (!title || !condition || !priceType || !category || !wilaya || !city || !delivery || !contactPhone || !hasAnyPhoto) {
-        showToast('Remplissez les champs obligatoires avant l’upload', 'alert-circle');
-        return { id: 0, error: 'missing_fields' };
-    }
-    if (priceType !== 'Free' && price <= 0) {
-        showToast('Ajoutez un prix valide avant l’upload', 'alert-circle');
-        return { id: 0, error: 'missing_price' };
-    }
-    if (!subcategory && Array.isArray(listingSubcategoriesByCategory[category]) && listingSubcategoriesByCategory[category].length) {
-        showToast('Choisissez une sous-catégorie avant l’upload', 'alert-circle');
-        return { id: 0, error: 'missing_subcategory' };
-    }
-
-    const payload = {
-        owner_id: userId,
-        title,
-        description: description || null,
-        condition: condition || null,
-        price_type: priceType || null,
-        subcategory: subcategory || null,
-        price,
-        delivery: delivery || null,
-        availability: availability || null,
-        category: category || null,
-        wilaya: wilaya || null,
-        city: city || null,
-        contact_phone: contactPhone || null,
-        tags: tags.length ? tags : null,
-        details: details && typeof details === 'object' ? details : null,
-        status: 'draft'
-    };
-
-    const { data: inserted, error } = await client
-        .from('listings')
-        .insert(payload)
-        .select('id')
-        .single();
-
-    if (error || !inserted?.id) {
-        const msg = error?.message || 'Impossible de créer le brouillon';
-        showToast(msg.includes('row-level security') ? 'Listings: permission refusée (RLS)' : msg, 'alert-circle');
-        return { id: 0, error: msg };
-    }
-
-    return { id: Number(inserted.id) || 0, error: '' };
 }
 
 function setListingVideoUploadButtonState({ mode = 'hidden' } = {}) {
@@ -5505,66 +5475,35 @@ async function startAutoListingVideoUpload({ source = 'auto' } = {}) {
     if (listingVideoUploadActive) return;
     if (!userProfile?.isVip) return;
     if (!selectedListingVideoFile) return;
-    if (listingVideoUploadedMeta?.listingId && listingVideoUploadedMeta?.video_path) return;
-
-    const client = initSupabase();
-    if (!client) return;
-
-    const detailsRaw = validateListingDynamicFields();
-    if (detailsRaw === null) return;
-
-    const { data: userData, error: userErr } = await client.auth.getUser();
-    const userId = userData?.user?.id || null;
-    if (userErr || !userId) {
-        showToast('Veuillez vous reconnecter', 'log-in');
-        openModal('loginModal');
-        return;
-    }
-
-    let targetListingId = 0;
-    if (createListingMode === 'edit' && Number(editingListingId) > 0) targetListingId = Number(editingListingId);
-    if (!targetListingId && Number(draftListingId) > 0) targetListingId = Number(draftListingId);
-
-    if (!targetListingId && createListingMode === 'create') {
-        const draftRes = await createDraftListingForVideoUpload({ client, userId, details: detailsRaw });
-        if (!draftRes?.id) {
-            setListingVideoUploadButtonState({ mode: 'retry' });
-            return;
-        }
-        draftListingId = Number(draftRes.id) || null;
-        targetListingId = Number(draftListingId) || 0;
-    }
-
-    if (!targetListingId) {
+    setListingVideoUploadButtonState({ mode: 'hidden' });
+    listingVideoTmpMeta = null;
+    listingVideoUploadActive = true;
+    setListingSubmitVideoUploadState(true);
+    setListingVideoUploadOverlay({ visible: true, percent: 0, loaded: 0, total: Number(selectedListingVideoFile.size) || 0 });
+    let canceled = false;
+    listingVideoUploadCancelHandler = () => {
+        canceled = true;
+        clearListingVideoUploadState();
+        setListingVideoUploadButtonState({ mode: 'retry' });
+    };
+    const signed = await requestVipListingVideoTmpSignedUpload({
+        filename: selectedListingVideoFile?.name || 'video.mp4',
+        contentType: selectedListingVideoFile?.type || 'video/mp4'
+    });
+    if (!signed?.signedUrl || !signed?.path) {
+        clearListingVideoUploadState();
+        showToast(signed?.error || 'Upload vidéo échoué', 'alert-circle');
         setListingVideoUploadButtonState({ mode: 'retry' });
         return;
     }
-
-    setListingVideoUploadButtonState({ mode: 'hidden' });
-    const res = await uploadVipListingVideoToStorage({ listingId: targetListingId, file: selectedListingVideoFile });
+    if (canceled) return;
+    const res = await uploadVipListingVideoToStorage({ listingId: 0, file: selectedListingVideoFile, signed });
     if (!res?.video_path) {
         showToast(res?.error || 'Upload vidéo échoué', 'alert-circle');
         setListingVideoUploadButtonState({ mode: 'retry' });
         return;
     }
-
-    listingVideoUploadedMeta = {
-        listingId: targetListingId,
-        video_path: String(res.video_path || ''),
-        video_url: String(res.video_url || '')
-    };
-
-    const saveRes = await saveUploadedListingVideoMeta({
-        listingId: targetListingId,
-        video_path: res.video_path,
-        video_url: res.video_url
-    });
-    if (!saveRes.ok) {
-        showToast(saveRes.error || 'Upload vidéo échoué', 'alert-circle');
-        setListingVideoUploadButtonState({ mode: 'retry' });
-        return;
-    }
-
+    listingVideoTmpMeta = { path: String(res.video_path || ''), publicUrl: String(res.video_url || '') };
     showToast('Vidéo uploadée', 'check-circle');
     selectedListingVideoFile = null;
     setListingVideoUploadButtonState({ mode: 'done' });
@@ -8002,10 +7941,10 @@ async function requestVipListingVideoSignedUpload({ listingId, filename, content
     }
 }
 
-async function uploadVipListingVideoToStorage({ listingId, file } = {}) {
+async function uploadVipListingVideoToStorage({ listingId, file, signed } = {}) {
     const f = file || null;
     if (!f) return null;
-    if (listingVideoUploadActive) return { error: 'Upload déjà en cours' };
+    if (listingVideoUploadActive && !signed) return { error: 'Upload déjà en cours' };
     listingVideoUploadActive = true;
     setListingSubmitVideoUploadState(true);
     setListingVideoUploadOverlay({ visible: true, percent: 0, loaded: 0, total: Number(f.size) || 0 });
@@ -8019,21 +7958,24 @@ async function uploadVipListingVideoToStorage({ listingId, file } = {}) {
         clearListingVideoUploadState();
     };
 
-    const signed = await requestVipListingVideoSignedUpload({
-        listingId,
-        filename: f.name || 'video.mp4',
-        contentType: f.type || 'video/mp4'
-    });
+    const signedPayload =
+        signed && typeof signed === 'object'
+            ? signed
+            : await requestVipListingVideoSignedUpload({
+                  listingId,
+                  filename: f.name || 'video.mp4',
+                  contentType: f.type || 'video/mp4'
+              });
     if (canceled) return { error: 'Upload annulé' };
-    if (!signed?.signedUrl || !signed?.path) {
+    if (!signedPayload?.signedUrl || !signedPayload?.path) {
         clearListingVideoUploadState();
-        return { error: signed?.error || 'Signed upload URL missing' };
+        return { error: signedPayload?.error || 'Signed upload URL missing' };
     }
     reportVipVideoUploadDebugEvent('signed_put_start', {
         listingId: Number(listingId) || 0,
-        path: String(signed.path || ''),
+        path: String(signedPayload.path || ''),
         urlHost: (() => {
-            try { return new URL(String(signed.signedUrl)).host; } catch (e) { return ''; }
+            try { return new URL(String(signedPayload.signedUrl)).host; } catch (e) { return ''; }
         })(),
         size: Number(f.size) || 0,
         type: String(f.type || '')
@@ -8085,15 +8027,15 @@ async function uploadVipListingVideoToStorage({ listingId, file } = {}) {
                 return;
             }
             setListingVideoUploadOverlay({ visible: true, percent: 100, loaded: Number(f.size) || 0, total: Number(f.size) || 0 });
-            const videoUrl = String(signed.publicUrl || '').trim();
+            const videoUrl = String(signedPayload.publicUrl || '').trim();
             done({
-                video_path: String(signed.path || '').trim(),
+                video_path: String(signedPayload.path || '').trim(),
                 video_url: videoUrl
             });
         };
 
         try {
-            xhr.open('PUT', String(signed.signedUrl), true);
+            xhr.open('PUT', String(signedPayload.signedUrl), true);
             xhr.setRequestHeader('content-type', String(f.type || 'video/mp4'));
             xhr.send(f);
         } catch (e) {
@@ -8129,7 +8071,6 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
     const submitBtn = e.target?.querySelector?.('button[type="submit"]') || null;
     const originalBtnText = submitBtn?.textContent || '';
     const isEditMode = createListingMode === 'edit' && Number(editingListingId) > 0;
-    const isDraftMode = !isEditMode && createListingMode === 'create' && Number(draftListingId) > 0;
     if (submitBtn) {
         submitBtn.disabled = true;
         submitBtn.textContent = isEditMode ? 'Saving...' : 'Posting...';
@@ -8158,6 +8099,11 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             showToast('Upload vidéo en cours…', 'loader');
             return;
         }
+        const wantsVideo = !!selectedListingVideoObjectUrl;
+        if (wantsVideo && !listingVideoTmpMeta?.path) {
+            showToast('Vidéo non uploadée. Réessayez ou retirez la vidéo.', 'alert-circle');
+            return;
+        }
         const { data: userData, error: userErr } = await withTimeout(
             client.auth.getUser(),
             12000,
@@ -8179,9 +8125,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             !!(ensuredProfile?.is_vip ?? ensuredProfile?.vip ?? userProfile?.isVip) ||
             !!(ensuredProfile?.verified ?? ensuredProfile?.is_verified ?? userProfile?.verified);
         const isVipAccount = !!(ensuredProfile?.is_vip ?? ensuredProfile?.vip ?? userProfile?.isVip);
-        const existingListing = (isEditMode || isDraftMode)
-            ? listings.find((l) => l && l.id === Number(isEditMode ? editingListingId : draftListingId))
-            : null;
+        const existingListing = isEditMode ? listings.find((l) => l && l.id === Number(editingListingId)) : null;
 
         const title = document.getElementById('listingTitle').value.trim();
         const description = document.getElementById('listingDescription')?.value?.trim?.() || '';
@@ -8264,7 +8208,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             return;
         }
 
-        if (!isEditMode && !isDraftMode && !isPrivilegedAccount) {
+        if (!isEditMode && !isPrivilegedAccount) {
             const { data: existingUserListings, error: limitErr } = await withTimeout(
                 client.from('listings').select('id').eq('owner_id', userId).limit(FREE_LISTING_LIMIT + 1),
                 12000,
@@ -8280,8 +8224,8 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             }
         }
 
-        if (isEditMode || isDraftMode) {
-            const listingId = Number(isEditMode ? editingListingId : draftListingId);
+        if (isEditMode) {
+            const listingId = Number(editingListingId);
             const objectPaths = [];
             const finalUrls = [];
             for (let i = 0; i < imagePlan.length; i++) {
@@ -8314,36 +8258,21 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 }
                 finalUrls.push(publicUrl);
             }
-            if (isVipAccount) {
-                const uploaded = listingVideoUploadedMeta?.listingId === listingId ? listingVideoUploadedMeta : null;
-                if (uploaded?.video_path) {
-                    const posterUrl = finalUrls[0] || existingListing?.image || '';
-                    mergedDetails = {
-                        ...(mergedDetails || {}),
-                        video_path: String(uploaded.video_path || ''),
-                        video_url: String(uploaded.video_url || ''),
-                        video_poster_url: posterUrl || null
-                    };
-                    details = Object.keys(mergedDetails).length ? mergedDetails : null;
-                } else if (selectedListingVideoFile) {
-                    const videoRes = await uploadVipListingVideoToStorage({ listingId, file: selectedListingVideoFile });
-                    if (!videoRes?.video_path) {
-                        showToast(videoRes?.error || 'Upload vidéo échoué', 'alert-circle');
-                        return;
-                    }
-                    let videoUrl = String(videoRes.video_url || '').trim();
-                    if (!videoUrl) {
-                        try {
-                            const { data: publicData } = client.storage.from(LISTING_VIDEOS_BUCKET).getPublicUrl(String(videoRes.video_path || '').trim());
-                            videoUrl = publicData?.publicUrl || '';
-                        } catch (e) {
-                            videoUrl = '';
-                        }
-                    }
-                    const posterUrl = finalUrls[0] || existingListing?.image || '';
-                    mergedDetails = { ...(mergedDetails || {}), video_path: String(videoRes.video_path || ''), video_url: videoUrl, video_poster_url: posterUrl || null };
-                    details = Object.keys(mergedDetails).length ? mergedDetails : null;
+            if (isVipAccount && listingVideoTmpMeta?.path) {
+                const attachRes = await requestVipListingVideoAttach({ listingId, tmpPath: listingVideoTmpMeta.path });
+                if (!attachRes?.video_path) {
+                    showToast(attachRes?.error || 'Upload vidéo échoué', 'alert-circle');
+                    return;
                 }
+                const posterUrl = finalUrls[0] || existingListing?.image || '';
+                mergedDetails = {
+                    ...(mergedDetails || {}),
+                    video_path: String(attachRes.video_path || ''),
+                    video_url: String(attachRes.video_url || ''),
+                    video_poster_url: posterUrl || null
+                };
+                details = Object.keys(mergedDetails).length ? mergedDetails : null;
+                listingVideoTmpMeta = null;
             }
             const updatePayload = {
                 title,
@@ -8361,7 +8290,6 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 tags: tags.length ? tags : null,
                 details
             };
-            if (isDraftMode) updatePayload.status = 'active';
             const { error: updateErr } = await withTimeout(
                 client
                     .from('listings')
@@ -8397,10 +8325,9 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 showToast(msg.includes('row-level security') ? 'Listing images: permission denied (RLS)' : msg, 'alert-circle');
                 return;
             }
-            showToast(isDraftMode ? "Annonce publiée !" : "Annonce mise à jour !", 'check-circle');
+            showToast("Annonce mise à jour !", 'check-circle');
             editingListingId = null;
-            draftListingId = null;
-            listingVideoUploadedMeta = null;
+            listingVideoTmpMeta = null;
             createListingMode = 'create';
             setCreateListingPageMode('create');
             resetCreateListingDraft({ resetForm: true });
@@ -8489,23 +8416,22 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             return;
         }
 
-        if (isVipAccount && selectedListingVideoFile) {
-            const videoRes = await uploadVipListingVideoToStorage({ listingId, file: selectedListingVideoFile });
-            if (!videoRes?.video_path) {
-                showToast(videoRes?.error || 'Video upload failed', 'alert-circle');
+        if (isVipAccount && listingVideoTmpMeta?.path) {
+            const attachRes = await requestVipListingVideoAttach({ listingId, tmpPath: listingVideoTmpMeta.path });
+            if (!attachRes?.video_path) {
+                try { await client.storage.from(LISTING_IMAGES_BUCKET).remove(objectPaths); } catch (e) { null; }
+                await client.from('listing_images').delete().eq('listing_id', listingId);
+                await client.from('listings').delete().eq('id', listingId).eq('owner_id', userId);
+                showToast(attachRes?.error || 'Upload vidéo échoué', 'alert-circle');
                 return;
             }
-            let videoUrl = String(videoRes.video_url || '').trim();
-            if (!videoUrl) {
-                try {
-                    const { data: publicData } = client.storage.from(LISTING_VIDEOS_BUCKET).getPublicUrl(String(videoRes.video_path || '').trim());
-                    videoUrl = publicData?.publicUrl || '';
-                } catch (e) {
-                    videoUrl = '';
-                }
-            }
             const posterUrl = imageRows[0]?.url || '';
-            mergedDetails = { ...(mergedDetails || {}), video_path: String(videoRes.video_path || ''), video_url: videoUrl, video_poster_url: posterUrl || null };
+            mergedDetails = {
+                ...(mergedDetails || {}),
+                video_path: String(attachRes.video_path || ''),
+                video_url: String(attachRes.video_url || ''),
+                video_poster_url: posterUrl || null
+            };
             details = Object.keys(mergedDetails).length ? mergedDetails : null;
             const { error: videoSaveErr } = await withTimeout(
                 client.from('listings').update({ details }).eq('id', listingId).eq('owner_id', userId),
@@ -8513,10 +8439,14 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 'Saving video timed out'
             );
             if (videoSaveErr) {
+                try { await client.storage.from(LISTING_IMAGES_BUCKET).remove(objectPaths); } catch (e) { null; }
+                await client.from('listing_images').delete().eq('listing_id', listingId);
+                await client.from('listings').delete().eq('id', listingId).eq('owner_id', userId);
                 const msg = videoSaveErr?.message || 'Failed to save video';
                 showToast(msg.includes('row-level security') ? 'Listings: permission denied (RLS)' : msg, 'alert-circle');
                 return;
             }
+            listingVideoTmpMeta = null;
         }
 
         showToast('Listing posted!', 'check-circle');
@@ -11270,7 +11200,7 @@ function handleSort() {
 }
 
 function getFilteredListings() {
-    let filtered = [...listings].filter((l) => String(l?.status || '') !== 'draft');
+    let filtered = [...listings];
     if (currentFilters.search) {
         filtered = filtered.filter(l => l.title.toLowerCase().includes(currentFilters.search) || l.category.toLowerCase().includes(currentFilters.search));
     }
@@ -13145,7 +13075,7 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
         seller.rating = 0;
         seller.reviews = 0;
     }
-    const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === ownerId && String(l?.status || '') !== 'draft');
+    const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === ownerId);
     if (!content) return;
     content.innerHTML = `
         <div class="profile-header">
@@ -13278,7 +13208,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         seller.reviews = 0;
     }
     if (!content) return;
-    const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === profileRow.id && String(l?.status || '') !== 'draft');
+    const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === profileRow.id);
     content.innerHTML = `
         <div class="profile-header">
             <div class="cover-photo-container">

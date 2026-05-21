@@ -30,8 +30,8 @@ function pickKeyFromJson(raw: string) {
   }
 }
 
-function safeName(name: string) {
-  return String(name || "video.mp4").replace(/[^a-zA-Z0-9._-]/g, "_");
+function safeSegment(s: string) {
+  return String(s || "").replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
 Deno.serve(async (req) => {
@@ -70,13 +70,9 @@ Deno.serve(async (req) => {
   }
 
   const listingId = Number(body?.listingId) || 0;
-  const filename = safeName(String(body?.filename || "video.mp4"));
-  const contentType = String(body?.contentType || "video/mp4").toLowerCase();
-
+  const tmpPath = String(body?.tmpPath || "").trim();
   if (!listingId) return json(400, { error: "Missing listingId" });
-  if (!contentType.startsWith("video/")) {
-    return json(400, { error: "Invalid content type" });
-  }
+  if (!tmpPath) return json(400, { error: "Missing tmpPath" });
 
   const userClient = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: authHeader, apikey: anonKey } },
@@ -89,6 +85,10 @@ Deno.serve(async (req) => {
     return json(401, { error: "Invalid auth" });
   }
   const userId = requesterData.user.id;
+
+  if (!tmpPath.startsWith(`${userId}/tmp/`)) {
+    return json(400, { error: "Invalid tmpPath" });
+  }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
@@ -113,24 +113,24 @@ Deno.serve(async (req) => {
     return json(403, { error: "Not owner" });
   }
 
+  const filename = safeSegment(tmpPath.split("/").slice(-1)[0] || "video.mp4");
   const objectPath = `${userId}/${listingId}/${Date.now()}_${filename}`;
-  const { data, error } = await adminClient.storage
-    .from("listing-videos")
-    .createSignedUploadUrl(objectPath);
 
-  if (error || !data?.signedUrl) {
-    return json(500, { error: "Failed to create signed upload url" });
+  const bucket = adminClient.storage.from("listing-videos");
+  const moved = await bucket.move(tmpPath, objectPath);
+  if (moved.error) {
+    const copied = await bucket.copy(tmpPath, objectPath);
+    if (copied.error) {
+      return json(500, { error: "Failed to move video" });
+    }
+    await bucket.remove([tmpPath]);
   }
 
-  const { data: publicData } = adminClient.storage
-    .from("listing-videos")
-    .getPublicUrl(objectPath);
+  const { data: publicData } = bucket.getPublicUrl(objectPath);
 
   return json(200, {
-    path: objectPath,
-    signedUrl: data.signedUrl,
-    token: data.token,
-    publicUrl: publicData?.publicUrl || "",
+    video_path: objectPath,
+    video_url: publicData?.publicUrl || "",
   });
 });
 

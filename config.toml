@@ -9,3 +9,9 @@ verify_jwt = false
 
 [functions.vip-listing-video-upload]
 verify_jwt = false
+
+[functions.vip-listing-video-tmp-upload]
+verify_jwt = false
+
+[functions.vip-listing-video-attach]
+verify_jwt = false
