@@ -2142,14 +2142,19 @@ main.expanded {
     pointer-events: none;
 }
 
-.vip-video-poster {
+.vip-video-loader {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    border-radius: inherit;
+    overflow: hidden;
     opacity: 1;
     transition: opacity 160ms ease;
+    background:
+        radial-gradient(120px 120px at 30% 30%, rgba(255, 107, 0, 0.25), transparent 60%),
+        radial-gradient(160px 160px at 70% 60%, rgba(255, 193, 7, 0.18), transparent 65%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.06));
 }
 
 .vip-video-preview {
@@ -2164,7 +2169,7 @@ main.expanded {
     opacity: 1;
 }
 
-.vip-video-card-media[data-video-ready="1"] .vip-video-poster {
+.vip-video-card-media[data-video-ready="1"] .vip-video-loader {
     opacity: 0;
 }
 

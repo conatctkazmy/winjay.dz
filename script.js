@@ -11561,14 +11561,13 @@ function createVipVideoCardHTML(item) {
     const availability = String(item.availability || '').toLowerCase();
     const badgeText = availability === 'sold' ? 'Sold' : (availability === 'reserved' ? 'Reserved' : '');
     const carouselImages = getListingImagesForDetail(item).slice(0, 2);
-    const poster = getListingVideoMeta(item).poster || carouselImages[0] || item.image || '';
     const videoUrl = getListingVideoPublicUrl(item);
     const muted = getVipVideoMutedPreference();
     const muteIcon = muted ? 'volume-x' : 'volume-2';
     const mediaHTML = videoUrl
         ? `<div class="card-media-wrap vip-video-card-media">
-                <img class="vip-video-poster" src="${poster}" alt="${escapeHtml(item.title)}" loading="lazy" decoding="async" fetchpriority="low">
-                <video class="card-img vip-video-preview" data-vip-video="1" data-listing-id="${item.id}" data-src="${videoUrl}" poster="${poster}" playsinline muted loop preload="none"></video>
+                <div class="vip-video-loader" aria-hidden="true"></div>
+                <video class="card-img vip-video-preview" data-vip-video="1" data-listing-id="${item.id}" data-src="${videoUrl}" playsinline muted loop preload="none"></video>
                 <button type="button" class="vip-video-mute-btn" data-listing-id="${item.id}" data-muted="${muted ? '1' : '0'}" aria-label="${muted ? 'Activer le son' : 'Couper le son'}" onclick="toggleVipVideoMuted(event, ${item.id})"><i data-lucide="${muteIcon}"></i></button>
             </div>`
         : `<div class="card-media-wrap"><img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
