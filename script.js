@@ -4798,20 +4798,6 @@ const toastContainer = document.getElementById('toastContainer');
 loadThemeModeFromStorage();
 
 document.addEventListener('DOMContentLoaded', async () => {
-    try {
-        const root = document.documentElement;
-        if (root.classList.contains('app-loading')) root.classList.remove('app-loading');
-        const home = document.getElementById('home-section');
-        if (home) {
-            home.style.display = 'block';
-        }
-        const grid = document.getElementById('listingsGrid');
-        if (grid && (!grid.innerHTML || String(grid.innerHTML).trim() === '')) {
-            grid.innerHTML = getHomeListingsSkeletonHTML(12);
-        }
-    } catch (e) {
-        null;
-    }
     setPendingReferralFromUrl();
     updateNavbarAuthUI();
     initSupabase();
