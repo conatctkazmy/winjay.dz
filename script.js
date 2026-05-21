@@ -11522,23 +11522,14 @@ function getVipVideoListingsForHome() {
 let vipVideoAutoplayObserver = null;
 let vipVideoAutoplayCleanupTimer = null;
 const VIP_VIDEO_MUTED_STORAGE_KEY = 'winjayVipVideoMutedV1';
+let vipVideoSessionUnmuted = false;
 
 function getVipVideoMutedPreference() {
-    try {
-        const raw = localStorage.getItem(VIP_VIDEO_MUTED_STORAGE_KEY);
-        if (raw === null) return true;
-        return raw === 'true';
-    } catch (e) {
-        return true;
-    }
+    return !vipVideoSessionUnmuted;
 }
 
 function setVipVideoMutedPreference(value) {
-    try {
-        localStorage.setItem(VIP_VIDEO_MUTED_STORAGE_KEY, value ? 'true' : 'false');
-    } catch (e) {
-        null;
-    }
+    vipVideoSessionUnmuted = !value;
 }
 
 function getListingVideoPublicUrl(item) {
