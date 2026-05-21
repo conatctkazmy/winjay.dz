@@ -7608,6 +7608,52 @@ function openShareModal(listingId) {
     window.open(`https://t.me/share/url?url=${url}&text=${shareText}`, '_blank');
 }
 
+//#region debug-point vip-video-upload-failed
+const DEBUG_VIP_VIDEO_UPLOAD_SESSION_ID = 'vip-video-upload-failed';
+const DEBUG_VIP_VIDEO_UPLOAD_RUN_ID = 'pre';
+const DEBUG_VIP_VIDEO_UPLOAD_DEFAULT_SERVER_URL = 'http://127.0.0.1:7778/event';
+
+function getVipVideoUploadDebugServerUrl() {
+    try {
+        const override = localStorage.getItem('winjayDebugServerUrl') || '';
+        if (override && /^https?:\/\//i.test(override)) return override;
+    } catch (e) {
+        null;
+    }
+    return DEBUG_VIP_VIDEO_UPLOAD_DEFAULT_SERVER_URL;
+}
+
+function debugVipVideoUploadEnabled() {
+    try {
+        if (localStorage.getItem('winjayDebugVipVideoUpload') === '1') return true;
+        const hasOverride = localStorage.getItem('winjayDebugServerUrl') || '';
+        if (hasOverride) return true;
+    } catch (e) {
+        null;
+    }
+    return location.protocol === 'file:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+}
+
+async function reportVipVideoUploadDebugEvent(eventName, data) {
+    if (!debugVipVideoUploadEnabled()) return;
+    try {
+        await fetch(getVipVideoUploadDebugServerUrl(), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: DEBUG_VIP_VIDEO_UPLOAD_SESSION_ID,
+                runId: DEBUG_VIP_VIDEO_UPLOAD_RUN_ID,
+                pointId: 'vip-video-upload',
+                eventName,
+                data: data || {}
+            })
+        });
+    } catch (e) {
+        null;
+    }
+}
+//#endregion debug-point vip-video-upload-failed
+
 async function requestVipListingVideoSignedUpload({ listingId, filename, contentType } = {}) {
     const client = initSupabase();
     if (!client) return null;
@@ -7616,6 +7662,13 @@ async function requestVipListingVideoSignedUpload({ listingId, filename, content
     if (!token) return null;
     const safeListingId = Number(listingId) || 0;
     if (!safeListingId) return null;
+    reportVipVideoUploadDebugEvent('signed_upload_request_start', {
+        listingId: safeListingId,
+        hasToken: !!token,
+        url: `${SUPABASE_PROJECT_URL}/functions/v1/vip-listing-video-upload`,
+        contentType: String(contentType || 'video/mp4'),
+        filename: String(filename || '')
+    });
     try {
         const res = await fetch(`${SUPABASE_PROJECT_URL}/functions/v1/vip-listing-video-upload`, {
             method: 'POST',
@@ -7631,6 +7684,13 @@ async function requestVipListingVideoSignedUpload({ listingId, filename, content
             })
         });
         const raw = await res.text();
+        reportVipVideoUploadDebugEvent('signed_upload_request_response', {
+            listingId: safeListingId,
+            status: res.status,
+            ok: res.ok,
+            contentType: res.headers?.get?.('content-type') || '',
+            bodyPreview: String(raw || '').slice(0, 500)
+        });
         let payload = null;
         try {
             payload = raw ? JSON.parse(raw) : null;
@@ -7645,6 +7705,11 @@ async function requestVipListingVideoSignedUpload({ listingId, filename, content
         }
         return payload;
     } catch (e) {
+        reportVipVideoUploadDebugEvent('signed_upload_request_error', {
+            listingId: safeListingId,
+            name: String(e?.name || ''),
+            message: String(e?.message || e || '')
+        });
         return { error: 'Video upload request failed' };
     }
 }
@@ -7660,6 +7725,15 @@ async function uploadVipListingVideoToStorage({ listingId, file } = {}) {
     if (!signed?.signedUrl || !signed?.path) {
         return { error: signed?.error || 'Signed upload URL missing' };
     }
+    reportVipVideoUploadDebugEvent('signed_put_start', {
+        listingId: Number(listingId) || 0,
+        path: String(signed.path || ''),
+        urlHost: (() => {
+            try { return new URL(String(signed.signedUrl)).host; } catch (e) { return ''; }
+        })(),
+        size: Number(f.size) || 0,
+        type: String(f.type || '')
+    });
     let put = null;
     try {
         put = await fetch(String(signed.signedUrl), {
@@ -7670,13 +7744,29 @@ async function uploadVipListingVideoToStorage({ listingId, file } = {}) {
             body: f
         });
     } catch (e) {
+        reportVipVideoUploadDebugEvent('signed_put_error', {
+            listingId: Number(listingId) || 0,
+            name: String(e?.name || ''),
+            message: String(e?.message || e || '')
+        });
         put = null;
     }
     if (!put?.ok) {
         let raw = '';
         try { raw = put ? await put.text() : ''; } catch (e) { raw = ''; }
+        reportVipVideoUploadDebugEvent('signed_put_response', {
+            listingId: Number(listingId) || 0,
+            ok: false,
+            status: put?.status || null,
+            bodyPreview: String(raw || '').slice(0, 500)
+        });
         return { error: raw || `Video upload failed (${put?.status || 'network'})` };
     }
+    reportVipVideoUploadDebugEvent('signed_put_response', {
+        listingId: Number(listingId) || 0,
+        ok: true,
+        status: put?.status || null
+    });
     const videoUrl = String(signed.publicUrl || '').trim();
     return {
         video_path: String(signed.path || '').trim(),
