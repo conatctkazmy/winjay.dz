@@ -2092,7 +2092,7 @@ main.expanded {
     padding: 14px;
     border: 1px solid var(--border-color);
     border-radius: 18px;
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.10), rgba(255, 140, 0, 0.08));
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.32), rgba(255, 179, 0, 0.18));
 }
 
 .vip-video-head {
