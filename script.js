@@ -5277,6 +5277,24 @@ const CATEGORY_LABELS = {
     "Services": { fr: "Services", en: "Services", ar: "خدمات" }
 };
 
+const WORK_CATEGORY_TO_LISTING = {
+    'Hôtel': { category: 'Hébergement', subcategory: 'Hôtel' },
+    'Auberge': { category: 'Hébergement', subcategory: 'Auberge' },
+    'Maison d\'hôtes': { category: 'Hébergement', subcategory: 'Maison d\'hôtes' },
+    'Resort': { category: 'Hébergement', subcategory: 'Villa de vacances' },
+    'Restaurant': { category: 'Boutiques', subcategory: 'Restaurants & cafés' },
+    'Fast-food': { category: 'Boutiques', subcategory: 'Restaurants & cafés' },
+    'Café': { category: 'Boutiques', subcategory: 'Restaurants & cafés' },
+    'Boulangerie / Pâtisserie': { category: 'Boutiques', subcategory: 'Restaurants & cafés' },
+    'Traiteur': { category: 'Boutiques', subcategory: 'Restaurants & cafés' },
+    'Food truck': { category: 'Boutiques', subcategory: 'Restaurants & cafés' },
+    'Boucherie / Charcuterie': { category: 'Alimentaires', subcategory: 'Viandes & poissons' },
+    'Épicerie / Supérette': { category: 'Boutiques', subcategory: 'Épiceries & supérettes' },
+    'Glacier / Jus': { category: 'Boutiques', subcategory: 'Restaurants & cafés' },
+    'Agence de voyage': { category: 'Voyages', subcategory: 'Agences & packs' },
+    'Guide touristique': { category: 'Voyages', subcategory: 'Excursions' }
+};
+
 let homeCategorySwipeMode = 'main';
 let homeCategorySwipeMainCategory = '';
 
@@ -11844,6 +11862,7 @@ function openCreateListingPage({ pushState = true } = {}) {
     if (phoneInput && !phoneInput.value && userProfile?.phone) {
         phoneInput.value = userProfile.phone;
     }
+    autoFillCategoryFromProfile();
     try {
         setupSelectPickers();
     } catch (e) {
@@ -11851,6 +11870,22 @@ function openCreateListingPage({ pushState = true } = {}) {
     }
     setCreateListingStep('category');
     lucide.createIcons();
+}
+
+function autoFillCategoryFromProfile() {
+    const workCat = userProfile?.work_category;
+    if (!workCat) return;
+    const mapping = WORK_CATEGORY_TO_LISTING[workCat];
+    if (!mapping) return;
+    const catSelect = document.getElementById('listingCategory');
+    const subSelect = document.getElementById('listingSubcategory');
+    if (!catSelect || !subSelect) return;
+    catSelect.value = mapping.category;
+    catSelect.dispatchEvent(new Event('change'));
+    setTimeout(() => {
+        subSelect.value = mapping.subcategory;
+        subSelect.dispatchEvent(new Event('change'));
+    }, 50);
 }
 
 function handleListingRoutesFromUrl() {
