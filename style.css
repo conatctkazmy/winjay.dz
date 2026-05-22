@@ -2092,7 +2092,7 @@ main.expanded {
     padding: 14px;
     border: 1px solid var(--border-color);
     border-radius: 18px;
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.32), rgba(255, 179, 0, 0.18));
+    background: var(--bg-main);
 }
 
 .vip-video-head {
@@ -2107,6 +2107,16 @@ main.expanded {
     margin: 0;
     font-weight: 800;
     letter-spacing: 0.2px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vip-video-title i,
+.vip-video-title svg {
+    width: 18px;
+    height: 18px;
+    color: #b88300;
 }
 
 .vip-video-subtitle {
