@@ -552,7 +552,7 @@ body.modal-open .mobile-footer-bar {
 
 html.dropdown-open,
 body.dropdown-open {
-    overflow-y: scroll;
+    overflow: hidden;
     overscroll-behavior: none;
 }
 
