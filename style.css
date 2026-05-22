@@ -2243,16 +2243,20 @@ html[dir="rtl"] .is-touch-device main {
 }
 
 .home-category-swipe-list {
-    max-height: 360px;
-    overflow-y: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
     overscroll-behavior: contain;
-    scroll-snap-type: y mandatory;
-    padding-right: 6px;
+    scroll-snap-type: x mandatory;
+    display: flex;
+    gap: 10px;
+    padding: 2px 2px 8px;
 }
 
 .home-category-swipe-item {
-    width: 100%;
-    display: flex;
+    flex: 0 0 auto;
+    min-width: 140px;
+    max-width: 180px;
+    display: inline-flex;
     align-items: center;
     gap: 12px;
     padding: 12px 12px;
@@ -2276,7 +2280,7 @@ html[dir="rtl"] .is-touch-device main {
 }
 
 .home-category-swipe-item + .home-category-swipe-item {
-    margin-top: 10px;
+    margin-top: 0;
 }
 
 .home-category-swipe-item i,
@@ -2302,7 +2306,12 @@ html[dir="rtl"] .home-category-swipe-item {
 
 @media (max-width: 768px) {
     .home-category-swipe-list {
-        max-height: 280px;
+        gap: 8px;
+    }
+
+    .home-category-swipe-item {
+        min-width: 128px;
+        max-width: 170px;
     }
 }
 
