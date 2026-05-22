@@ -5227,6 +5227,7 @@ const categories = [
     { name: "Loisirs & Divertissements", icon: "palmtree" },
     { name: "Sport", icon: "trophy" },
     { name: "Emploi", icon: "briefcase" },
+    { name: "Hébergement", icon: "bed-double" },
     { name: "Matériaux & Équipement", icon: "wrench" },
     { name: "Alimentaires", icon: "utensils" },
     { name: "Voyages", icon: "plane" },
@@ -5269,6 +5270,7 @@ const CATEGORY_LABELS = {
     "Loisirs & Divertissements": { fr: "Loisirs & Divertissements", en: "Leisure & Entertainment", ar: "ترفيه وهوايات" },
     "Sport": { fr: "Sport", en: "Sports", ar: "رياضة" },
     "Emploi": { fr: "Emploi", en: "Jobs", ar: "وظائف" },
+    "Hébergement": { fr: "Hébergement", en: "Accommodation", ar: "إقامة" },
     "Matériaux & Équipement": { fr: "Matériaux & Équipement", en: "Materials & Equipment", ar: "مواد ومعدات" },
     "Alimentaires": { fr: "Alimentaires", en: "Food", ar: "مواد غذائية" },
     "Voyages": { fr: "Voyages", en: "Travel", ar: "سفر" },
@@ -6534,6 +6536,10 @@ const listingDynamicFieldSchemas = {
         { key: 'price', label: 'Prix', type: 'text', required: false, placeholder: 'ex: 2000 DA' },
         { key: 'availability', label: 'Disponibilité', type: 'text', required: false, placeholder: 'ex: 7j/7' },
         { key: 'experience', label: 'Expérience', type: 'text', required: false, placeholder: 'ex: 5 ans' }
+    ],
+    "Hébergement::*": [
+        { key: 'property_type', label: 'Type', type: 'select', required: true, options: ['Hôtel', 'Auberge', 'Résidence hôtelière', 'Appartement meublé', 'Villa de vacances', 'Chalet', 'Maison d\'hôtes'] },
+        { key: 'stars', label: 'Étoiles', type: 'text', required: false, placeholder: 'ex: 3' }
     ]
 };
 
@@ -6684,9 +6690,13 @@ function setupListingSubcategorySelects() {
         const refresh = () => {
             populateListingSubcategorySelect(subAdd, mainAdd.value, '');
             renderListingDynamicFields();
+            toggleHotelFieldsVisibility();
         };
         mainAdd.addEventListener('change', refresh);
-        subAdd.addEventListener('change', () => renderListingDynamicFields());
+        subAdd.addEventListener('change', () => {
+            renderListingDynamicFields();
+            toggleHotelFieldsVisibility();
+        });
         refresh();
     }
     if (mainEdit && subEdit) {
@@ -6694,6 +6704,155 @@ function setupListingSubcategorySelects() {
         mainEdit.addEventListener('change', refresh);
         refresh();
     }
+}
+
+function toggleHotelFieldsVisibility() {
+    const catEl = document.getElementById('listingCategory');
+    const subEl = document.getElementById('listingSubcategory');
+    const hotelSection = document.getElementById('hotelFieldsSection');
+    if (!catEl || !hotelSection) return;
+    const cat = catEl.value || '';
+    const sub = subEl?.value || '';
+    const isHotel = normalizeListingCategory(cat, sub) === 'Hébergement';
+    hotelSection.style.display = isHotel ? 'block' : 'none';
+}
+
+let hotelRoomCount = 0;
+
+function addHotelRoomField(roomData = {}) {
+    const container = document.getElementById('hotelRoomsList');
+    if (!container) return;
+    const id = hotelRoomCount++;
+    const card = document.createElement('div');
+    card.className = 'hotel-room-card';
+    card.id = `hotelRoomCard_${id}`;
+    card.innerHTML = `
+        <div class="hotel-room-card-header">
+            <span class="hotel-room-card-title">Chambre ${id + 1}</span>
+            <button type="button" class="hotel-room-card-remove" onclick="removeHotelRoomField('hotelRoomCard_${id}')">
+                <i data-lucide="trash-2"></i>
+            </button>
+        </div>
+        <div class="hotel-room-grid">
+            <div class="form-group">
+                <label>Nom de la chambre</label>
+                <input type="text" id="hotelRoomName_${id}" placeholder="ex: Chambre Double Standard" value="${roomData.room_name || ''}">
+            </div>
+            <div class="form-group">
+                <label>Prix/nuit (DA)</label>
+                <input type="number" id="hotelRoomPrice_${id}" placeholder="0" value="${roomData.price_per_night || ''}">
+            </div>
+            <div class="form-group">
+                <label>Adultes max</label>
+                <input type="number" id="hotelRoomAdults_${id}" min="1" max="10" value="${roomData.max_adults || 2}">
+            </div>
+            <div class="form-group">
+                <label>Enfants max</label>
+                <input type="number" id="hotelRoomChildren_${id}" min="0" max="10" value="${roomData.max_children || 0}">
+            </div>
+            <div class="form-group">
+                <label>Type de lit</label>
+                <select id="hotelRoomBed_${id}">
+                    <option value="">Sélectionnez</option>
+                    <option value="1 King">1 Lit King</option>
+                    <option value="1 Queen">1 Lit Queen</option>
+                    <option value="2 Simple">2 Lits Simple</option>
+                    <option value="1 Double">1 Lit Double</option>
+                    <option value="1 Double + 1 Simple">1 Double + 1 Simple</option>
+                    <option value="3 Simple">3 Lits Simple</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Chambres disponibles</label>
+                <input type="number" id="hotelRoomAvailable_${id}" min="1" max="100" value="${roomData.rooms_available || 1}">
+            </div>
+            <div class="form-group hotel-room-grid-full">
+                <label>Vue</label>
+                <select id="hotelRoomView_${id}">
+                    <option value="">Aucune</option>
+                    <option value="mer">Mer</option>
+                    <option value="piscine">Piscine</option>
+                    <option value="ville">Ville</option>
+                    <option value="montagne">Montagne</option>
+                    <option value="jardin">Jardin</option>
+                </select>
+            </div>
+            <div class="form-group hotel-room-grid-full">
+                <label>Salle de bain</label>
+                <select id="hotelRoomBathroom_${id}">
+                    <option value="">Sélectionnez</option>
+                    <option value="douche">Douche</option>
+                    <option value="baignoire">Baignoire</option>
+                    <option value="douche_baignoire">Douche + Baignoire</option>
+                </select>
+            </div>
+        </div>
+    `;
+    container.appendChild(card);
+    if (roomData.bed_type) {
+        const bedSelect = document.getElementById(`hotelRoomBed_${id}`);
+        if (bedSelect) bedSelect.value = roomData.bed_type;
+    }
+    if (roomData.room_view) {
+        const viewSelect = document.getElementById(`hotelRoomView_${id}`);
+        if (viewSelect) viewSelect.value = roomData.room_view;
+    }
+    if (roomData.bathroom_type) {
+        const bathSelect = document.getElementById(`hotelRoomBathroom_${id}`);
+        if (bathSelect) bathSelect.value = roomData.bathroom_type;
+    }
+    lucide.createIcons();
+}
+
+function removeHotelRoomField(cardId) {
+    const card = document.getElementById(cardId);
+    if (card) card.remove();
+}
+
+function collectHotelData() {
+    const catEl = document.getElementById('listingCategory');
+    const cat = catEl?.value || '';
+    const sub = document.getElementById('listingSubcategory')?.value || '';
+    if (normalizeListingCategory(cat, sub) !== 'Hébergement') return null;
+
+    const services = Array.from(document.querySelectorAll('input[name="hotelService"]:checked')).map(cb => cb.value);
+    const payments = Array.from(document.querySelectorAll('input[name="hotelPayment"]:checked')).map(cb => cb.value);
+
+    const rooms = [];
+    document.querySelectorAll('.hotel-room-card').forEach(card => {
+        const id = card.id.split('_')[1];
+        rooms.push({
+            room_name: document.getElementById(`hotelRoomName_${id}`)?.value || '',
+            price_per_night: parseFloat(document.getElementById(`hotelRoomPrice_${id}`)?.value) || 0,
+            max_adults: parseInt(document.getElementById(`hotelRoomAdults_${id}`)?.value) || 2,
+            max_children: parseInt(document.getElementById(`hotelRoomChildren_${id}`)?.value) || 0,
+            bed_type: document.getElementById(`hotelRoomBed_${id}`)?.value || '',
+            rooms_available: parseInt(document.getElementById(`hotelRoomAvailable_${id}`)?.value) || 1,
+            room_view: document.getElementById(`hotelRoomView_${id}`)?.value || '',
+            bathroom_type: document.getElementById(`hotelRoomBathroom_${id}`)?.value || ''
+        });
+    });
+
+    return {
+        stars: document.getElementById('hotelStars')?.value || '',
+        check_in: document.getElementById('hotelCheckIn')?.value || '14:00',
+        check_out: document.getElementById('hotelCheckOut')?.value || '12:00',
+        cancellation: document.getElementById('hotelCancellation')?.value || 'free',
+        free_cancellation_days: parseInt(document.getElementById('hotelFreeCancellationDays')?.value) || 0,
+        children_policy: document.getElementById('hotelChildren')?.value || 'allowed',
+        pets_policy: document.getElementById('hotelPets')?.value || 'not_allowed',
+        smoking_policy: document.getElementById('hotelSmoking')?.value || 'not_allowed',
+        whatsapp: document.getElementById('hotelWhatsApp')?.value || '',
+        website: document.getElementById('hotelWebsite')?.value || '',
+        license: document.getElementById('hotelLicense')?.value || '',
+        min_stay: parseInt(document.getElementById('hotelMinStay')?.value) || 1,
+        max_stay: parseInt(document.getElementById('hotelMaxStay')?.value) || 30,
+        latitude: parseFloat(document.getElementById('hotelLat')?.value) || null,
+        longitude: parseFloat(document.getElementById('hotelLng')?.value) || null,
+        services,
+        payments,
+        rooms
+    };
 }
 
 function populateAllExtraCategories() {

@@ -145,6 +145,7 @@
                         <li><a href="#" onclick="filterByCategory('Informatique', this); return false;"><i data-lucide="monitor"></i> <span data-i18n="cat_it">Informatique</span></a></li>
                         <li><a href="#" onclick="filterByCategory('Téléphonie', this); return false;"><i data-lucide="phone"></i> <span data-i18n="cat_telephony">Téléphonie</span></a></li>
                         <li><a href="#" onclick="filterByCategory('Sport & Santé', this); return false;"><i data-lucide="heart-pulse"></i> <span data-i18n="cat_sport_health">Sport & Santé</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Hébergement', this); return false;"><i data-lucide="bed-double"></i> <span data-i18n="cat_accommodation">Hébergement</span></a></li>
                         <li><a href="#" onclick="filterByCategory('Matériel Professionnel', this); return false;"><i data-lucide="wrench"></i> <span data-i18n="cat_pro_equipment">Matériel Pro</span></a></li>
                         <li><a href="#" onclick="openOtherCategoriesModal(true); return false;"><i data-lucide="more-horizontal"></i> <span data-i18n="cat_other">Autres</span></a></li>
                     </ul>
@@ -999,6 +1000,128 @@
                         <div class="form-group" id="listingDynamicFieldsGroup" style="display: none;">
                             <label>Détails spécifiques</label>
                             <div id="listingDynamicFields" class="dynamic-fields"></div>
+                        </div>
+                        <div id="hotelFieldsSection" style="display: none;">
+                            <div class="form-group">
+                                <label>Étoiles</label>
+                                <select id="hotelStars">
+                                    <option value="">Non classé</option>
+                                    <option value="1">1 ★</option>
+                                    <option value="2">2 ★★</option>
+                                    <option value="3">3 ★★★</option>
+                                    <option value="4">4 ★★★★</option>
+                                    <option value="5">5 ★★★★★</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Check-in</label>
+                                <input type="time" id="hotelCheckIn" value="14:00" placeholder="ex: 14:00">
+                            </div>
+                            <div class="form-group">
+                                <label>Check-out</label>
+                                <input type="time" id="hotelCheckOut" value="12:00" placeholder="ex: 12:00">
+                            </div>
+                            <div class="form-group">
+                                <label>Politique d'annulation</label>
+                                <select id="hotelCancellation">
+                                    <option value="free">Annulation gratuite</option>
+                                    <option value="partial">Remboursement partiel</option>
+                                    <option value="none">Non remboursable</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Jours pour annulation gratuite</label>
+                                <input type="number" id="hotelFreeCancellationDays" value="3" min="0" max="30" placeholder="0">
+                            </div>
+                            <div class="form-group">
+                                <label>Enfants</label>
+                                <select id="hotelChildren">
+                                    <option value="allowed">Enfants acceptés</option>
+                                    <option value="not_allowed">Enfants non acceptés</option>
+                                    <option value="extra_bed">Lit supplémentaire (+)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Animaux</label>
+                                <select id="hotelPets">
+                                    <option value="not_allowed">Animaux non admis</option>
+                                    <option value="allowed_free">Animaux admis (gratuit)</option>
+                                    <option value="allowed_paid">Animaux admis (payant)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Fumer</label>
+                                <select id="hotelSmoking">
+                                    <option value="not_allowed">Non-fumeur</option>
+                                    <option value="allowed">Fumer autorisé</option>
+                                    <option value="designated">Zones fumeurs désignées</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>WhatsApp</label>
+                                <input type="tel" id="hotelWhatsApp" placeholder="0555 123 456">
+                            </div>
+                            <div class="form-group">
+                                <label>Site web</label>
+                                <input type="url" id="hotelWebsite" placeholder="https://...">
+                            </div>
+                            <div class="form-group">
+                                <label>Numéro d'agrément touristique</label>
+                                <input type="text" id="hotelLicense" placeholder="Ex: 1234/DG Tourism">
+                            </div>
+                            <div class="form-group">
+                                <label>Séjour minimum (nuits)</label>
+                                <input type="number" id="hotelMinStay" value="1" min="1" max="30">
+                            </div>
+                            <div class="form-group">
+                                <label>Séjour maximum (nuits)</label>
+                                <input type="number" id="hotelMaxStay" value="30" min="1" max="365">
+                            </div>
+                            <div class="form-group">
+                                <label>Coordonnées GPS</label>
+                                <div style="display: flex; gap: 10px;">
+                                    <input type="number" id="hotelLat" step="0.000001" placeholder="Latitude" style="flex: 1;">
+                                    <input type="number" id="hotelLng" step="0.000001" placeholder="Longitude" style="flex: 1;">
+                                </div>
+                            </div>
+                            <h4 style="margin: 20px 0 10px; color: var(--primary-color);">Services</h4>
+                            <div id="hotelServicesList" class="checkbox-grid">
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="wifi"> WiFi</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="pool"> Piscine</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="parking"> Parking</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="restaurant"> Restaurant</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="spa"> Spa</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="gym"> Gym</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="ac"> Climatisation</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="heating"> Chauffage</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="room_service"> Room service</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="laundry"> Blanchisserie</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="airport_shuttle"> Navette aéroport</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="security"> Sécurité 24/7</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="cctv"> Vidéosurveillance</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="elevator"> Ascenseur</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="accessible"> Accès handicapé</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="breakfast"> Petit-déjeuner</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="safe"> Coffre-fort</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="minibar"> Mini-bar</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="tv"> TV</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelService" value="balcony"> Balcon</label>
+                            </div>
+                            <h4 style="margin: 20px 0 10px; color: var(--primary-color);">Types de paiement</h4>
+                            <div id="hotelPaymentList" class="checkbox-grid">
+                                <label class="checkbox-item"><input type="checkbox" name="hotelPayment" value="cash" checked> Espèces</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelPayment" value="ccp"> CCP</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelPayment" value="baridimob"> BaridiMob</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelPayment" value="edahabia"> Edahabia</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelPayment" value="visa"> Visa</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelPayment" value="vodafone_cash"> Vodafone Cash</label>
+                                <label class="checkbox-item"><input type="checkbox" name="hotelPayment" value="cib"> CIB</label>
+                            </div>
+                            <h4 style="margin: 20px 0 10px; color: var(--primary-color);">Chambres</h4>
+                            <div id="hotelRoomsList"></div>
+                            <button type="button" class="submit-btn small" onclick="addHotelRoomField()">
+                                <i data-lucide="plus"></i> Ajouter une chambre
+                            </button>
                         </div>
                         <div class="form-group">
                             <label>Wilaya</label>

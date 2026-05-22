@@ -1293,6 +1293,68 @@ html[dir="rtl"] .sidebar-lang-menu {
     margin-top: 14px;
 }
 
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--light-gray);
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.checkbox-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary-color);
+}
+
+.hotel-room-card {
+    background: var(--light-gray);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    position: relative;
+}
+
+.hotel-room-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.hotel-room-card-title {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.hotel-room-card-remove {
+    background: none;
+    border: none;
+    color: var(--error-color);
+    cursor: pointer;
+    padding: 4px;
+}
+
+.hotel-room-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.hotel-room-grid-full {
+    grid-column: span 2;
+}
+
 .listing-image-slot {
     width: 100%;
     aspect-ratio: 1 / 1;
