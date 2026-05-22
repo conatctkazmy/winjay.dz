@@ -1170,6 +1170,12 @@ html.sidebar-open {
     cursor: pointer;
 }
 
+@media (max-width: 768px) {
+    .sidebar-section:first-child > h3 {
+        display: none;
+    }
+}
+
 .sidebar-overlay {
     position: fixed;
     top: 0;
