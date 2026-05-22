@@ -2206,6 +2206,106 @@ html[dir="rtl"] .is-touch-device main {
     background: var(--bg-main);
 }
 
+.home-category-swipe {
+    margin: 10px 0 16px;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 18px;
+    background: var(--bg-main);
+}
+
+.home-category-swipe-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.home-category-swipe-title {
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    font-size: 1.02rem;
+}
+
+.home-category-swipe-back {
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    color: var(--text-main);
+    border-radius: 12px;
+    padding: 8px 12px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.home-category-swipe-back:hover {
+    background: var(--light-gray);
+}
+
+.home-category-swipe-list {
+    max-height: 360px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-snap-type: y mandatory;
+    padding-right: 6px;
+}
+
+.home-category-swipe-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 12px;
+    border-radius: 16px;
+    border: 1px solid transparent;
+    background: var(--bg-main);
+    color: var(--text-main);
+    cursor: pointer;
+    scroll-snap-align: start;
+    transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.home-category-swipe-item:hover {
+    background: var(--light-gray);
+    transform: translateY(-1px);
+}
+
+.home-category-swipe-item.active {
+    border-color: rgba(255, 122, 0, 0.35);
+    background: rgba(255, 122, 0, 0.08);
+}
+
+.home-category-swipe-item + .home-category-swipe-item {
+    margin-top: 10px;
+}
+
+.home-category-swipe-item i,
+.home-category-swipe-item svg {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+}
+
+.home-category-swipe-label {
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+
+html[dir="rtl"] .home-category-swipe-head {
+    flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .home-category-swipe-item {
+    flex-direction: row-reverse;
+    text-align: right;
+}
+
+@media (max-width: 768px) {
+    .home-category-swipe-list {
+        max-height: 280px;
+    }
+}
+
 .vip-video-head {
     display: flex;
     align-items: center;

@@ -82,6 +82,8 @@ const I18N = {
         filter_category_title: 'Catégorie',
         filter_category_all: 'Toutes les catégories',
         filter_clear: 'Effacer les filtres',
+        home_categories_title: 'Catégories',
+        home_categories_back: 'Retour',
         price_min: 'Min',
         price_max: 'Max',
         load_more: 'Charger plus',
@@ -142,6 +144,8 @@ const I18N = {
         filter_category_title: 'Category',
         filter_category_all: 'All categories',
         filter_clear: 'Clear filters',
+        home_categories_title: 'Categories',
+        home_categories_back: 'Back',
         price_min: 'Min',
         price_max: 'Max',
         load_more: 'Load more',
@@ -202,6 +206,8 @@ const I18N = {
         filter_category_title: 'الفئة',
         filter_category_all: 'كل الفئات',
         filter_clear: 'مسح الفلاتر',
+        home_categories_title: 'الفئات',
+        home_categories_back: 'رجوع',
         price_min: 'الأدنى',
         price_max: 'الأقصى',
         load_more: 'تحميل المزيد',
@@ -272,6 +278,7 @@ function setLanguage(lang) {
     applyTranslations();
     applyBusinessTypeTranslations();
     populateWorkCategoriesSelect();
+    renderHomeCategorySwipe();
 }
 
 function applyLanguageToDocument() {
@@ -5180,6 +5187,7 @@ function viewChatUserProfile(tag) {
 let currentFilters = {
     search: '',
     category: '',
+    subcategory: '',
     wilaya: '',
     priceMin: '',
     priceMax: '',
@@ -5241,6 +5249,143 @@ const listingSubcategoriesByCategory = {
 };
 
 const allExtraCategories = [];
+
+const CATEGORY_LABELS = {
+    "Boutiques": { fr: "Boutiques", en: "Shops", ar: "متاجر" },
+    "Immobilier": { fr: "Immobilier", en: "Real Estate", ar: "عقارات" },
+    "Automobiles & Véhicules": { fr: "Automobiles & Véhicules", en: "Cars & Vehicles", ar: "سيارات ومركبات" },
+    "Pièces détachées": { fr: "Pièces détachées", en: "Spare parts", ar: "قطع غيار" },
+    "Téléphones & Accessoires": { fr: "Téléphones & Accessoires", en: "Phones & Accessories", ar: "هواتف وإكسسوارات" },
+    "Informatique": { fr: "Informatique", en: "Computers & IT", ar: "حواسيب ومعلوماتية" },
+    "Électroménager & Électronique": { fr: "Électroménager & Électronique", en: "Appliances & Electronics", ar: "أجهزة منزلية وإلكترونيات" },
+    "Vêtements & Mode": { fr: "Vêtements & Mode", en: "Fashion & Clothing", ar: "ملابس وموضة" },
+    "Santé & Beauté": { fr: "Santé & Beauté", en: "Health & Beauty", ar: "صحة وجمال" },
+    "Meubles & Maison": { fr: "Meubles & Maison", en: "Furniture & Home", ar: "أثاث ومنزل" },
+    "Loisirs & Divertissements": { fr: "Loisirs & Divertissements", en: "Leisure & Entertainment", ar: "ترفيه وهوايات" },
+    "Sport": { fr: "Sport", en: "Sports", ar: "رياضة" },
+    "Emploi": { fr: "Emploi", en: "Jobs", ar: "وظائف" },
+    "Matériaux & Équipement": { fr: "Matériaux & Équipement", en: "Materials & Equipment", ar: "مواد ومعدات" },
+    "Alimentaires": { fr: "Alimentaires", en: "Food", ar: "مواد غذائية" },
+    "Voyages": { fr: "Voyages", en: "Travel", ar: "سفر" },
+    "Services": { fr: "Services", en: "Services", ar: "خدمات" }
+};
+
+let homeCategorySwipeMode = 'main';
+let homeCategorySwipeMainCategory = '';
+
+function getCategoryLabel(name) {
+    const cat = String(name || '').trim();
+    const entry = CATEGORY_LABELS[cat] || null;
+    if (!entry) return cat;
+    return entry[currentLang] || entry.fr || cat;
+}
+
+function setupHomeCategorySwipe() {
+    const wrap = document.getElementById('homeCategorySwipe');
+    const listEl = document.getElementById('homeCategorySwipeList');
+    const titleEl = document.getElementById('homeCategorySwipeTitle');
+    const backEl = document.getElementById('homeCategorySwipeBack');
+    if (!wrap || !listEl || !titleEl || !backEl) return;
+
+    if (!wrap.dataset.bound) {
+        wrap.dataset.bound = '1';
+
+        backEl.addEventListener('click', () => {
+            homeCategorySwipeMode = 'main';
+            currentFilters.subcategory = '';
+            updateActiveFilters();
+            currentPage = 1;
+            renderListings();
+            renderHomeCategorySwipe();
+        });
+
+        listEl.addEventListener('click', (e) => {
+            const btn = e.target?.closest?.('.home-category-swipe-item');
+            if (!btn) return;
+            const main = btn.getAttribute('data-main') || '';
+            const sub = btn.getAttribute('data-sub') || '';
+
+            if (homeCategorySwipeMode === 'main') {
+                homeCategorySwipeMainCategory = main;
+                filterByCategory(main, null);
+                const subs = Array.isArray(listingSubcategoriesByCategory[main]) ? listingSubcategoriesByCategory[main] : [];
+                if (subs.length) {
+                    homeCategorySwipeMode = 'sub';
+                    renderHomeCategorySwipe();
+                }
+                return;
+            }
+
+            if (homeCategorySwipeMode === 'sub') {
+                currentFilters.category = homeCategorySwipeMainCategory || currentFilters.category;
+                document.getElementById('filterCategory').value = currentFilters.category;
+                currentFilters.subcategory = sub;
+                applyFilters();
+                renderHomeCategorySwipe();
+            }
+        });
+    }
+
+    renderHomeCategorySwipe();
+}
+
+function renderHomeCategorySwipe() {
+    const listEl = document.getElementById('homeCategorySwipeList');
+    const titleEl = document.getElementById('homeCategorySwipeTitle');
+    const backEl = document.getElementById('homeCategorySwipeBack');
+    if (!listEl || !titleEl || !backEl) return;
+
+    if (!homeCategorySwipeMode || homeCategorySwipeMode === 'main') {
+        homeCategorySwipeMode = 'main';
+        titleEl.textContent = t('home_categories_title');
+        backEl.style.display = 'none';
+        const active = String(currentFilters.category || '').trim();
+        listEl.innerHTML = categories.map((c) => {
+            const label = getCategoryLabel(c.name);
+            const isActive = active === c.name ? 'active' : '';
+            return `<button type="button" class="home-category-swipe-item ${isActive}" data-main="${escapeHtml(c.name)}"><i data-lucide="${escapeHtml(c.icon)}"></i><span class="home-category-swipe-label">${escapeHtml(label)}</span></button>`;
+        }).join('');
+        lucide.createIcons();
+        return;
+    }
+
+    if (homeCategorySwipeMode === 'sub') {
+        const main = homeCategorySwipeMainCategory || currentFilters.category;
+        const mainIcon = categories.find((c) => c.name === main)?.icon || 'grid';
+        titleEl.textContent = getCategoryLabel(main);
+        backEl.textContent = t('home_categories_back');
+        backEl.style.display = '';
+        const subs = Array.isArray(listingSubcategoriesByCategory[main]) ? listingSubcategoriesByCategory[main] : [];
+        const activeSub = String(currentFilters.subcategory || '').trim();
+        listEl.innerHTML = subs.map((s) => {
+            const isActive = activeSub === s ? 'active' : '';
+            return `<button type="button" class="home-category-swipe-item ${isActive}" data-main="${escapeHtml(main)}" data-sub="${escapeHtml(s)}"><i data-lucide="${escapeHtml(mainIcon)}"></i><span class="home-category-swipe-label">${escapeHtml(s)}</span></button>`;
+        }).join('');
+        lucide.createIcons();
+    }
+}
+
+function syncHomeCategorySwipeFromFilters() {
+    const main = String(currentFilters.category || '').trim();
+    if (!main) {
+        homeCategorySwipeMode = 'main';
+        homeCategorySwipeMainCategory = '';
+        renderHomeCategorySwipe();
+        return;
+    }
+
+    if (homeCategorySwipeMode === 'sub' && homeCategorySwipeMainCategory && homeCategorySwipeMainCategory !== main) {
+        homeCategorySwipeMode = 'main';
+        homeCategorySwipeMainCategory = '';
+        renderHomeCategorySwipe();
+        return;
+    }
+
+    if (homeCategorySwipeMode === 'sub' && !homeCategorySwipeMainCategory) {
+        homeCategorySwipeMainCategory = main;
+    }
+    renderHomeCategorySwipe();
+}
 
 function ensureCategoryListings() {
     const adjectives = ["Neuf", "Bon plan", "Premium", "Top qualité", "À saisir"];
@@ -5364,6 +5509,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     populateWilayas();
     loadAlgeriaCommunesData();
     populateCategories();
+    setupHomeCategorySwipe();
     setupListingSubcategorySelects();
     setupListingCitySelects();
     setupListingCoreFieldBindings();
@@ -11655,10 +11801,12 @@ function scheduleSyncMessagesContainerHeight() {
 function filterByCategory(category, element) {
     showSection('home-section');
     currentFilters.category = category === 'all' ? '' : category;
+    currentFilters.subcategory = '';
     document.querySelectorAll('.category-list li a, .sidebar-section li a').forEach(a => a.classList.remove('active'));
     if (element) element.classList.add('active');
     document.getElementById('filterCategory').value = currentFilters.category;
     applyFilters();
+    syncHomeCategorySwipeFromFilters();
 }
 
 function toggleFilterPanel() {
@@ -11666,18 +11814,21 @@ function toggleFilterPanel() {
 }
 
 function applyFilters() {
+    const prevCategory = currentFilters.category;
     currentFilters.wilaya = document.getElementById('filterWilaya').value;
     currentFilters.category = document.getElementById('filterCategory').value;
+    if (currentFilters.category !== prevCategory) currentFilters.subcategory = '';
     currentFilters.priceMin = document.getElementById('priceMin').value;
     currentFilters.priceMax = document.getElementById('priceMax').value;
     currentFilters.sort = document.getElementById('sortSelect').value;
     updateActiveFilters();
     currentPage = 1;
     renderListings();
+    syncHomeCategorySwipeFromFilters();
 }
 
 function clearFilters() {
-    currentFilters = { search: '', category: '', wilaya: '', priceMin: '', priceMax: '', sort: 'newest' };
+    currentFilters = { search: '', category: '', subcategory: '', wilaya: '', priceMin: '', priceMax: '', sort: 'newest' };
     document.getElementById('mainSearchInput').value = '';
     document.getElementById('filterWilaya').value = '';
     document.getElementById('filterCategory').value = '';
@@ -11688,12 +11839,14 @@ function clearFilters() {
     updateActiveFilters();
     currentPage = 1;
     renderListings();
+    syncHomeCategorySwipeFromFilters();
 }
 
 function updateActiveFilters() {
     const container = document.getElementById('activeFilters');
     let tags = [];
     if (currentFilters.category) tags.push(`<span class="filter-tag">${currentFilters.category} <button onclick="removeFilter('category')">&times;</button></span>`);
+    if (currentFilters.subcategory) tags.push(`<span class="filter-tag">${currentFilters.subcategory} <button onclick="removeFilter('subcategory')">&times;</button></span>`);
     if (currentFilters.wilaya) tags.push(`<span class="filter-tag">${currentFilters.wilaya} <button onclick="removeFilter('wilaya')">&times;</button></span>`);
     if (currentFilters.priceMin || currentFilters.priceMax) {
         const priceText = `${currentFilters.priceMin || '0'} - ${currentFilters.priceMax || '∞'} DA`;
@@ -11708,7 +11861,12 @@ function updateActiveFilters() {
 function removeFilter(type) {
     if (type === 'category') {
         currentFilters.category = '';
+        currentFilters.subcategory = '';
         document.getElementById('filterCategory').value = '';
+        syncHomeCategorySwipeFromFilters();
+    } else if (type === 'subcategory') {
+        currentFilters.subcategory = '';
+        syncHomeCategorySwipeFromFilters();
     } else if (type === 'wilaya') {
         currentFilters.wilaya = '';
         document.getElementById('filterWilaya').value = '';
@@ -11724,7 +11882,7 @@ function removeFilter(type) {
 }
 
 function clearAllFilters() {
-    currentFilters = { search: '', category: '', wilaya: '', priceMin: '', priceMax: '', sort: 'newest' };
+    currentFilters = { search: '', category: '', subcategory: '', wilaya: '', priceMin: '', priceMax: '', sort: 'newest' };
     document.getElementById('filterCategory').value = '';
     document.getElementById('filterWilaya').value = '';
     document.getElementById('priceMin').value = '';
@@ -11734,6 +11892,7 @@ function clearAllFilters() {
     updateActiveFilters();
     currentPage = 1;
     renderListings();
+    syncHomeCategorySwipeFromFilters();
     showToast('Filtres effacés', 'filter');
 }
 
@@ -11750,6 +11909,9 @@ function getFilteredListings() {
     }
     if (currentFilters.category) {
         filtered = filtered.filter(l => l.category === currentFilters.category);
+    }
+    if (currentFilters.subcategory) {
+        filtered = filtered.filter(l => String(l.subcategory || '') === currentFilters.subcategory);
     }
     if (currentFilters.wilaya) {
         filtered = filtered.filter(l => l.location === currentFilters.wilaya);
