@@ -11885,6 +11885,8 @@ function autoFillCategoryFromProfile() {
     setTimeout(() => {
         subSelect.value = mapping.subcategory;
         subSelect.dispatchEvent(new Event('change'));
+        toggleHotelFieldsVisibility();
+        setCreateListingStep('details');
     }, 50);
 }
 
