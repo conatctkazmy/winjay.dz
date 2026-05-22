@@ -57,6 +57,8 @@ const LISTING_VIDEOS_BUCKET = 'listing-videos';
 const PROFILE_IMAGES_BUCKET = 'profile-images';
 const MESSAGE_MEDIA_BUCKET = 'message-media';
 const IDENTITY_DOCS_BUCKET = 'identity-docs';
+const COURSE_PUBLIC_BUCKET = 'course-public';
+const COURSE_VIDEOS_BUCKET = 'course-videos';
 const FREE_LISTING_LIMIT = 4;
 const SELLER_PROFILE_LAST_TAG_STORAGE_KEY = 'winjayLastSellerProfileTagV1';
 const INITIAL_LISTINGS_FETCH_LIMIT = 24;
@@ -126,7 +128,8 @@ const I18N = {
         sidebar_messages: 'Messages',
         sidebar_become_verified: 'Devenir Vérifié',
         sidebar_become_vip: 'Devenir VIP',
-        sidebar_settings: 'Paramètres'
+        sidebar_settings: 'Paramètres',
+        sidebar_courses: 'Cours'
     },
     en: {
         lang_current: 'English',
@@ -188,7 +191,8 @@ const I18N = {
         sidebar_messages: 'Messages',
         sidebar_become_verified: 'Become Verified',
         sidebar_become_vip: 'Become VIP',
-        sidebar_settings: 'Settings'
+        sidebar_settings: 'Settings',
+        sidebar_courses: 'Courses'
     },
     ar: {
         lang_current: 'العربية',
@@ -250,7 +254,8 @@ const I18N = {
         sidebar_messages: 'الرسائل',
         sidebar_become_verified: 'احصل على توثيق',
         sidebar_become_vip: 'كن VIP',
-        sidebar_settings: 'الإعدادات'
+        sidebar_settings: 'الإعدادات',
+        sidebar_courses: 'الدورات'
     }
 };
 
@@ -9470,6 +9475,7 @@ function updateNavbarAuthUI() {
     const addListingBtn = document.getElementById('navAddListingBtn');
     const freeVerifiedPill = document.getElementById('navFreeVerifiedPill');
     const profileMenu = document.getElementById('navProfileMenu');
+    const sidebarCoursesItem = document.getElementById('sidebarCoursesItem');
 
     if (loginBtn) loginBtn.style.display = likelyLoggedIn ? 'none' : 'inline-flex';
     if (notificationsBtn) notificationsBtn.style.display = loggedIn ? '' : 'none';
@@ -9477,6 +9483,7 @@ function updateNavbarAuthUI() {
     if (addListingBtn) addListingBtn.style.display = loggedIn ? '' : 'none';
     if (freeVerifiedPill) freeVerifiedPill.style.display = profileReady && !verified ? '' : 'none';
     if (profileMenu) profileMenu.style.display = loggedIn ? '' : 'none';
+    if (sidebarCoursesItem) sidebarCoursesItem.style.display = loggedIn ? '' : 'none';
 }
 
 function updateProfileUI() {
@@ -10169,17 +10176,25 @@ async function ensureMyProfileReviewsLoaded() {
 async function switchMyProfileSection(section) {
     const listingsTab = document.getElementById('myProfileListingsTab');
     const reviewsTab = document.getElementById('myProfileReviewsTab');
+    const coursesTab = document.getElementById('myProfileCoursesTab');
     const listingsPanel = document.getElementById('myProfileListingsSection');
     const reviewsPanel = document.getElementById('myProfileReviewsSection');
-    if (!listingsTab || !reviewsTab || !listingsPanel || !reviewsPanel) return;
+    const coursesPanel = document.getElementById('myProfileCoursesSection');
+    if (!listingsTab || !reviewsTab || !coursesTab || !listingsPanel || !reviewsPanel || !coursesPanel) return;
 
-    const showListings = section !== 'reviews';
+    const key = String(section || '').toLowerCase();
+    const showListings = key === 'listings' || (!key || (key !== 'reviews' && key !== 'courses'));
+    const showReviews = key === 'reviews';
+    const showCourses = key === 'courses';
+
     listingsTab.classList.toggle('active', showListings);
-    reviewsTab.classList.toggle('active', !showListings);
+    reviewsTab.classList.toggle('active', showReviews);
+    coursesTab.classList.toggle('active', showCourses);
     listingsPanel.classList.toggle('active', showListings);
-    reviewsPanel.classList.toggle('active', !showListings);
+    reviewsPanel.classList.toggle('active', showReviews);
+    coursesPanel.classList.toggle('active', showCourses);
 
-    if (!showListings) {
+    if (showReviews) {
         const list = document.getElementById('myProfileReviewsList');
         if (list && !myProfileReviewsLoaded) {
             list.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><p style="margin-top: 10px;">Loading reviews...</p></div>`;
@@ -10191,6 +10206,9 @@ async function switchMyProfileSection(section) {
             return;
         }
         renderMyProfileReviews();
+    }
+    if (showCourses) {
+        await renderMyProfileCoursesPanel();
     }
 }
 
@@ -11392,7 +11410,7 @@ function showSection(sectionId) {
     if (sectionId !== 'create-listing-section' && sectionId !== 'listing-detail-section') {
         clearListingRouteParams({ replace: true });
     }
-    const protectedSections = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section'];
+    const protectedSections = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section', 'course-section'];
     if (protectedSections.includes(sectionId) && !requireAuthOrPrompt()) {
         sectionId = 'home-section';
     }
@@ -11448,6 +11466,9 @@ function showSection(sectionId) {
     } else if (sectionId === 'admin-dashboard-section') {
         clearSellerProfileRouteTag();
         renderAdminDashboard();
+    } else if (sectionId === 'course-section') {
+        clearSellerProfileRouteTag();
+        renderCourseSection();
     }
 }
 
@@ -14716,4 +14737,866 @@ function handleLogout() {
             showSection('home-section');
         }
     );
+}
+
+let activeCourseId = null;
+let activeCourseFromSection = 'profile-section';
+let activeCourseCreateModuleCourseId = null;
+let activeCourseCreateLessonCourseId = null;
+let activeCourseCreateLessonModuleId = null;
+let activeCourseInviteCourseId = null;
+let activeCourseLastLessonId = null;
+let activeCourseProgressFlushTimer = null;
+let activeCourseProgressInFlight = false;
+let activeCourseProgressQueued = null;
+
+function navigateBackFromCourse() {
+    const from = String(activeCourseFromSection || '').trim() || 'profile-section';
+    activeCourseFromSection = 'profile-section';
+    showSection(from === 'course-section' ? 'profile-section' : from);
+}
+
+function openCourse(courseId, { fromSection = null } = {}) {
+    const id = String(courseId || '').trim();
+    if (!id) return;
+    activeCourseId = id;
+    activeCourseFromSection = fromSection || getActiveSectionId() || 'profile-section';
+    showSection('course-section');
+}
+
+function openCreateCourseModal() {
+    if (!requireAuthOrPrompt()) return;
+    const title = document.getElementById('createCourseTitle');
+    const desc = document.getElementById('createCourseDescription');
+    const thumb = document.getElementById('createCourseThumbnailFile');
+    const vsl = document.getElementById('createCourseVslFile');
+    const pub = document.getElementById('createCoursePublished');
+    if (title) title.value = '';
+    if (desc) desc.value = '';
+    if (thumb) thumb.value = '';
+    if (vsl) vsl.value = '';
+    if (pub) pub.checked = false;
+    openModal('createCourseModal');
+    lucide.createIcons();
+}
+
+function openCreateCourseModuleModal(courseId) {
+    if (!requireAuthOrPrompt()) return;
+    activeCourseCreateModuleCourseId = String(courseId || '').trim() || null;
+    const input = document.getElementById('createCourseModuleTitle');
+    if (input) input.value = '';
+    openModal('createCourseModuleModal');
+    lucide.createIcons();
+}
+
+function openCreateCourseLessonModal(courseId, moduleId) {
+    if (!requireAuthOrPrompt()) return;
+    activeCourseCreateLessonCourseId = String(courseId || '').trim() || null;
+    activeCourseCreateLessonModuleId = String(moduleId || '').trim() || null;
+    const title = document.getElementById('createCourseLessonTitle');
+    const file = document.getElementById('createCourseLessonVideoFile');
+    const preview = document.getElementById('createCourseLessonPreview');
+    if (title) title.value = '';
+    if (file) file.value = '';
+    if (preview) preview.checked = false;
+    openModal('createCourseLessonModal');
+    lucide.createIcons();
+}
+
+function openInviteCourseStudentModal(courseId) {
+    if (!requireAuthOrPrompt()) return;
+    activeCourseInviteCourseId = String(courseId || '').trim() || null;
+    const input = document.getElementById('inviteCourseStudentEmail');
+    if (input) input.value = '';
+    openModal('inviteCourseStudentModal');
+    lucide.createIcons();
+    renderOwnerCourseInvitesList();
+}
+
+async function courseAuthedFetch(path, payload) {
+    const client = initSupabase();
+    if (!client) return { error: 'Supabase is not configured' };
+    const { data: sessionData } = await client.auth.getSession();
+    const token = sessionData?.session?.access_token || '';
+    if (!token) return { error: 'Session expired. Log in again.' };
+    if (!SUPABASE_PROJECT_URL) return { error: 'Supabase URL missing' };
+    try {
+        const res = await fetch(`${SUPABASE_PROJECT_URL}/functions/v1/${path}`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                apikey: SUPABASE_ANON_KEY,
+                authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify(payload || {})
+        });
+        const raw = await res.text();
+        let data = null;
+        try {
+            data = raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            data = null;
+        }
+        if (!res.ok) {
+            return { error: data?.error || raw || `Request failed (${res.status})` };
+        }
+        return data || {};
+    } catch (e) {
+        return { error: 'Network error' };
+    }
+}
+
+async function uploadFileToSignedUrl(signedUrl, file) {
+    const f = file || null;
+    const url = String(signedUrl || '').trim();
+    if (!f || !url) return { error: 'Missing upload url' };
+    return await new Promise((resolve) => {
+        let finished = false;
+        const done = (payload) => {
+            if (finished) return;
+            finished = true;
+            resolve(payload);
+        };
+        const xhr = new XMLHttpRequest();
+        xhr.onerror = () => done({ error: 'Upload failed (network)' });
+        xhr.onabort = () => done({ error: 'Upload canceled' });
+        xhr.onload = () => {
+            const ok = xhr.status >= 200 && xhr.status < 300;
+            if (!ok) {
+                done({ error: String(xhr.responseText || `Upload failed (${xhr.status})`) });
+                return;
+            }
+            done({ ok: true });
+        };
+        try {
+            xhr.open('PUT', url, true);
+            xhr.setRequestHeader('content-type', String(f.type || 'application/octet-stream'));
+            xhr.send(f);
+        } catch (e) {
+            done({ error: 'Upload failed' });
+        }
+    });
+}
+
+async function createCourseFromModal() {
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const titleEl = document.getElementById('createCourseTitle');
+    const descEl = document.getElementById('createCourseDescription');
+    const thumbEl = document.getElementById('createCourseThumbnailFile');
+    const vslEl = document.getElementById('createCourseVslFile');
+    const pubEl = document.getElementById('createCoursePublished');
+
+    const title = String(titleEl?.value || '').trim();
+    const description = String(descEl?.value || '').trim();
+    const is_published = !!pubEl?.checked;
+
+    if (!title) {
+        showToast('Title is required', 'alert-circle');
+        return;
+    }
+
+    const { data: courseRow, error } = await client
+        .from('courses')
+        .insert({
+            owner_id: currentSupabaseUserId,
+            title,
+            description,
+            is_published
+        })
+        .select('*')
+        .single();
+
+    if (error || !courseRow?.id) {
+        showToast(error?.message || 'Failed to create course', 'alert-circle');
+        return;
+    }
+
+    const courseId = String(courseRow.id);
+    const thumbFile = thumbEl?.files?.[0] || null;
+    const vslFile = vslEl?.files?.[0] || null;
+
+    let thumbPath = '';
+    let vslPath = '';
+
+    if (thumbFile) {
+        const signed = await courseAuthedFetch('course-owner-upload-url', {
+            courseId,
+            kind: 'thumbnail',
+            filename: safeStorageFilename(thumbFile.name || 'thumb.png'),
+            contentType: thumbFile.type || 'image/png'
+        });
+        if (!signed?.error && signed?.signedUrl && signed?.path) {
+            const up = await uploadFileToSignedUrl(signed.signedUrl, thumbFile);
+            if (!up?.error) thumbPath = String(signed.path || '').trim();
+        }
+    }
+
+    if (vslFile) {
+        const signed = await courseAuthedFetch('course-owner-upload-url', {
+            courseId,
+            kind: 'vsl',
+            filename: safeStorageFilename(vslFile.name || 'vsl.mp4'),
+            contentType: vslFile.type || 'video/mp4'
+        });
+        if (!signed?.error && signed?.signedUrl && signed?.path) {
+            const up = await uploadFileToSignedUrl(signed.signedUrl, vslFile);
+            if (!up?.error) vslPath = String(signed.path || '').trim();
+        }
+    }
+
+    if (thumbPath || vslPath) {
+        await client
+            .from('courses')
+            .update({
+                thumbnail_object_path: thumbPath || courseRow.thumbnail_object_path || '',
+                vsl_object_path: vslPath || courseRow.vsl_object_path || ''
+            })
+            .eq('id', courseId)
+            .eq('owner_id', currentSupabaseUserId);
+    }
+
+    closeModal('createCourseModal');
+    showToast('Course created', 'check-circle');
+    await renderMyProfileCoursesPanel();
+    openCourse(courseId, { fromSection: 'profile-section' });
+}
+
+async function createCourseModuleFromModal() {
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const courseId = String(activeCourseCreateModuleCourseId || '').trim();
+    if (!courseId) return;
+    const titleEl = document.getElementById('createCourseModuleTitle');
+    const title = String(titleEl?.value || '').trim();
+    if (!title) {
+        showToast('Module title is required', 'alert-circle');
+        return;
+    }
+    const { data: existing } = await client.from('course_modules').select('position').eq('course_id', courseId).order('position', { ascending: false }).limit(1);
+    const nextPos = (existing?.[0]?.position ?? -1) + 1;
+    const { error } = await client.from('course_modules').insert({ course_id: courseId, title, position: nextPos });
+    if (error) {
+        showToast(error.message || 'Failed to add module', 'alert-circle');
+        return;
+    }
+    closeModal('createCourseModuleModal');
+    showToast('Module added', 'check-circle');
+    await renderCourseSection();
+    await renderMyProfileCoursesPanel();
+}
+
+async function createCourseLessonFromModal() {
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const courseId = String(activeCourseCreateLessonCourseId || '').trim();
+    const moduleId = String(activeCourseCreateLessonModuleId || '').trim();
+    if (!courseId || !moduleId) return;
+    const titleEl = document.getElementById('createCourseLessonTitle');
+    const fileEl = document.getElementById('createCourseLessonVideoFile');
+    const previewEl = document.getElementById('createCourseLessonPreview');
+    const title = String(titleEl?.value || '').trim();
+    const file = fileEl?.files?.[0] || null;
+    const is_preview = !!previewEl?.checked;
+    if (!title) {
+        showToast('Lesson title is required', 'alert-circle');
+        return;
+    }
+    if (!file) {
+        showToast('Video file is required', 'alert-circle');
+        return;
+    }
+    const { data: existing } = await client.from('course_lessons').select('position').eq('module_id', moduleId).order('position', { ascending: false }).limit(1);
+    const nextPos = (existing?.[0]?.position ?? -1) + 1;
+    const { data: lessonRow, error } = await client
+        .from('course_lessons')
+        .insert({
+            course_id: courseId,
+            module_id: moduleId,
+            title,
+            position: nextPos,
+            duration_seconds: 0,
+            is_preview
+        })
+        .select('*')
+        .single();
+    if (error || !lessonRow?.id) {
+        showToast(error?.message || 'Failed to create lesson', 'alert-circle');
+        return;
+    }
+    const lessonId = String(lessonRow.id);
+    const signed = await courseAuthedFetch('course-owner-upload-url', {
+        courseId,
+        kind: 'lesson',
+        lessonId,
+        filename: safeStorageFilename(file.name || 'lesson.mp4'),
+        contentType: file.type || 'video/mp4'
+    });
+    if (signed?.error || !signed?.signedUrl || !signed?.path) {
+        showToast(signed?.error || 'Failed to prepare video upload', 'alert-circle');
+        return;
+    }
+    showToast('Uploading video...', 'loader');
+    const up = await uploadFileToSignedUrl(signed.signedUrl, file);
+    if (up?.error) {
+        showToast(up.error || 'Upload failed', 'alert-circle');
+        return;
+    }
+    const { error: mediaErr } = await client
+        .from('course_lesson_media')
+        .upsert({
+            lesson_id: lessonId,
+            video_bucket: COURSE_VIDEOS_BUCKET,
+            video_object_path: String(signed.path || '').trim()
+        });
+    if (mediaErr) {
+        showToast(mediaErr.message || 'Failed to save lesson video', 'alert-circle');
+        return;
+    }
+    closeModal('createCourseLessonModal');
+    showToast('Lesson added', 'check-circle');
+    await renderCourseSection();
+}
+
+async function inviteCourseStudentFromModal() {
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const courseId = String(activeCourseInviteCourseId || '').trim();
+    if (!courseId) return;
+    const input = document.getElementById('inviteCourseStudentEmail');
+    const email = String(input?.value || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+        showToast('Valid email required', 'alert-circle');
+        return;
+    }
+    const { error } = await client.from('course_invites').insert({
+        course_id: courseId,
+        email,
+        invited_by: currentSupabaseUserId,
+        status: 'pending'
+    });
+    if (error) {
+        showToast(error.message || 'Failed to invite', 'alert-circle');
+        return;
+    }
+    if (input) input.value = '';
+    showToast('Invite sent', 'check-circle');
+    await renderOwnerCourseInvitesList();
+    await renderMyProfileCoursesPanel();
+}
+
+async function acceptCourseInvite(inviteId) {
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const id = String(inviteId || '').trim();
+    if (!id) return;
+    const { error } = await client.rpc('accept_course_invite', { p_invite_id: id });
+    if (error) {
+        showToast(error.message || 'Failed to accept invite', 'alert-circle');
+        return;
+    }
+    showToast('Access granted', 'check-circle');
+    await renderMyProfileCoursesPanel();
+}
+
+async function renderMyProfileCoursesPanel() {
+    if (!isLoggedIn()) return;
+    const invitesEl = document.getElementById('myCourseInvitesList');
+    const enrolledEl = document.getElementById('myEnrolledCoursesList');
+    const ownedEl = document.getElementById('myOwnedCoursesList');
+    if (!invitesEl || !enrolledEl || !ownedEl) return;
+    invitesEl.innerHTML = '<div class="muted">Loading...</div>';
+    enrolledEl.innerHTML = '<div class="muted">Loading...</div>';
+    ownedEl.innerHTML = '<div class="muted">Loading...</div>';
+
+    const client = initSupabase();
+    if (!client) return;
+
+    const [invitesRes, enrollRes, ownedRes] = await Promise.all([
+        client
+            .from('course_invites')
+            .select('id, course_id, status, created_at, courses(id, title, thumbnail_object_path, owner_id)')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(50),
+        client
+            .from('course_enrollments')
+            .select('course_id, created_at, courses(id, title, thumbnail_object_path, owner_id)')
+            .eq('user_id', currentSupabaseUserId)
+            .order('created_at', { ascending: false })
+            .limit(50),
+        client
+            .from('courses')
+            .select('id, title, thumbnail_object_path, is_published, created_at')
+            .eq('owner_id', currentSupabaseUserId)
+            .order('created_at', { ascending: false })
+            .limit(50)
+    ]);
+
+    const invites = Array.isArray(invitesRes?.data) ? invitesRes.data : [];
+    const enrollments = Array.isArray(enrollRes?.data) ? enrollRes.data : [];
+    const owned = Array.isArray(ownedRes?.data) ? ownedRes.data : [];
+
+    invitesEl.innerHTML = invites.length
+        ? invites
+              .map((x) => {
+                  const c = x?.courses || {};
+                  const title = escapeHtml(String(c?.title || 'Course'));
+                  return `
+                    <div class="admin-list-item" style="margin-bottom:10px;">
+                        <div>
+                            <div style="font-weight:900;">Invite · ${title}</div>
+                            <div class="meta">Check your email · ${escapeHtml(String(currentSupabaseUserEmail || ''))}</div>
+                        </div>
+                        <button class="admin-action-btn" type="button" onclick="acceptCourseInvite('${String(x.id)}')">Accept</button>
+                    </div>
+                `;
+              })
+              .join('')
+        : '<div class="muted">No invites.</div>';
+
+    enrolledEl.innerHTML = enrollments.length
+        ? enrollments
+              .map((x) => {
+                  const c = x?.courses || {};
+                  const title = escapeHtml(String(c?.title || 'Course'));
+                  return `
+                    <div class="admin-list-item" style="margin-bottom:10px;">
+                        <div>
+                            <div style="font-weight:900;">${title}</div>
+                            <div class="meta">Enrolled</div>
+                        </div>
+                        <button class="admin-action-btn" type="button" onclick="openCourse('${String(c?.id || x.course_id)}', { fromSection: 'profile-section' })">Open</button>
+                    </div>
+                `;
+              })
+              .join('')
+        : '<div class="muted">No enrolled courses yet.</div>';
+
+    ownedEl.innerHTML = owned.length
+        ? owned
+              .map((c) => {
+                  const title = escapeHtml(String(c?.title || 'Course'));
+                  const pub = c?.is_published ? 'Published' : 'Private';
+                  return `
+                    <div class="admin-list-item" style="margin-bottom:10px;">
+                        <div>
+                            <div style="font-weight:900;">${title}</div>
+                            <div class="meta">${pub}</div>
+                        </div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+                            <button class="admin-action-btn" type="button" onclick="openCourse('${String(c?.id)}', { fromSection: 'profile-section' })">Open</button>
+                            <button class="admin-action-btn" type="button" onclick="openInviteCourseStudentModal('${String(c?.id)}')">Invite</button>
+                        </div>
+                    </div>
+                `;
+              })
+              .join('')
+        : '<div class="muted">No courses created yet.</div>';
+
+    lucide.createIcons();
+}
+
+async function renderOwnerCourseInvitesList() {
+    const wrap = document.getElementById('courseInvitesOwnerList');
+    if (!wrap) return;
+    const client = initSupabase();
+    if (!client) return;
+    const courseId = String(activeCourseInviteCourseId || '').trim();
+    if (!courseId) {
+        wrap.innerHTML = '<div class="muted">Select a course.</div>';
+        return;
+    }
+    wrap.innerHTML = '<div class="muted">Loading...</div>';
+    const { data } = await client
+        .from('course_invites')
+        .select('id, email, status, created_at')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+    const rows = Array.isArray(data) ? data : [];
+    wrap.innerHTML = rows.length
+        ? rows
+              .map((x) => {
+                  const email = escapeHtml(String(x.email || ''));
+                  const status = escapeHtml(String(x.status || ''));
+                  return `<div class="admin-list-item" style="margin-bottom:10px;"><div><div style="font-weight:900;">${email}</div><div class="meta">${status}</div></div></div>`;
+              })
+              .join('')
+        : '<div class="muted">No invites.</div>';
+}
+
+async function renderCourseSection() {
+    if (!isLoggedIn()) return;
+    const courseId = String(activeCourseId || '').trim();
+    const titleEl = document.getElementById('courseTitle');
+    const ownerEl = document.getElementById('courseOwner');
+    const descEl = document.getElementById('courseDescription');
+    const thumbImg = document.getElementById('courseThumbImg');
+    const accessRow = document.getElementById('courseAccessRow');
+    const vslWrap = document.getElementById('courseVslWrap');
+    const vslVideo = document.getElementById('courseVslVideo');
+    const playerGrid = document.getElementById('coursePlayerGrid');
+    const modulesList = document.getElementById('courseModulesList');
+    const achievementsList = document.getElementById('courseAchievementsList');
+    const progressFill = document.getElementById('courseProgressFill');
+    const progressValue = document.getElementById('courseProgressValue');
+    const nowPlaying = document.getElementById('courseNowPlaying');
+    const lessonVideo = document.getElementById('courseLessonVideo');
+    if (!titleEl || !ownerEl || !descEl || !thumbImg || !accessRow || !vslWrap || !vslVideo || !playerGrid || !modulesList || !achievementsList || !progressFill || !progressValue || !nowPlaying || !lessonVideo) return;
+
+    titleEl.textContent = 'Course';
+    ownerEl.textContent = '—';
+    descEl.textContent = '';
+    thumbImg.src = '';
+    accessRow.innerHTML = '';
+    vslWrap.style.display = 'none';
+    try {
+        vslVideo.removeAttribute('src');
+        vslVideo.load();
+    } catch (e) {
+        null;
+    }
+    playerGrid.style.display = 'none';
+    modulesList.innerHTML = '<div class="muted">Loading...</div>';
+    achievementsList.innerHTML = '<div class="muted">Loading...</div>';
+    progressFill.style.width = '0%';
+    progressValue.textContent = '0%';
+    nowPlaying.textContent = '';
+    try {
+        lessonVideo.removeAttribute('src');
+        lessonVideo.load();
+    } catch (e) {
+        null;
+    }
+
+    const client = initSupabase();
+    if (!client) return;
+
+    const { data: course, error: courseErr } = await client
+        .from('courses')
+        .select('id, title, description, thumbnail_object_path, vsl_object_path, is_published, owner_id')
+        .eq('id', courseId)
+        .maybeSingle();
+
+    if (courseErr || !course?.id) {
+        modulesList.innerHTML = '<div class="muted">Course not found.</div>';
+        return;
+    }
+
+    const isOwner = String(course.owner_id || '') === String(currentSupabaseUserId || '');
+
+    const { data: enrollment } = await client
+        .from('course_enrollments')
+        .select('course_id, user_id')
+        .eq('course_id', courseId)
+        .eq('user_id', currentSupabaseUserId)
+        .maybeSingle();
+
+    const isEnrolled = !!enrollment?.course_id;
+
+    titleEl.textContent = String(course.title || 'Course');
+    descEl.textContent = String(course.description || '');
+
+    const ownerProfile = await client.from('profiles').select('display_name, tag').eq('id', course.owner_id).maybeSingle();
+    const ownerName = ownerProfile?.data?.display_name || ownerProfile?.data?.tag || 'Owner';
+    ownerEl.textContent = String(ownerName || 'Owner');
+
+    if (String(course.thumbnail_object_path || '').trim()) {
+        const publicUrl = client.storage.from(COURSE_PUBLIC_BUCKET).getPublicUrl(String(course.thumbnail_object_path)).data?.publicUrl || '';
+        if (publicUrl) thumbImg.src = publicUrl;
+    }
+
+    if (String(course.vsl_object_path || '').trim()) {
+        const vslUrl = client.storage.from(COURSE_PUBLIC_BUCKET).getPublicUrl(String(course.vsl_object_path)).data?.publicUrl || '';
+        if (vslUrl) {
+            try {
+                vslVideo.src = vslUrl;
+                vslWrap.style.display = '';
+            } catch (e) {
+                null;
+            }
+        }
+    }
+
+    const accessBits = [];
+    if (isOwner) {
+        accessBits.push(`<span class="admin-badge ok">OWNER</span>`);
+        accessBits.push(`<button class="admin-action-btn" type="button" onclick="openInviteCourseStudentModal('${courseId}')">Invite student</button>`);
+        accessBits.push(`<button class="admin-action-btn" type="button" onclick="openCreateCourseModuleModal('${courseId}')">Add module</button>`);
+        accessBits.push(`<button class="admin-action-btn" type="button" onclick="toggleCoursePublish('${courseId}', ${course.is_published ? 'false' : 'true'})">${course.is_published ? 'Unpublish' : 'Publish'}</button>`);
+    } else if (isEnrolled) {
+        accessBits.push(`<span class="admin-badge ok">STUDENT ACCESS</span>`);
+    } else {
+        accessBits.push(`<span class="admin-badge pending">NO ACCESS</span>`);
+        accessBits.push(`<button class="admin-action-btn" type="button" onclick="showToast('Ask the owner to invite your email: ${escapeHtml(String(currentSupabaseUserEmail || ''))}', 'info')">How to get access</button>`);
+    }
+    accessRow.innerHTML = accessBits.join(' ');
+
+    if (!isOwner && !isEnrolled) {
+        modulesList.innerHTML = '<div class="muted">You need an invite to access lessons.</div>';
+        achievementsList.innerHTML = '<div class="muted">—</div>';
+        lucide.createIcons();
+        return;
+    }
+
+    playerGrid.style.display = '';
+
+    const [modsRes, lessonsRes, progRes, achRes] = await Promise.all([
+        client.from('course_modules').select('*').eq('course_id', courseId).order('position', { ascending: true }).limit(500),
+        client.from('course_lessons').select('*').eq('course_id', courseId).order('position', { ascending: true }).limit(1000),
+        client
+            .from('course_lesson_progress')
+            .select('lesson_id, completed, last_position_seconds')
+            .eq('user_id', currentSupabaseUserId)
+            .limit(2000),
+        client
+            .from('course_user_achievements')
+            .select('code, earned_at, course_achievements(code, title, description, icon)')
+            .eq('course_id', courseId)
+            .eq('user_id', currentSupabaseUserId)
+            .order('earned_at', { ascending: false })
+            .limit(50)
+    ]);
+
+    const modules = Array.isArray(modsRes?.data) ? modsRes.data : [];
+    const lessons = Array.isArray(lessonsRes?.data) ? lessonsRes.data : [];
+    const progressRows = Array.isArray(progRes?.data) ? progRes.data : [];
+    const achievements = Array.isArray(achRes?.data) ? achRes.data : [];
+
+    const progressByLesson = {};
+    progressRows.forEach((p) => {
+        if (!p?.lesson_id) return;
+        progressByLesson[String(p.lesson_id)] = p;
+    });
+
+    const totalLessons = lessons.length;
+    const completedLessons = lessons.filter((l) => !!progressByLesson[String(l.id)]?.completed).length;
+    const pct = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+    progressFill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    progressValue.textContent = `${Math.max(0, Math.min(100, pct))}%`;
+
+    const lessonsByModule = {};
+    lessons.forEach((l) => {
+        const mid = String(l.module_id || '');
+        if (!lessonsByModule[mid]) lessonsByModule[mid] = [];
+        lessonsByModule[mid].push(l);
+    });
+    Object.keys(lessonsByModule).forEach((mid) => {
+        lessonsByModule[mid].sort((a, b) => Number(a.position) - Number(b.position));
+    });
+
+    modulesList.innerHTML = modules.length
+        ? modules
+              .map((m) => {
+                  const mid = String(m.id);
+                  const moduleLessons = lessonsByModule[mid] || [];
+                  const listHtml = moduleLessons.length
+                      ? `<div class="course-lessons-list">${moduleLessons
+                            .map((l) => {
+                                const lid = String(l.id);
+                                const p = progressByLesson[lid] || {};
+                                const done = !!p.completed;
+                                const icon = done ? 'check-circle' : 'play-circle';
+                                const label = done ? 'Completed' : 'Start';
+                                return `
+                                    <div class="course-lesson-item" onclick="playCourseLesson('${lid}')">
+                                        <div class="course-lesson-left">
+                                            <i data-lucide="${icon}"></i>
+                                            <div style="min-width:0;">
+                                                <div class="course-lesson-title">${escapeHtml(String(l.title || 'Lesson'))}</div>
+                                                <div class="course-lesson-meta">${label}</div>
+                                            </div>
+                                        </div>
+                                        <i data-lucide="chevron-right"></i>
+                                    </div>
+                                `;
+                            })
+                            .join('')}</div>`
+                      : '<div class="muted" style="padding: 10px 12px;">No lessons yet.</div>';
+                  const ownerBtn = isOwner
+                      ? `<button class="admin-action-btn" type="button" onclick="openCreateCourseLessonModal('${courseId}','${mid}')">Add lesson</button>`
+                      : '';
+                  return `
+                    <div class="course-module">
+                        <div class="course-module-head">
+                            <div class="course-module-title">${escapeHtml(String(m.title || 'Module'))}</div>
+                            ${ownerBtn}
+                        </div>
+                        ${listHtml}
+                    </div>
+                  `;
+              })
+              .join('')
+        : `<div class="muted">${isOwner ? 'Create your first module to start building.' : 'No modules yet.'}</div>`;
+
+    achievementsList.innerHTML = achievements.length
+        ? achievements
+              .map((a) => {
+                  const meta = a?.course_achievements || {};
+                  const icon = escapeHtml(String(meta.icon || 'trophy'));
+                  const title = escapeHtml(String(meta.title || a.code || 'Achievement'));
+                  const desc = escapeHtml(String(meta.description || ''));
+                  return `
+                    <div class="course-achievement">
+                        <i data-lucide="${icon}"></i>
+                        <div>
+                            <div class="course-achievement-title">${title}</div>
+                            <div class="course-achievement-desc">${desc}</div>
+                        </div>
+                    </div>
+                  `;
+              })
+              .join('')
+        : '<div class="muted">No achievements yet.</div>';
+
+    lucide.createIcons();
+
+    const nextLesson = findNextCourseLessonToContinue(lessons, progressByLesson) || null;
+    if (nextLesson) {
+        playCourseLesson(String(nextLesson.id));
+    }
+}
+
+function findNextCourseLessonToContinue(lessons, progressByLesson) {
+    const list = Array.isArray(lessons) ? lessons.slice() : [];
+    if (!list.length) return null;
+    const firstIncomplete = list.find((l) => !progressByLesson[String(l.id)]?.completed);
+    if (firstIncomplete) return firstIncomplete;
+    return list[0] || null;
+}
+
+async function toggleCoursePublish(courseId, next) {
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const id = String(courseId || '').trim();
+    const value = !!next;
+    if (!id) return;
+    const { error } = await client.from('courses').update({ is_published: value }).eq('id', id).eq('owner_id', currentSupabaseUserId);
+    if (error) {
+        showToast(error.message || 'Failed to update', 'alert-circle');
+        return;
+    }
+    showToast(value ? 'Published' : 'Unpublished', 'check-circle');
+    await renderMyProfileCoursesPanel();
+    await renderCourseSection();
+}
+
+async function playCourseLesson(lessonId) {
+    if (!requireAuthOrPrompt()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const courseId = String(activeCourseId || '').trim();
+    if (!courseId) return;
+    const lid = String(lessonId || '').trim();
+    if (!lid) return;
+    const lessonVideo = document.getElementById('courseLessonVideo');
+    const nowPlaying = document.getElementById('courseNowPlaying');
+    if (!lessonVideo || !nowPlaying) return;
+    activeCourseLastLessonId = lid;
+    nowPlaying.textContent = 'Loading lesson...';
+    try {
+        lessonVideo.pause();
+    } catch (e) {
+        null;
+    }
+    const signed = await courseAuthedFetch('course-lesson-video-url', { lessonId: lid, expiresIn: 60 * 60 });
+    if (signed?.error || !signed?.signedUrl) {
+        showToast(signed?.error || 'Failed to load video', 'alert-circle');
+        nowPlaying.textContent = '';
+        return;
+    }
+    lessonVideo.src = String(signed.signedUrl);
+    lessonVideo.load();
+    const { data: lessonRow } = await client.from('course_lessons').select('id, title, duration_seconds').eq('id', lid).maybeSingle();
+    nowPlaying.textContent = String(lessonRow?.title || 'Lesson');
+
+    const { data: progressRow } = await client
+        .from('course_lesson_progress')
+        .select('last_position_seconds, completed')
+        .eq('lesson_id', lid)
+        .eq('user_id', currentSupabaseUserId)
+        .maybeSingle();
+
+    const seekTo = Number(progressRow?.last_position_seconds) || 0;
+
+    const onLoaded = () => {
+        try {
+            if (seekTo > 3 && Number.isFinite(seekTo)) {
+                lessonVideo.currentTime = Math.min(Math.max(0, seekTo), Math.max(0, lessonVideo.duration || seekTo));
+            }
+        } catch (e) {
+            null;
+        }
+        try {
+            if (lessonRow && (!lessonRow.duration_seconds || Number(lessonRow.duration_seconds) <= 0) && lessonVideo.duration && Number.isFinite(Number(lessonVideo.duration))) {
+                client.from('course_lessons').update({ duration_seconds: Math.round(Number(lessonVideo.duration)) }).eq('id', lid).eq('course_id', courseId);
+            }
+        } catch (e) {
+            null;
+        }
+        try {
+            lessonVideo.play();
+        } catch (e) {
+            null;
+        }
+    };
+
+    lessonVideo.onloadedmetadata = onLoaded;
+    lessonVideo.ontimeupdate = () => queueCourseProgressFlush(false);
+    lessonVideo.onpause = () => queueCourseProgressFlush(false);
+    lessonVideo.onended = () => queueCourseProgressFlush(true);
+}
+
+function queueCourseProgressFlush(markComplete) {
+    const video = document.getElementById('courseLessonVideo');
+    const lessonId = String(activeCourseLastLessonId || '').trim();
+    if (!video || !lessonId) return;
+    const pos = Math.floor(Number(video.currentTime) || 0);
+    const dur = Math.floor(Number(video.duration) || 0);
+    activeCourseProgressQueued = { lessonId, pos, dur, markComplete: !!markComplete };
+    if (activeCourseProgressInFlight) return;
+    if (activeCourseProgressFlushTimer) return;
+    activeCourseProgressFlushTimer = setTimeout(() => {
+        activeCourseProgressFlushTimer = null;
+        flushCourseProgressQueued();
+    }, 1200);
+}
+
+async function flushCourseProgressQueued() {
+    if (activeCourseProgressInFlight) return;
+    if (!activeCourseProgressQueued) return;
+    const payload = activeCourseProgressQueued;
+    activeCourseProgressQueued = null;
+    activeCourseProgressInFlight = true;
+    try {
+        const client = initSupabase();
+        if (!client) return;
+        await client.rpc('upsert_course_lesson_progress', {
+            p_lesson_id: payload.lessonId,
+            p_position_seconds: payload.pos,
+            p_duration_seconds: payload.dur,
+            p_mark_complete: payload.markComplete
+        });
+    } catch (e) {
+        null;
+    } finally {
+        activeCourseProgressInFlight = false;
+        if (activeCourseProgressQueued) {
+            setTimeout(() => flushCourseProgressQueued(), 400);
+        } else {
+            try {
+                const section = getActiveSectionId();
+                if (section === 'course-section') renderCourseSection();
+            } catch (e) {
+                null;
+            }
+        }
+    }
 }

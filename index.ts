@@ -30,10 +30,6 @@ function pickKeyFromJson(raw: string) {
   }
 }
 
-function safeSegment(s: string) {
-  return String(s || "").replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -45,9 +41,7 @@ Deno.serve(async (req) => {
   const secretKeysJson = Deno.env.get("SUPABASE_SECRET_KEYS") ?? "";
 
   const anonKey =
-    (Deno.env.get("SUPABASE_ANON_KEY") ?? "") ||
-    pickKeyFromJson(publishableKeysJson);
-
+    (Deno.env.get("SUPABASE_ANON_KEY") ?? "") || pickKeyFromJson(publishableKeysJson);
   const serviceRoleKey =
     (Deno.env.get("SERVICE_ROLE_KEY") ?? "") ||
     (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "") ||
@@ -69,10 +63,13 @@ Deno.serve(async (req) => {
     body = null;
   }
 
-  const listingId = Number(body?.listingId) || 0;
-  const tmpPath = String(body?.tmpPath || "").trim();
-  if (!listingId) return json(400, { error: "Missing listingId" });
-  if (!tmpPath) return json(400, { error: "Missing tmpPath" });
+  const lessonId = String(body?.lessonId || "").trim();
+  const expiresIn = Math.max(
+    60,
+    Math.min(60 * 60 * 6, Number(body?.expiresIn) || 60 * 60),
+  );
+
+  if (!lessonId) return json(400, { error: "Missing lessonId" });
 
   const userClient = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: authHeader, apikey: anonKey } },
@@ -86,51 +83,62 @@ Deno.serve(async (req) => {
   }
   const userId = requesterData.user.id;
 
-  if (!tmpPath.startsWith(`${userId}/tmp/`)) {
-    return json(400, { error: "Invalid tmpPath" });
-  }
-
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
 
-  const { data: profileRow } = await adminClient
-    .from("profiles")
-    .select("id, is_vip")
-    .eq("id", userId)
+  const { data: lessonRow } = await adminClient
+    .from("course_lessons")
+    .select("id, course_id, is_preview, courses!inner(id, owner_id, is_published)")
+    .eq("id", lessonId)
     .maybeSingle();
 
-  if (!profileRow?.is_vip) return json(403, { error: "VIP required" });
+  if (!lessonRow?.id) return json(404, { error: "Lesson not found" });
 
-  const { data: listingRow } = await adminClient
-    .from("listings")
-    .select("id, owner_id")
-    .eq("id", listingId)
+  const courseOwnerId = (lessonRow as any)?.courses?.owner_id || "";
+  const isPublished = !!(lessonRow as any)?.courses?.is_published;
+  const isOwner = String(courseOwnerId || "") === String(userId);
+
+  const { data: enrollmentRow } = await adminClient
+    .from("course_enrollments")
+    .select("course_id, user_id")
+    .eq("course_id", lessonRow.course_id)
+    .eq("user_id", userId)
     .maybeSingle();
 
-  if (!listingRow?.id) return json(404, { error: "Listing not found" });
-  if (String(listingRow.owner_id || "") !== String(userId)) {
-    return json(403, { error: "Not owner" });
-  }
+  const isEnrolled = !!enrollmentRow?.course_id;
 
-  const filename = safeSegment(tmpPath.split("/").slice(-1)[0] || "video.mp4");
-  const objectPath = `${userId}/${listingId}/${Date.now()}_${filename}`;
-
-  const bucket = adminClient.storage.from("listing-videos");
-  const moved = await bucket.move(tmpPath, objectPath);
-  if (moved.error) {
-    const copied = await bucket.copy(tmpPath, objectPath);
-    if (copied.error) {
-      return json(500, { error: "Failed to move video" });
+  if (!isOwner && !isEnrolled) {
+    if (!(isPublished && (lessonRow as any).is_preview)) {
+      return json(403, { error: "No access" });
     }
-    await bucket.remove([tmpPath]);
   }
 
-  const { data: publicData } = bucket.getPublicUrl(objectPath);
+  const { data: mediaRow } = await adminClient
+    .from("course_lesson_media")
+    .select("video_bucket, video_object_path")
+    .eq("lesson_id", lessonId)
+    .maybeSingle();
+
+  if (!mediaRow?.video_object_path) {
+    return json(404, { error: "Lesson has no video yet" });
+  }
+
+  const bucket = String(mediaRow.video_bucket || "course-videos");
+  const path = String(mediaRow.video_object_path || "");
+
+  const { data, error } = await adminClient.storage
+    .from(bucket)
+    .createSignedUrl(path, expiresIn);
+
+  if (error || !data?.signedUrl) {
+    return json(500, { error: "Failed to create signed url" });
+  }
 
   return json(200, {
-    video_path: objectPath,
-    video_url: publicData?.publicUrl || "",
+    bucket,
+    path,
+    expiresIn,
+    signedUrl: data.signedUrl,
   });
 });
-

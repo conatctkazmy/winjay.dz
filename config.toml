@@ -15,3 +15,9 @@ verify_jwt = false
 
 [functions.vip-listing-video-attach]
 verify_jwt = false
+
+[functions.course-owner-upload-url]
+verify_jwt = false
+
+[functions.course-lesson-video-url]
+verify_jwt = false

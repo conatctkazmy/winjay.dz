@@ -169,6 +169,7 @@
                     <ul>
                         <li><a href="#" onclick="showSection('favorites-section'); return false;"><i data-lucide="heart"></i> <span data-i18n="sidebar_favorites">Favorites</span></a></li>
                         <li><a href="#" onclick="showSection('messages-section'); return false;"><i data-lucide="message-circle"></i> <span data-i18n="sidebar_messages">Messages</span></a></li>
+                        <li id="sidebarCoursesItem" style="display:none;"><a href="#" onclick="showSection('course-section'); return false;"><i data-lucide="graduation-cap"></i> <span data-i18n="sidebar_courses">Courses</span></a></li>
                         <li id="sidebarVerifiedCta" style="display:none;"><a href="#" onclick="openVerifiedUpgradeModal(); return false;"><i data-lucide="badge-check"></i> <span style="color: #28a745;" data-i18n="sidebar_become_verified">Become Verified</span></a></li>
                         <li id="sidebarVipCta" style="display:none;"><a href="#" onclick="openVipModal(); return false;"><i data-lucide="crown"></i> <span style="color: #ffd700;" data-i18n="sidebar_become_vip">Become VIP</span></a></li>
                         <li><a href="#" onclick="showSection('settings-section'); return false;"><i data-lucide="settings"></i> <span data-i18n="sidebar_settings">Settings</span></a></li>
@@ -382,6 +383,10 @@
                                 <i data-lucide="star"></i>
                                 <span>Reviews</span>
                             </button>
+                            <button class="profile-switch-btn" id="myProfileCoursesTab" type="button" onclick="switchMyProfileSection('courses')">
+                                <i data-lucide="graduation-cap"></i>
+                                <span>Courses</span>
+                            </button>
                         </div>
                         <div id="myProfileListingsSection" class="profile-section-panel active">
                             <h3>My listings</h3>
@@ -391,6 +396,25 @@
                             <div class="reviews-section">
                                 <h3>Reviews about me</h3>
                                 <div class="reviews-list" id="myProfileReviewsList"></div>
+                            </div>
+                        </div>
+                        <div id="myProfileCoursesSection" class="profile-section-panel">
+                            <div class="profile-courses-grid">
+                                <div class="profile-courses-card">
+                                    <div class="profile-courses-card-head">
+                                        <h3><i data-lucide="play-circle"></i> My learning</h3>
+                                    </div>
+                                    <div id="myCourseInvitesList"></div>
+                                    <div class="profile-courses-subtitle">Enrolled</div>
+                                    <div id="myEnrolledCoursesList"></div>
+                                </div>
+                                <div class="profile-courses-card">
+                                    <div class="profile-courses-card-head">
+                                        <h3><i data-lucide="settings-2"></i> Owner dashboard</h3>
+                                        <button class="admin-action-btn" type="button" onclick="openCreateCourseModal()">Create course</button>
+                                    </div>
+                                    <div id="myOwnedCoursesList"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -407,6 +431,49 @@
                     <i data-lucide="heart-off"></i>
                     <h3>Pas encore de favoris</h3>
                     <p>Ajoutez des annonces à vos favoris en cliquant sur le cœur.</p>
+                </div>
+            </section>
+
+            <section id="course-section" class="content-section">
+                <button class="back-btn" onclick="navigateBackFromCourse()">
+                    <i data-lucide="arrow-left"></i> Back
+                </button>
+                <div class="course-shell">
+                    <div class="course-header">
+                        <div class="course-thumb">
+                            <img id="courseThumbImg" src="" alt="">
+                        </div>
+                        <div class="course-head-meta">
+                            <div class="course-title" id="courseTitle">Course</div>
+                            <div class="course-owner" id="courseOwner">—</div>
+                            <div class="course-desc" id="courseDescription"></div>
+                            <div class="course-access-row" id="courseAccessRow"></div>
+                        </div>
+                    </div>
+                    <div class="course-vsl" id="courseVslWrap" style="display:none;">
+                        <div class="course-vsl-title">VSL</div>
+                        <video id="courseVslVideo" class="course-video" controls playsinline></video>
+                    </div>
+                    <div class="course-player-grid" id="coursePlayerGrid" style="display:none;">
+                        <div class="course-lessons-pane">
+                            <div class="course-progress-row">
+                                <div class="course-progress-label">Progress</div>
+                                <div class="course-progress-bar">
+                                    <div class="course-progress-fill" id="courseProgressFill"></div>
+                                </div>
+                                <div class="course-progress-value" id="courseProgressValue">0%</div>
+                            </div>
+                            <div id="courseModulesList"></div>
+                        </div>
+                        <div class="course-video-pane">
+                            <div class="course-now-playing" id="courseNowPlaying"></div>
+                            <video id="courseLessonVideo" class="course-video" controls playsinline></video>
+                            <div class="course-achievements">
+                                <div class="course-achievements-title"><i data-lucide="trophy"></i> Achievements</div>
+                                <div class="course-achievements-list" id="courseAchievementsList"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -1651,6 +1718,82 @@
                 <input type="text" id="newMessageUsername" placeholder="@username" autocomplete="off">
             </div>
             <button class="submit-btn" type="button" onclick="startNewMessageFromModal()">Start chat</button>
+        </div>
+    </div>
+
+    <div id="createCourseModal" class="modal">
+        <div class="modal-content" style="max-width: 520px;">
+            <span class="close" onclick="closeModal('createCourseModal')">&times;</span>
+            <h2 style="margin-bottom: 14px;">Create course</h2>
+            <div class="form-group">
+                <label>Title</label>
+                <input type="text" id="createCourseTitle" placeholder="Course title" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="createCourseDescription" rows="4" placeholder="What will students learn?"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Thumbnail (optional)</label>
+                <input type="file" id="createCourseThumbnailFile" accept="image/*">
+            </div>
+            <div class="form-group">
+                <label>VSL video (optional)</label>
+                <input type="file" id="createCourseVslFile" accept="video/*">
+            </div>
+            <div class="form-group" style="display:flex; gap:10px; align-items:center;">
+                <input type="checkbox" id="createCoursePublished">
+                <label for="createCoursePublished" style="margin:0;">Publish course page</label>
+            </div>
+            <button class="submit-btn" type="button" onclick="createCourseFromModal()">Create</button>
+        </div>
+    </div>
+
+    <div id="createCourseModuleModal" class="modal">
+        <div class="modal-content" style="max-width: 460px;">
+            <span class="close" onclick="closeModal('createCourseModuleModal')">&times;</span>
+            <h2 style="margin-bottom: 14px;">Add module</h2>
+            <div class="form-group">
+                <label>Module title</label>
+                <input type="text" id="createCourseModuleTitle" placeholder="Module title" autocomplete="off">
+            </div>
+            <button class="submit-btn" type="button" onclick="createCourseModuleFromModal()">Add</button>
+        </div>
+    </div>
+
+    <div id="createCourseLessonModal" class="modal">
+        <div class="modal-content" style="max-width: 520px;">
+            <span class="close" onclick="closeModal('createCourseLessonModal')">&times;</span>
+            <h2 style="margin-bottom: 14px;">Add lesson</h2>
+            <div class="form-group">
+                <label>Lesson title</label>
+                <input type="text" id="createCourseLessonTitle" placeholder="Lesson title" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Video file</label>
+                <input type="file" id="createCourseLessonVideoFile" accept="video/*">
+            </div>
+            <div class="form-group" style="display:flex; gap:10px; align-items:center;">
+                <input type="checkbox" id="createCourseLessonPreview">
+                <label for="createCourseLessonPreview" style="margin:0;">Preview lesson (public when course is published)</label>
+            </div>
+            <button class="submit-btn" type="button" onclick="createCourseLessonFromModal()">Add</button>
+        </div>
+    </div>
+
+    <div id="inviteCourseStudentModal" class="modal">
+        <div class="modal-content" style="max-width: 520px;">
+            <span class="close" onclick="closeModal('inviteCourseStudentModal')">&times;</span>
+            <h2 style="margin-bottom: 14px;">Invite student</h2>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="inviteCourseStudentEmail" placeholder="student@email.com" autocomplete="off">
+            </div>
+            <button class="submit-btn" type="button" onclick="inviteCourseStudentFromModal()">Send invite</button>
+            <div style="margin-top:16px;">
+                <div class="meta" style="margin-bottom:8px;">Invites</div>
+                <div id="courseInvitesOwnerList"></div>
+            </div>
         </div>
     </div>
 
