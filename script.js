@@ -11955,13 +11955,22 @@ function openCreateListingPage({ pushState = true } = {}) {
     if (phoneInput && !phoneInput.value && userProfile?.phone) {
         phoneInput.value = userProfile.phone;
     }
-    autoFillCategoryFromProfile();
+    
+    const isPro = userProfile?.businessType === 'Professionnel';
+    const hasAutoFilled = autoFillCategoryFromProfile();
+    
     try {
         setupSelectPickers();
     } catch (e) {
         null;
     }
-    setCreateListingStep('category');
+    
+    if (isPro && hasAutoFilled) {
+        setCreateListingStep('details');
+    } else {
+        setCreateListingStep('category');
+    }
+    
     lucide.createIcons();
 }
 
@@ -11971,7 +11980,7 @@ function normalizeText(str) {
 
 function autoFillCategoryFromProfile() {
     const workCat = userProfile?.workCategory;
-    if (!workCat) return;
+    if (!workCat) return false;
     const normalizedCat = normalizeText(workCat);
     let mapping = WORK_CATEGORY_TO_LISTING[workCat];
     if (!mapping) {
@@ -11982,18 +11991,21 @@ function autoFillCategoryFromProfile() {
             }
         }
     }
-    if (!mapping) return;
+    if (!mapping) return false;
     const catSelect = document.getElementById('listingCategory');
     const subSelect = document.getElementById('listingSubcategory');
-    if (!catSelect || !subSelect) return;
+    if (!catSelect || !subSelect) return false;
+    
     catSelect.value = mapping.category;
+    // Pre-populate subcategory list
+    populateListingSubcategorySelect(subSelect, mapping.category, mapping.subcategory);
+    
     catSelect.dispatchEvent(new Event('change'));
-    setTimeout(() => {
-        subSelect.value = mapping.subcategory;
-        subSelect.dispatchEvent(new Event('change'));
-        toggleHotelFieldsVisibility();
-        setCreateListingStep('details');
-    }, 50);
+    subSelect.value = mapping.subcategory;
+    subSelect.dispatchEvent(new Event('change'));
+    
+    toggleHotelFieldsVisibility();
+    return true;
 }
 
 function handleListingRoutesFromUrl() {
