@@ -11872,10 +11872,23 @@ function openCreateListingPage({ pushState = true } = {}) {
     lucide.createIcons();
 }
 
+function normalizeText(str) {
+    return String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function autoFillCategoryFromProfile() {
     const workCat = userProfile?.work_category;
     if (!workCat) return;
-    const mapping = WORK_CATEGORY_TO_LISTING[workCat];
+    const normalizedCat = normalizeText(workCat);
+    let mapping = WORK_CATEGORY_TO_LISTING[workCat];
+    if (!mapping) {
+        for (const [key, value] of Object.entries(WORK_CATEGORY_TO_LISTING)) {
+            if (normalizeText(key) === normalizedCat) {
+                mapping = value;
+                break;
+            }
+        }
+    }
     if (!mapping) return;
     const catSelect = document.getElementById('listingCategory');
     const subSelect = document.getElementById('listingSubcategory');
