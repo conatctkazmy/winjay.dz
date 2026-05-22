@@ -6966,9 +6966,11 @@ footer {
 
     .sidebar-mobile-header {
         display: flex;
+        height: 46px;
     }
 
     .sidebar-content {
+        padding-top: 10px;
         padding-bottom: calc(20px + 92px + env(safe-area-inset-bottom));
     }
 
