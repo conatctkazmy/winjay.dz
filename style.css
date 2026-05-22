@@ -1150,6 +1150,28 @@ html.sidebar-open {
     touch-action: pan-y;
 }
 
+@media (min-width: 769px) {
+    .sidebar {
+        scrollbar-width: thin;
+        scrollbar-color: var(--primary) transparent;
+    }
+
+    .sidebar::-webkit-scrollbar {
+        width: 10px;
+    }
+
+    .sidebar::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .sidebar::-webkit-scrollbar-thumb {
+        background: var(--primary);
+        border-radius: 999px;
+        border: 3px solid transparent;
+        background-clip: padding-box;
+    }
+}
+
 html[dir="rtl"] .sidebar {
     right: 0;
     left: auto;
