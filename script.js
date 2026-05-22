@@ -48,6 +48,7 @@ const VERIFIED_QUEST_STORAGE_KEY = 'winjayVerifiedQuestV1';
 const THEME_STORAGE_KEY = 'winjayThemeV1';
 const LOGIN_FAIL_COUNT_STORAGE_KEY = 'winjayLoginFailCountV1';
 const LOGIN_COOLDOWN_UNTIL_STORAGE_KEY = 'winjayLoginCooldownUntilV1';
+const LANGUAGE_STORAGE_KEY = 'winjayLangV1';
 const FREE_VERIFIED_TOTAL = 1000;
 const REFERRALS_REQUIRED = 10;
 const MARKETPLACE_LISTINGS_STORAGE_KEY = 'marketplaceListingsV1';
@@ -60,6 +61,312 @@ const FREE_LISTING_LIMIT = 4;
 const SELLER_PROFILE_LAST_TAG_STORAGE_KEY = 'winjayLastSellerProfileTagV1';
 const INITIAL_LISTINGS_FETCH_LIMIT = 24;
 const LISTINGS_FETCH_PAGE_SIZE = 24;
+
+const SUPPORTED_LANGS = ['fr', 'ar', 'en'];
+let currentLang = 'fr';
+
+const I18N = {
+    fr: {
+        lang_current: 'Français',
+        search_placeholder: 'Rechercher des annonces...',
+        search_clear_history: 'Effacer l’historique',
+        home_hero_title: 'Trouvez ce dont vous avez besoin, localement.',
+        home_hero_subtitle: 'Le meilleur marché pour tout.',
+        home_sort_newest: 'Plus récents',
+        home_sort_price_asc: 'Prix croissant',
+        home_sort_price_desc: 'Prix décroissant',
+        filter_button: 'Filtres',
+        filter_price_title: 'Prix (DA)',
+        filter_wilaya_title: 'Wilaya',
+        filter_wilaya_all: 'Toutes les wilayas',
+        filter_category_title: 'Catégorie',
+        filter_category_all: 'Toutes les catégories',
+        filter_clear: 'Effacer les filtres',
+        price_min: 'Min',
+        price_max: 'Max',
+        load_more: 'Charger plus',
+        empty_title: 'Aucune annonce trouvée',
+        empty_subtitle: 'Essayez de modifier vos filtres ou votre recherche.',
+        reset_filters: 'Réinitialiser les filtres',
+        messages_search_placeholder: 'Rechercher',
+        chat_write_message_placeholder: 'Écrire un message...',
+        edit_profile_title: 'Modifier le profil',
+        label_name: 'Nom',
+        label_username: "Nom d'utilisateur",
+        label_location: 'Localisation',
+        label_account_type: 'Type de compte',
+        label_phone: 'Numéro de téléphone',
+        label_work_category: 'Catégorie de travail',
+        save_changes: 'Enregistrer les modifications',
+        category_search_placeholder: 'Rechercher une catégorie...',
+        select_search_placeholder: 'Rechercher...',
+        theme_dark_mode: 'Mode sombre',
+        sidebar_categories: 'Catégories',
+        cat_all: 'Tous',
+        cat_vehicles: 'Véhicules',
+        cat_real_estate: 'Immobilier',
+        cat_electronics: 'Électronique',
+        cat_jobs_services: 'Emploi & Services',
+        cat_home_garden: 'Maison & Jardin',
+        cat_fashion_beauty: 'Mode & Beauté',
+        cat_leisure_entertainment: 'Loisirs & Divertissement',
+        cat_it: 'Informatique',
+        cat_telephony: 'Téléphonie',
+        cat_sport_health: 'Sport & Santé',
+        cat_pro_equipment: 'Matériel Pro',
+        cat_other: 'Autres',
+        sidebar_following: 'Abonnements',
+        sidebar_see_all: 'Voir tout',
+        sidebar_community: 'Communauté',
+        sidebar_ambassadors: 'Ambassadeurs',
+        sidebar_my_actions: 'Mes actions',
+        sidebar_favorites: 'Favoris',
+        sidebar_messages: 'Messages',
+        sidebar_become_verified: 'Devenir Vérifié',
+        sidebar_become_vip: 'Devenir VIP',
+        sidebar_settings: 'Paramètres'
+    },
+    en: {
+        lang_current: 'English',
+        search_placeholder: 'Search listings...',
+        search_clear_history: 'Clear history',
+        home_hero_title: 'Find what you need, locally.',
+        home_hero_subtitle: 'The best marketplace for everything.',
+        home_sort_newest: 'Newest',
+        home_sort_price_asc: 'Price: low to high',
+        home_sort_price_desc: 'Price: high to low',
+        filter_button: 'Filters',
+        filter_price_title: 'Price (DZD)',
+        filter_wilaya_title: 'Wilaya',
+        filter_wilaya_all: 'All wilayas',
+        filter_category_title: 'Category',
+        filter_category_all: 'All categories',
+        filter_clear: 'Clear filters',
+        price_min: 'Min',
+        price_max: 'Max',
+        load_more: 'Load more',
+        empty_title: 'No listings found',
+        empty_subtitle: 'Try adjusting your filters or search.',
+        reset_filters: 'Reset filters',
+        messages_search_placeholder: 'Search',
+        chat_write_message_placeholder: 'Write a message...',
+        edit_profile_title: 'Edit profile',
+        label_name: 'Name',
+        label_username: 'Username',
+        label_location: 'Location',
+        label_account_type: 'Account type',
+        label_phone: 'Phone number',
+        label_work_category: 'Work category',
+        save_changes: 'Save changes',
+        category_search_placeholder: 'Search a category...',
+        select_search_placeholder: 'Search...',
+        theme_dark_mode: 'Dark mode',
+        sidebar_categories: 'Categories',
+        cat_all: 'All',
+        cat_vehicles: 'Vehicles',
+        cat_real_estate: 'Real Estate',
+        cat_electronics: 'Electronics',
+        cat_jobs_services: 'Jobs & Services',
+        cat_home_garden: 'Home & Garden',
+        cat_fashion_beauty: 'Fashion & Beauty',
+        cat_leisure_entertainment: 'Leisure & Entertainment',
+        cat_it: 'IT',
+        cat_telephony: 'Phones',
+        cat_sport_health: 'Sports & Health',
+        cat_pro_equipment: 'Pro Equipment',
+        cat_other: 'Other',
+        sidebar_following: 'Following',
+        sidebar_see_all: 'See all',
+        sidebar_community: 'Community',
+        sidebar_ambassadors: 'Ambassadors',
+        sidebar_my_actions: 'My actions',
+        sidebar_favorites: 'Favorites',
+        sidebar_messages: 'Messages',
+        sidebar_become_verified: 'Become Verified',
+        sidebar_become_vip: 'Become VIP',
+        sidebar_settings: 'Settings'
+    },
+    ar: {
+        lang_current: 'العربية',
+        search_placeholder: 'ابحث عن الإعلانات...',
+        search_clear_history: 'مسح السجل',
+        home_hero_title: 'اعثر على ما تحتاجه محليًا.',
+        home_hero_subtitle: 'أفضل سوق لكل شيء.',
+        home_sort_newest: 'الأحدث',
+        home_sort_price_asc: 'السعر: من الأقل إلى الأعلى',
+        home_sort_price_desc: 'السعر: من الأعلى إلى الأقل',
+        filter_button: 'فلاتر',
+        filter_price_title: 'السعر (دج)',
+        filter_wilaya_title: 'الولاية',
+        filter_wilaya_all: 'كل الولايات',
+        filter_category_title: 'الفئة',
+        filter_category_all: 'كل الفئات',
+        filter_clear: 'مسح الفلاتر',
+        price_min: 'الأدنى',
+        price_max: 'الأقصى',
+        load_more: 'تحميل المزيد',
+        empty_title: 'لا توجد إعلانات',
+        empty_subtitle: 'جرّب تعديل الفلاتر أو البحث.',
+        reset_filters: 'إعادة تعيين الفلاتر',
+        messages_search_placeholder: 'بحث',
+        chat_write_message_placeholder: 'اكتب رسالة...',
+        edit_profile_title: 'تعديل الملف الشخصي',
+        label_name: 'الاسم',
+        label_username: 'اسم المستخدم',
+        label_location: 'الموقع',
+        label_account_type: 'نوع الحساب',
+        label_phone: 'رقم الهاتف',
+        label_work_category: 'فئة النشاط',
+        save_changes: 'حفظ التغييرات',
+        category_search_placeholder: 'ابحث عن فئة...',
+        select_search_placeholder: 'بحث...',
+        theme_dark_mode: 'الوضع الداكن',
+        sidebar_categories: 'الفئات',
+        cat_all: 'الكل',
+        cat_vehicles: 'مركبات',
+        cat_real_estate: 'عقارات',
+        cat_electronics: 'إلكترونيات',
+        cat_jobs_services: 'وظائف وخدمات',
+        cat_home_garden: 'المنزل والحديقة',
+        cat_fashion_beauty: 'الموضة والجمال',
+        cat_leisure_entertainment: 'ترفيه وهوايات',
+        cat_it: 'معلوماتية',
+        cat_telephony: 'هواتف',
+        cat_sport_health: 'الرياضة والصحة',
+        cat_pro_equipment: 'معدات مهنية',
+        cat_other: 'أخرى',
+        sidebar_following: 'المتابَعون',
+        sidebar_see_all: 'عرض الكل',
+        sidebar_community: 'المجتمع',
+        sidebar_ambassadors: 'سفراء',
+        sidebar_my_actions: 'إجراءاتي',
+        sidebar_favorites: 'المفضلة',
+        sidebar_messages: 'الرسائل',
+        sidebar_become_verified: 'احصل على توثيق',
+        sidebar_become_vip: 'كن VIP',
+        sidebar_settings: 'الإعدادات'
+    }
+};
+
+function normalizeLang(lang) {
+    const l = String(lang || '').trim().toLowerCase();
+    if (SUPPORTED_LANGS.includes(l)) return l;
+    return 'fr';
+}
+
+function t(key) {
+    const k = String(key || '').trim();
+    if (!k) return '';
+    const dict = I18N[currentLang] || I18N.fr;
+    return dict[k] ?? I18N.fr[k] ?? k;
+}
+
+function setLanguage(lang) {
+    currentLang = normalizeLang(lang);
+    try {
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLang);
+    } catch (e) {
+        null;
+    }
+    applyLanguageToDocument();
+    applyTranslations();
+    applyBusinessTypeTranslations();
+    populateWorkCategoriesSelect();
+}
+
+function applyLanguageToDocument() {
+    const isRtl = currentLang === 'ar';
+    document.documentElement.lang = currentLang;
+    document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
+}
+
+function applyTranslations() {
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+        const key = el.getAttribute('data-i18n');
+        if (!key) return;
+        el.textContent = t(key);
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        if (!key) return;
+        el.setAttribute('placeholder', t(key));
+    });
+
+    const langLabel = document.querySelector('#sidebarLang .sidebar-lang-label[data-i18n="lang_current"]');
+    if (langLabel) langLabel.textContent = t('lang_current');
+}
+
+function initLanguageSelector() {
+    const wrap = document.getElementById('sidebarLang');
+    const btn = document.getElementById('sidebarLangBtn');
+    const menu = document.getElementById('sidebarLangMenu');
+    if (!wrap || !btn || !menu) return;
+
+    const close = () => {
+        wrap.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+    };
+
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const next = !wrap.classList.contains('open');
+        wrap.classList.toggle('open', next);
+        btn.setAttribute('aria-expanded', next ? 'true' : 'false');
+    });
+
+    menu.querySelectorAll('[data-lang]').forEach((item) => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const lang = item.getAttribute('data-lang');
+            close();
+            setLanguage(lang);
+        });
+    });
+
+    document.addEventListener('click', () => close());
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') close();
+    });
+}
+
+function initLanguage() {
+    let lang = 'fr';
+    try {
+        lang = localStorage.getItem(LANGUAGE_STORAGE_KEY) || '';
+    } catch (e) {
+        lang = '';
+    }
+    if (!lang) {
+        const nav = String(navigator.language || '').toLowerCase();
+        if (nav.startsWith('ar')) lang = 'ar';
+        else if (nav.startsWith('en')) lang = 'en';
+        else lang = 'fr';
+    }
+    currentLang = normalizeLang(lang);
+    applyLanguageToDocument();
+    initLanguageSelector();
+    applyTranslations();
+    applyBusinessTypeTranslations();
+    populateWorkCategoriesSelect();
+}
+
+function applyBusinessTypeTranslations() {
+    const map = {
+        Particulier: { fr: 'Particulier', en: 'Individual', ar: 'فردي' },
+        Professionnel: { fr: 'Professionnel', en: 'Professional', ar: 'مهني' }
+    };
+    ['editBusinessType', 'businessType', 'signupBusinessType'].forEach((id) => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        Array.from(sel.options || []).forEach((opt) => {
+            const v = String(opt.value || '').trim();
+            if (!map[v]) return;
+            opt.textContent = map[v][currentLang] || map[v].fr;
+        });
+    });
+}
 
 function safeStorageFilename(name) {
     return String(name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -1243,39 +1550,198 @@ async function copyReferralLink() {
 function populateWorkCategoriesSelect() {
     const select = document.getElementById('editWorkCategory');
     if (!select) return;
+    const makeItem = (value, fr, en, ar) => ({ value, fr, en, ar });
+    const label = (fr, en, ar) => ({ fr, en, ar });
     const groups = [
-        { label: 'Restauration & Boissons', items: ['Restaurant', 'Fast-food', 'Café', 'Boulangerie / Pâtisserie', 'Traiteur', 'Food truck', 'Boucherie / Charcuterie', 'Épicerie / Supérette', 'Glacier / Jus'] },
-        { label: 'Hôtellerie & Tourisme', items: ['Hôtel', 'Auberge', 'Maison d’hôtes', 'Resort', 'Agence de voyage', 'Guide touristique'] },
-        { label: 'Automobile & Transport', items: ['Garage / Mécanique', 'Carrosserie / Peinture', 'Lavage auto', 'Pneumatiques', 'Pièces auto', 'Remorquage', 'Location de voiture'] },
-        { label: 'Construction & BTP', items: ['Entreprise de construction', 'Plomberie', 'Électricité', 'Climatisation / HVAC', 'Menuiserie', 'Maçonnerie', 'Peinture', 'Toiture', 'Soudure', 'Aluminium / Vitrerie'] },
-        { label: 'Services à domicile', items: ['Nettoyage', 'Déménagement', 'Jardinage', 'Lutte antiparasitaire'] },
-        { label: 'Santé & Médical', items: ['Cabinet médical', 'Clinique', 'Dentiste', 'Laboratoire', 'Opticien', 'Pharmacie / Parapharmacie', 'Kinésithérapie'] },
-        { label: 'Beauté & Bien-être', items: ['Salon de coiffure', 'Barber', 'Spa / Hammam', 'Esthétique / Soins', 'Onglerie', 'Maquillage'] },
-        { label: 'Éducation & Formation', items: ['École privée', 'Soutien scolaire', 'Centre de formation', 'École de langues', 'Auto-école'] },
-        { label: 'Informatique & Digital', items: ['Développement web / app', 'Réparation informatique', 'Réseaux / Sécurité', 'Design graphique', 'Marketing digital', 'Imprimerie'] },
-        { label: 'Commerce & Boutiques', items: ['Boutique vêtements', 'Boutique électronique', 'Boutique téléphonie', 'Meubles / Déco', 'Quincaillerie', 'Cosmétique / Parfum', 'Librairie', 'Animalerie'] },
-        { label: 'Services professionnels', items: ['Comptabilité', 'Juridique', 'Assurance', 'Conseil', 'Traduction'] },
-        { label: 'Logistique', items: ['Livraison / Coursier', 'Transport de marchandises', 'Entrepôt'] },
-        { label: 'Industrie & Fabrication', items: ['Atelier', 'Usine', 'Métallerie', 'Menuiserie industrielle', 'Textile'] },
-        { label: 'Agriculture & Animaux', items: ['Ferme', 'Pépinière', 'Fournitures agricoles', 'Vétérinaire'] },
-        { label: 'Sport & Loisirs', items: ['Salle de sport', 'Club sportif', 'Coach'] },
-        { label: 'Événementiel', items: ['Photographe', 'Vidéaste', 'DJ', 'Organisation événements'] }
+        {
+            label: label('Restauration & Boissons', 'Food & Beverage', 'الأطعمة والمشروبات'),
+            items: [
+                makeItem('Restaurant', 'Restaurant', 'Restaurant', 'مطعم'),
+                makeItem('Fast-food', 'Fast-food', 'Fast food', 'وجبات سريعة'),
+                makeItem('Café', 'Café', 'Café', 'مقهى'),
+                makeItem('Boulangerie / Pâtisserie', 'Boulangerie / Pâtisserie', 'Bakery / Pastry', 'مخبزة / حلويات'),
+                makeItem('Traiteur', 'Traiteur', 'Catering', 'تموين'),
+                makeItem('Food truck', 'Food truck', 'Food truck', 'شاحنة طعام'),
+                makeItem('Boucherie / Charcuterie', 'Boucherie / Charcuterie', 'Butcher / Deli', 'ملحمة / لحوم'),
+                makeItem('Épicerie / Supérette', 'Épicerie / Supérette', 'Grocery / Mini-market', 'بقالة / سوبرماركت'),
+                makeItem('Glacier / Jus', 'Glacier / Jus', 'Ice cream / Juice', 'آيس كريم / عصائر')
+            ]
+        },
+        {
+            label: label('Hôtellerie & Tourisme', 'Hospitality & Tourism', 'الفنادق والسياحة'),
+            items: [
+                makeItem('Hôtel', 'Hôtel', 'Hotel', 'فندق'),
+                makeItem('Auberge', 'Auberge', 'Hostel', 'نُزُل'),
+                makeItem('Maison d’hôtes', 'Maison d’hôtes', 'Guesthouse', 'دار ضيافة'),
+                makeItem('Resort', 'Resort', 'Resort', 'منتجع'),
+                makeItem('Agence de voyage', 'Agence de voyage', 'Travel agency', 'وكالة سفر'),
+                makeItem('Guide touristique', 'Guide touristique', 'Tour guide', 'مرشد سياحي')
+            ]
+        },
+        {
+            label: label('Automobile & Transport', 'Automotive & Transport', 'السيارات والنقل'),
+            items: [
+                makeItem('Garage / Mécanique', 'Garage / Mécanique', 'Mechanic shop', 'ميكانيكي / ورشة'),
+                makeItem('Carrosserie / Peinture', 'Carrosserie / Peinture', 'Body & paint', 'هيكل / طلاء'),
+                makeItem('Lavage auto', 'Lavage auto', 'Car wash', 'غسيل سيارات'),
+                makeItem('Pneumatiques', 'Pneumatiques', 'Tires', 'إطارات'),
+                makeItem('Pièces auto', 'Pièces auto', 'Auto parts', 'قطع غيار'),
+                makeItem('Remorquage', 'Remorquage', 'Towing', 'سحب السيارات'),
+                makeItem('Location de voiture', 'Location de voiture', 'Car rental', 'تأجير سيارات')
+            ]
+        },
+        {
+            label: label('Construction & BTP', 'Construction & Trades', 'البناء والحِرَف'),
+            items: [
+                makeItem('Entreprise de construction', 'Entreprise de construction', 'Construction company', 'شركة بناء'),
+                makeItem('Plomberie', 'Plomberie', 'Plumbing', 'سباكة'),
+                makeItem('Électricité', 'Électricité', 'Electrical', 'كهرباء'),
+                makeItem('Climatisation / HVAC', 'Climatisation / HVAC', 'HVAC', 'تكييف / تهوية'),
+                makeItem('Menuiserie', 'Menuiserie', 'Carpentry', 'نجارة'),
+                makeItem('Maçonnerie', 'Maçonnerie', 'Masonry', 'بناء'),
+                makeItem('Peinture', 'Peinture', 'Painting', 'دهان'),
+                makeItem('Toiture', 'Toiture', 'Roofing', 'أسقف'),
+                makeItem('Soudure', 'Soudure', 'Welding', 'لحام'),
+                makeItem('Aluminium / Vitrerie', 'Aluminium / Vitrerie', 'Aluminum / Glass', 'ألمنيوم / زجاج')
+            ]
+        },
+        {
+            label: label('Services à domicile', 'Home Services', 'خدمات منزلية'),
+            items: [
+                makeItem('Nettoyage', 'Nettoyage', 'Cleaning', 'تنظيف'),
+                makeItem('Déménagement', 'Déménagement', 'Moving', 'نقل الأثاث'),
+                makeItem('Jardinage', 'Jardinage', 'Gardening', 'بستنة'),
+                makeItem('Lutte antiparasitaire', 'Lutte antiparasitaire', 'Pest control', 'مكافحة الحشرات')
+            ]
+        },
+        {
+            label: label('Santé & Médical', 'Health & Medical', 'الصحة والطب'),
+            items: [
+                makeItem('Cabinet médical', 'Cabinet médical', 'Doctor office', 'عيادة'),
+                makeItem('Clinique', 'Clinique', 'Clinic', 'مصحة'),
+                makeItem('Dentiste', 'Dentiste', 'Dentist', 'طبيب أسنان'),
+                makeItem('Laboratoire', 'Laboratoire', 'Laboratory', 'مخبر'),
+                makeItem('Opticien', 'Opticien', 'Optician', 'نظاراتي'),
+                makeItem('Pharmacie / Parapharmacie', 'Pharmacie / Parapharmacie', 'Pharmacy', 'صيدلية'),
+                makeItem('Kinésithérapie', 'Kinésithérapie', 'Physiotherapy', 'علاج طبيعي')
+            ]
+        },
+        {
+            label: label('Beauté & Bien-être', 'Beauty & Wellness', 'الجمال والعناية'),
+            items: [
+                makeItem('Salon de coiffure', 'Salon de coiffure', 'Hair salon', 'صالون شعر'),
+                makeItem('Barber', 'Barber', 'Barber', 'حلاقة رجال'),
+                makeItem('Spa / Hammam', 'Spa / Hammam', 'Spa / Hammam', 'سبا / حمام'),
+                makeItem('Esthétique / Soins', 'Esthétique / Soins', 'Skincare', 'تجميل / عناية'),
+                makeItem('Onglerie', 'Onglerie', 'Nails', 'أظافر'),
+                makeItem('Maquillage', 'Maquillage', 'Makeup', 'مكياج')
+            ]
+        },
+        {
+            label: label('Éducation & Formation', 'Education & Training', 'التعليم والتدريب'),
+            items: [
+                makeItem('École privée', 'École privée', 'Private school', 'مدرسة خاصة'),
+                makeItem('Soutien scolaire', 'Soutien scolaire', 'Tutoring', 'دروس دعم'),
+                makeItem('Centre de formation', 'Centre de formation', 'Training center', 'مركز تكوين'),
+                makeItem('École de langues', 'École de langues', 'Language school', 'مدرسة لغات'),
+                makeItem('Auto-école', 'Auto-école', 'Driving school', 'مدرسة سياقة')
+            ]
+        },
+        {
+            label: label('Informatique & Digital', 'IT & Digital', 'المعلوماتية والرقمي'),
+            items: [
+                makeItem('Développement web / app', 'Développement web / app', 'Web / app development', 'تطوير ويب / تطبيقات'),
+                makeItem('Réparation informatique', 'Réparation informatique', 'Computer repair', 'صيانة حواسيب'),
+                makeItem('Réseaux / Sécurité', 'Réseaux / Sécurité', 'Network / Security', 'شبكات / أمن'),
+                makeItem('Design graphique', 'Design graphique', 'Graphic design', 'تصميم جرافيك'),
+                makeItem('Marketing digital', 'Marketing digital', 'Digital marketing', 'تسويق رقمي'),
+                makeItem('Imprimerie', 'Imprimerie', 'Printing', 'طباعة')
+            ]
+        },
+        {
+            label: label('Commerce & Boutiques', 'Retail & Shops', 'التجارة والمتاجر'),
+            items: [
+                makeItem('Boutique vêtements', 'Boutique vêtements', 'Clothing shop', 'متجر ملابس'),
+                makeItem('Boutique électronique', 'Boutique électronique', 'Electronics shop', 'متجر إلكترونيات'),
+                makeItem('Boutique téléphonie', 'Boutique téléphonie', 'Phone shop', 'متجر هواتف'),
+                makeItem('Meubles / Déco', 'Meubles / Déco', 'Furniture / Decor', 'أثاث / ديكور'),
+                makeItem('Quincaillerie', 'Quincaillerie', 'Hardware store', 'عتاد / أدوات'),
+                makeItem('Cosmétique / Parfum', 'Cosmétique / Parfum', 'Cosmetics / Perfume', 'تجميل / عطور'),
+                makeItem('Librairie', 'Librairie', 'Bookstore', 'مكتبة'),
+                makeItem('Animalerie', 'Animalerie', 'Pet shop', 'متجر حيوانات')
+            ]
+        },
+        {
+            label: label('Services professionnels', 'Business Services', 'خدمات مهنية'),
+            items: [
+                makeItem('Comptabilité', 'Comptabilité', 'Accounting', 'محاسبة'),
+                makeItem('Juridique', 'Juridique', 'Legal services', 'خدمات قانونية'),
+                makeItem('Assurance', 'Assurance', 'Insurance', 'تأمين'),
+                makeItem('Conseil', 'Conseil', 'Consulting', 'استشارات'),
+                makeItem('Traduction', 'Traduction', 'Translation', 'ترجمة')
+            ]
+        },
+        {
+            label: label('Logistique', 'Logistics', 'اللوجستيك'),
+            items: [
+                makeItem('Livraison / Coursier', 'Livraison / Coursier', 'Delivery / Courier', 'توصيل / ساعي'),
+                makeItem('Transport de marchandises', 'Transport de marchandises', 'Freight transport', 'نقل بضائع'),
+                makeItem('Entrepôt', 'Entrepôt', 'Warehouse', 'مستودع')
+            ]
+        },
+        {
+            label: label('Industrie & Fabrication', 'Industry & Manufacturing', 'الصناعة والتصنيع'),
+            items: [
+                makeItem('Atelier', 'Atelier', 'Workshop', 'ورشة'),
+                makeItem('Usine', 'Usine', 'Factory', 'مصنع'),
+                makeItem('Métallerie', 'Métallerie', 'Metalwork', 'حدادة'),
+                makeItem('Menuiserie industrielle', 'Menuiserie industrielle', 'Industrial carpentry', 'نجارة صناعية'),
+                makeItem('Textile', 'Textile', 'Textiles', 'نسيج')
+            ]
+        },
+        {
+            label: label('Agriculture & Animaux', 'Agriculture & Animals', 'الزراعة والحيوانات'),
+            items: [
+                makeItem('Ferme', 'Ferme', 'Farm', 'مزرعة'),
+                makeItem('Pépinière', 'Pépinière', 'Plant nursery', 'مشتلة'),
+                makeItem('Fournitures agricoles', 'Fournitures agricoles', 'Agricultural supplies', 'مستلزمات زراعية'),
+                makeItem('Vétérinaire', 'Vétérinaire', 'Veterinarian', 'طبيب بيطري')
+            ]
+        },
+        {
+            label: label('Sport & Loisirs', 'Sports & Leisure', 'الرياضة والترفيه'),
+            items: [
+                makeItem('Salle de sport', 'Salle de sport', 'Gym', 'قاعة رياضة'),
+                makeItem('Club sportif', 'Club sportif', 'Sports club', 'نادي رياضي'),
+                makeItem('Coach', 'Coach', 'Coach', 'مدرب')
+            ]
+        },
+        {
+            label: label('Événementiel', 'Events', 'الفعاليات'),
+            items: [
+                makeItem('Photographe', 'Photographe', 'Photographer', 'مصور'),
+                makeItem('Vidéaste', 'Vidéaste', 'Videographer', 'مصوّر فيديو'),
+                makeItem('DJ', 'DJ', 'DJ', 'دي جي'),
+                makeItem('Organisation événements', 'Organisation événements', 'Event planning', 'تنظيم فعاليات')
+            ]
+        }
     ];
-    select.innerHTML = '<option value="">Sélectionnez...</option>';
+    const placeholder = currentLang === 'ar' ? 'اختر...' : (currentLang === 'en' ? 'Select...' : 'Sélectionnez...');
+    select.innerHTML = `<option value="">${placeholder}</option>`;
     groups.forEach((g) => {
         const og = document.createElement('optgroup');
-        og.label = g.label;
-        g.items.forEach((name) => {
+        og.label = g.label[currentLang] || g.label.fr;
+        g.items.forEach((it) => {
             const opt = document.createElement('option');
-            opt.value = name;
-            opt.textContent = name;
+            opt.value = it.value;
+            opt.textContent = it[currentLang] || it.fr;
             og.appendChild(opt);
         });
         select.appendChild(og);
     });
     const other = document.createElement('option');
     other.value = 'Autre';
-    other.textContent = 'Autre';
+    other.textContent = currentLang === 'ar' ? 'أخرى' : (currentLang === 'en' ? 'Other' : 'Autre');
     select.appendChild(other);
 }
 
@@ -4885,6 +5351,7 @@ loadThemeModeFromStorage();
 
 document.addEventListener('DOMContentLoaded', async () => {
     setPendingReferralFromUrl();
+    initLanguage();
     updateNavbarAuthUI();
     initSupabase();
     await bootstrapSupabaseAuth();

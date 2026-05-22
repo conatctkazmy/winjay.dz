@@ -28,7 +28,7 @@
         <div class="nav-center">
             <div class="search-container" style="position: relative;">
                 <i data-lucide="search"></i>
-                <input type="text" id="mainSearchInput" placeholder="Search listings..." onkeyup="handleSearch()" onfocus="showSearchHistory()" onkeydown="handleSearchKeydown(event,'mainSearchInput')">
+                <input type="text" id="mainSearchInput" placeholder="Search listings..." data-i18n-placeholder="search_placeholder" onkeyup="handleSearch()" onfocus="showSearchHistory()" onkeydown="handleSearchKeydown(event,'mainSearchInput')">
                 <div class="search-history-dropdown" id="searchHistoryDropdown">
                     <div class="search-history-header">Recent searches</div>
                     <div id="searchHistoryList"></div>
@@ -99,14 +99,14 @@
             <button class="icon-btn mobile-search-submit" type="button" onclick="submitMobileSearch()" title="Search">
                 <i data-lucide="search"></i>
             </button>
-            <input type="text" id="mobileSearchExpandInput" placeholder="Search listings..." onkeyup="handleSearch('mobileSearchExpandInput')" onfocus="showSearchHistory('mobileSearchExpandInput','mobileSearchHistoryDropdown','mobileSearchHistoryList')" onkeydown="handleSearchKeydown(event,'mobileSearchExpandInput')">
+            <input type="text" id="mobileSearchExpandInput" placeholder="Search listings..." data-i18n-placeholder="search_placeholder" onkeyup="handleSearch('mobileSearchExpandInput')" onfocus="showSearchHistory('mobileSearchExpandInput','mobileSearchHistoryDropdown','mobileSearchHistoryList')" onkeydown="handleSearchKeydown(event,'mobileSearchExpandInput')">
             <button class="icon-btn mobile-search-close" onclick="closeMobileSearchExpand()" title="Close search" type="button">
                 <i data-lucide="x"></i>
             </button>
             <div class="search-history-dropdown" id="mobileSearchHistoryDropdown">
                 <div class="search-history-header">Recent searches</div>
                 <div id="mobileSearchHistoryList"></div>
-                <button class="clear-history-btn" onclick="clearSearchHistory()">Clear history</button>
+                <button class="clear-history-btn" onclick="clearSearchHistory()" data-i18n="search_clear_history">Clear history</button>
             </div>
         </div>
     </div>
@@ -114,8 +114,17 @@
     <div class="main-container">
         <aside id="sidebar" class="sidebar">
             <div class="sidebar-mobile-header">
-                <div class="sidebar-mobile-brand" onclick="showSection('home-section'); closeSidebarOverlay();">
-                    Catégories
+                <div class="sidebar-mobile-brand sidebar-lang" id="sidebarLang">
+                    <button class="sidebar-lang-btn" type="button" id="sidebarLangBtn" aria-haspopup="true" aria-expanded="false">
+                        <i data-lucide="globe"></i>
+                        <span class="sidebar-lang-label" data-i18n="lang_current">Français</span>
+                        <i data-lucide="chevron-down"></i>
+                    </button>
+                    <div class="sidebar-lang-menu" id="sidebarLangMenu" role="menu">
+                        <button class="sidebar-lang-item" type="button" data-lang="fr" role="menuitem">Français</button>
+                        <button class="sidebar-lang-item" type="button" data-lang="ar" role="menuitem">العربية</button>
+                        <button class="sidebar-lang-item" type="button" data-lang="en" role="menuitem">English</button>
+                    </div>
                 </div>
                 <button class="icon-btn" type="button" onclick="closeSidebarOverlay()" title="Close">
                     <i data-lucide="x"></i>
@@ -123,46 +132,46 @@
             </div>
             <div class="sidebar-content">
                 <div class="sidebar-section">
-                    <h3>Catégories</h3>
+                    <h3 data-i18n="sidebar_categories">Catégories</h3>
                     <ul id="categoryList" class="category-list">
-                        <li><a href="#" onclick="filterByCategory('all', this); return false;"><i data-lucide="layout-grid"></i> Tous</a></li>
-                        <li><a href="#" onclick="filterByCategory('Véhicules', this); return false;"><i data-lucide="car"></i> Véhicules</a></li>
-                        <li><a href="#" onclick="filterByCategory('Immobilier', this); return false;"><i data-lucide="home"></i> Immobilier</a></li>
-                        <li><a href="#" onclick="filterByCategory('Électronique', this); return false;"><i data-lucide="smartphone"></i> Électronique</a></li>
-                        <li><a href="#" onclick="filterByCategory('Emploi & Services', this); return false;"><i data-lucide="briefcase"></i> Emploi & Services</a></li>
-                        <li><a href="#" onclick="filterByCategory('Maison & Jardin', this); return false;"><i data-lucide="armchair"></i> Maison & Jardin</a></li>
-                        <li><a href="#" onclick="filterByCategory('Mode & Beauté', this); return false;"><i data-lucide="shopping-bag"></i> Mode & Beauté</a></li>
-                        <li><a href="#" onclick="filterByCategory('Loisirs & Divertissement', this); return false;"><i data-lucide="palmtree"></i> Loisirs & Divertissement</a></li>
-                        <li><a href="#" onclick="filterByCategory('Informatique', this); return false;"><i data-lucide="monitor"></i> Informatique</a></li>
-                        <li><a href="#" onclick="filterByCategory('Téléphonie', this); return false;"><i data-lucide="phone"></i> Téléphonie</a></li>
-                        <li><a href="#" onclick="filterByCategory('Sport & Santé', this); return false;"><i data-lucide="heart-pulse"></i> Sport & Santé</a></li>
-                        <li><a href="#" onclick="filterByCategory('Matériel Professionnel', this); return false;"><i data-lucide="wrench"></i> Matériel Pro</a></li>
-                        <li><a href="#" onclick="openOtherCategoriesModal(true); return false;"><i data-lucide="more-horizontal"></i> Autres</a></li>
+                        <li><a href="#" onclick="filterByCategory('all', this); return false;"><i data-lucide="layout-grid"></i> <span data-i18n="cat_all">Tous</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Véhicules', this); return false;"><i data-lucide="car"></i> <span data-i18n="cat_vehicles">Véhicules</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Immobilier', this); return false;"><i data-lucide="home"></i> <span data-i18n="cat_real_estate">Immobilier</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Électronique', this); return false;"><i data-lucide="smartphone"></i> <span data-i18n="cat_electronics">Électronique</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Emploi & Services', this); return false;"><i data-lucide="briefcase"></i> <span data-i18n="cat_jobs_services">Emploi & Services</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Maison & Jardin', this); return false;"><i data-lucide="armchair"></i> <span data-i18n="cat_home_garden">Maison & Jardin</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Mode & Beauté', this); return false;"><i data-lucide="shopping-bag"></i> <span data-i18n="cat_fashion_beauty">Mode & Beauté</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Loisirs & Divertissement', this); return false;"><i data-lucide="palmtree"></i> <span data-i18n="cat_leisure_entertainment">Loisirs & Divertissement</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Informatique', this); return false;"><i data-lucide="monitor"></i> <span data-i18n="cat_it">Informatique</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Téléphonie', this); return false;"><i data-lucide="phone"></i> <span data-i18n="cat_telephony">Téléphonie</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Sport & Santé', this); return false;"><i data-lucide="heart-pulse"></i> <span data-i18n="cat_sport_health">Sport & Santé</span></a></li>
+                        <li><a href="#" onclick="filterByCategory('Matériel Professionnel', this); return false;"><i data-lucide="wrench"></i> <span data-i18n="cat_pro_equipment">Matériel Pro</span></a></li>
+                        <li><a href="#" onclick="openOtherCategoriesModal(true); return false;"><i data-lucide="more-horizontal"></i> <span data-i18n="cat_other">Autres</span></a></li>
                     </ul>
                 </div>
                 <div class="sidebar-divider" id="sidebarFollowingDivider"></div>
                 <div class="sidebar-section" id="sidebarFollowingSection">
-                    <h3>Abonnements</h3>
+                    <h3 data-i18n="sidebar_following">Abonnements</h3>
                     <ul id="sidebarFollowingList" class="sidebar-following-list"></ul>
                     <div id="sidebarFollowingEmpty" class="sidebar-following-empty" style="display:none;"></div>
-                    <button id="sidebarFollowingMoreBtn" class="sidebar-following-more" type="button" onclick="toggleSidebarFollowingExpanded()" style="display:none;">Voir tout</button>
+                    <button id="sidebarFollowingMoreBtn" class="sidebar-following-more" type="button" onclick="toggleSidebarFollowingExpanded()" style="display:none;" data-i18n="sidebar_see_all">Voir tout</button>
                 </div>
                 <div class="sidebar-divider"></div>
                 <div class="sidebar-section">
-                    <h3>Communauté</h3>
+                    <h3 data-i18n="sidebar_community">Communauté</h3>
                     <ul>
-                        <li><a href="#" onclick="openAmbassadorsSection(); return false;"><i data-lucide="award"></i> Ambassadeurs</a></li>
+                        <li><a href="#" onclick="openAmbassadorsSection(); return false;"><i data-lucide="award"></i> <span data-i18n="sidebar_ambassadors">Ambassadeurs</span></a></li>
                     </ul>
                 </div>
                 <div class="sidebar-divider"></div>
                 <div class="sidebar-section">
-                    <h3>My actions</h3>
+                    <h3 data-i18n="sidebar_my_actions">My actions</h3>
                     <ul>
-                        <li><a href="#" onclick="showSection('favorites-section'); return false;"><i data-lucide="heart"></i> Favorites</a></li>
-                        <li><a href="#" onclick="showSection('messages-section'); return false;"><i data-lucide="message-circle"></i> Messages</a></li>
-                        <li id="sidebarVerifiedCta" style="display:none;"><a href="#" onclick="openVerifiedUpgradeModal(); return false;"><i data-lucide="badge-check"></i> <span style="color: #28a745;">Become Verified</span></a></li>
-                        <li id="sidebarVipCta" style="display:none;"><a href="#" onclick="openVipModal(); return false;"><i data-lucide="crown"></i> <span style="color: #ffd700;">Become VIP</span></a></li>
-                        <li><a href="#" onclick="showSection('settings-section'); return false;"><i data-lucide="settings"></i> Settings</a></li>
+                        <li><a href="#" onclick="showSection('favorites-section'); return false;"><i data-lucide="heart"></i> <span data-i18n="sidebar_favorites">Favorites</span></a></li>
+                        <li><a href="#" onclick="showSection('messages-section'); return false;"><i data-lucide="message-circle"></i> <span data-i18n="sidebar_messages">Messages</span></a></li>
+                        <li id="sidebarVerifiedCta" style="display:none;"><a href="#" onclick="openVerifiedUpgradeModal(); return false;"><i data-lucide="badge-check"></i> <span style="color: #28a745;" data-i18n="sidebar_become_verified">Become Verified</span></a></li>
+                        <li id="sidebarVipCta" style="display:none;"><a href="#" onclick="openVipModal(); return false;"><i data-lucide="crown"></i> <span style="color: #ffd700;" data-i18n="sidebar_become_vip">Become VIP</span></a></li>
+                        <li><a href="#" onclick="showSection('settings-section'); return false;"><i data-lucide="settings"></i> <span data-i18n="sidebar_settings">Settings</span></a></li>
                     </ul>
                 </div>
                 <div class="sidebar-divider"></div>
@@ -172,7 +181,7 @@
                     </button>
                     <button id="themeToggle" class="theme-toggle">
                         <i data-lucide="moon" id="themeIcon"></i>
-                        <span>Dark mode</span>
+                        <span data-i18n="theme_dark_mode">Dark mode</span>
                     </button>
                 </div>
             </div>
@@ -182,19 +191,19 @@
         <main id="content-area">
             <section id="home-section" class="content-section active">
                 <div class="hero">
-                    <h1>Trouvez ce dont vous avez besoin, localement.</h1>
-                    <p>Le meilleur marché pour tout.</p>
+                    <h1 data-i18n="home_hero_title">Trouvez ce dont vous avez besoin, localement.</h1>
+                    <p data-i18n="home_hero_subtitle">Le meilleur marché pour tout.</p>
                 </div>
                 <div class="listings-controls">
                     <div class="filter-bar">
                         <button class="filter-btn" onclick="toggleFilterPanel()">
-                            <i data-lucide="sliders-horizontal"></i> Filtres
+                            <i data-lucide="sliders-horizontal"></i> <span data-i18n="filter_button">Filtres</span>
                         </button>
                         <div class="sort-dropdown">
                             <select id="sortSelect" onchange="handleSort()">
-                                <option value="newest">Plus récents</option>
-                                <option value="price-asc">Prix croissant</option>
-                                <option value="price-desc">Prix décroissant</option>
+                                <option value="newest" data-i18n="home_sort_newest">Plus récents</option>
+                                <option value="price-asc" data-i18n="home_sort_price_asc">Prix croissant</option>
+                                <option value="price-desc" data-i18n="home_sort_price_desc">Prix décroissant</option>
                             </select>
                         </div>
                     </div>
@@ -202,27 +211,27 @@
                 </div>
                 <div id="filterPanel" class="filter-panel">
                     <div class="filter-section">
-                        <h4>Prix (DA)</h4>
+                        <h4 data-i18n="filter_price_title">Prix (DA)</h4>
                         <div class="price-range">
-                            <input type="number" id="priceMin" placeholder="Min" onkeyup="applyFilters()">
+                            <input type="number" id="priceMin" placeholder="Min" data-i18n-placeholder="price_min" onkeyup="applyFilters()">
                             <span>—</span>
-                            <input type="number" id="priceMax" placeholder="Max" onkeyup="applyFilters()">
+                            <input type="number" id="priceMax" placeholder="Max" data-i18n-placeholder="price_max" onkeyup="applyFilters()">
                         </div>
                     </div>
                     <div class="filter-section">
-                        <h4>Wilaya</h4>
+                        <h4 data-i18n="filter_wilaya_title">Wilaya</h4>
                         <select id="filterWilaya" onchange="applyFilters()">
-                            <option value="">Toutes les wilayas</option>
+                            <option value="" data-i18n="filter_wilaya_all">Toutes les wilayas</option>
                         </select>
                     </div>
                     <div class="filter-section">
-                        <h4>Catégorie</h4>
+                        <h4 data-i18n="filter_category_title">Catégorie</h4>
                         <select id="filterCategory" onchange="applyFilters()">
-                            <option value="">Toutes les catégories</option>
+                            <option value="" data-i18n="filter_category_all">Toutes les catégories</option>
                         </select>
                     </div>
                     <div class="filter-actions">
-                        <button class="clear-filters-btn" onclick="clearFilters()">Effacer les filtres</button>
+                        <button class="clear-filters-btn" onclick="clearFilters()" data-i18n="filter_clear">Effacer les filtres</button>
                     </div>
                 </div>
                 <div class="vip-video-section" id="vipVideoSection" style="display: none;">
@@ -238,13 +247,13 @@
                 <div class="listings-grid" id="listingsGrid"></div>
                 <div id="pagination" class="pagination"></div>
                 <div id="loadMoreListingsWrap" class="load-more-wrap" style="display: none;">
-                    <button class="submit-btn load-more-btn" id="loadMoreListingsBtn" type="button">Load more</button>
+                    <button class="submit-btn load-more-btn" id="loadMoreListingsBtn" type="button" data-i18n="load_more">Load more</button>
                 </div>
                 <div class="empty-state" id="emptyState" style="display: none;">
                     <i data-lucide="search-x"></i>
-                    <h3>Aucune annonce trouvée</h3>
-                    <p>Essayez de modifier vos filtres ou votre recherche.</p>
-                    <button class="submit-btn" onclick="clearFilters()">Réinitialiser les filtres</button>
+                    <h3 data-i18n="empty_title">Aucune annonce trouvée</h3>
+                    <p data-i18n="empty_subtitle">Essayez de modifier vos filtres ou votre recherche.</p>
+                    <button class="submit-btn" onclick="clearFilters()" data-i18n="reset_filters">Réinitialiser les filtres</button>
                 </div>
                 <div class="loading-skeleton" id="loadingSkeleton" style="display: none;">
                     <div class="skeleton-grid">
@@ -425,7 +434,7 @@
 
                         <div class="messages-pane-search">
                             <i data-lucide="search"></i>
-                            <input type="text" id="messagesSearchInput" placeholder="Search">
+                            <input type="text" id="messagesSearchInput" placeholder="Search" data-i18n-placeholder="messages_search_placeholder">
                         </div>
 
                         <div class="messages-list" id="messagesList"></div>
@@ -442,7 +451,7 @@
                             <button class="chat-plus-btn" id="chatPlusBtn" onclick="toggleChatActions(event)" title="Add">
                                 <i data-lucide="plus"></i>
                             </button>
-                            <input type="text" id="chatInput" placeholder="Write a message...">
+                            <input type="text" id="chatInput" placeholder="Write a message..." data-i18n-placeholder="chat_write_message_placeholder">
                             <input type="file" id="chatFileInput" hidden multiple>
                             <button class="chat-mic-btn" id="chatMicBtn" onclick="startVoiceRecording()" title="Voice message"><i data-lucide="mic"></i></button>
                             <button id="chatSendBtn" onclick="sendMessage()"><i data-lucide="send"></i></button>
@@ -1143,14 +1152,14 @@
     <div id="editProfileModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('editProfileModal')">&times;</span>
-            <h2>Modifier le profil</h2>
+            <h2 data-i18n="edit_profile_title">Modifier le profil</h2>
             <form id="editProfileForm">
                 <div class="form-group">
-                    <label>Nom</label>
+                    <label data-i18n="label_name">Nom</label>
                     <input type="text" id="editName" value="John Doe">
                 </div>
                 <div class="form-group">
-                    <label>Nom d'utilisateur</label>
+                    <label data-i18n="label_username">Nom d'utilisateur</label>
                     <div class="username-input-wrapper">
                         <span class="username-at">@</span>
                         <input type="text" id="editTag" oninput="formatUsernameInput(this)" placeholder="">
@@ -1158,25 +1167,25 @@
                     <small id="usernameStatus" style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;"></small>
                 </div>
                 <div class="form-group">
-                    <label>Localisation</label>
+                    <label data-i18n="label_location">Localisation</label>
                     <input type="text" id="editLocation" value="Alger, Algérie">
                 </div>
                 <div class="form-group">
-                    <label>Type de compte</label>
+                    <label data-i18n="label_account_type">Type de compte</label>
                     <select id="editBusinessType">
                         <option value="Particulier">Particulier</option>
                         <option value="Professionnel">Professionnel</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Numéro de téléphone</label>
+                    <label data-i18n="label_phone">Numéro de téléphone</label>
                     <input type="tel" id="editPhone" placeholder="+213 ..." autocomplete="tel">
                 </div>
                 <div class="form-group">
-                    <label>Catégorie de travail</label>
+                    <label data-i18n="label_work_category">Catégorie de travail</label>
                     <select id="editWorkCategory"></select>
                 </div>
-                <button type="submit" class="submit-btn">Enregistrer les modifications</button>
+                <button type="submit" class="submit-btn" data-i18n="save_changes">Enregistrer les modifications</button>
             </form>
         </div>
     </div>
@@ -1269,7 +1278,7 @@
             <h2>Toutes les catégories</h2>
             <div class="search-container modal-search">
                 <i data-lucide="search"></i>
-                <input type="text" id="categorySearch" placeholder="Rechercher une catégorie..." onkeyup="filterCategories()">
+                <input type="text" id="categorySearch" placeholder="Rechercher une catégorie..." data-i18n-placeholder="category_search_placeholder" onkeyup="filterCategories()">
             </div>
             <div class="categories-grid" id="allCategoriesGrid"></div>
         </div>
@@ -1281,7 +1290,7 @@
             <h2 id="selectPickerTitle">Sélectionnez</h2>
             <div class="search-container modal-search">
                 <i data-lucide="search"></i>
-                <input type="text" id="selectPickerSearch" placeholder="Rechercher..." onkeyup="filterSelectPickerOptions()">
+                <input type="text" id="selectPickerSearch" placeholder="Rechercher..." data-i18n-placeholder="select_search_placeholder" onkeyup="filterSelectPickerOptions()">
             </div>
             <div class="select-picker-list" id="selectPickerList"></div>
         </div>
