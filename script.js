@@ -11543,6 +11543,7 @@ let vipVideoAutoplayObserver = null;
 let vipVideoAutoplayCleanupTimer = null;
 const VIP_VIDEO_MUTED_STORAGE_KEY = 'winjayVipVideoMutedV1';
 let vipVideoSessionUnmuted = false;
+let vipVideoHoveredListingId = 0;
 
 function getVipVideoMutedPreference() {
     return !vipVideoSessionUnmuted;
@@ -11754,6 +11755,7 @@ function setupVipVideoAutoplay(row) {
     if (!('IntersectionObserver' in window)) return;
     const videos = Array.from(row.querySelectorAll('video.vip-video-preview[data-vip-video="1"]'));
     if (!videos.length) return;
+    const hoverEnabled = !!(window.matchMedia && window.matchMedia('(hover: hover)').matches);
     videos.forEach((v) => {
         const wrap = v.closest('.vip-video-card-media');
         if (wrap && !wrap.dataset.videoReady) wrap.dataset.videoReady = '0';
@@ -11765,13 +11767,46 @@ function setupVipVideoAutoplay(row) {
                 w.dataset.videoReady = '1';
             });
         }
+        if (hoverEnabled && !v.dataset.hoverBound) {
+            v.dataset.hoverBound = '1';
+            const listingId = Number(v.dataset.listingId) || 0;
+            const card = v.closest('.card');
+            const onEnter = () => {
+                vipVideoHoveredListingId = listingId;
+                try {
+                    row.dispatchEvent(new CustomEvent('vipVideoHoverChanged'));
+                } catch (e) {
+                    null;
+                }
+            };
+            const onLeave = () => {
+                if (vipVideoHoveredListingId === listingId) vipVideoHoveredListingId = 0;
+                try {
+                    row.dispatchEvent(new CustomEvent('vipVideoHoverChanged'));
+                } catch (e) {
+                    null;
+                }
+            };
+            if (card) {
+                card.addEventListener('mouseenter', onEnter);
+                card.addEventListener('mouseleave', onLeave);
+            } else {
+                v.addEventListener('mouseenter', onEnter);
+                v.addEventListener('mouseleave', onLeave);
+            }
+        }
     });
     const visibility = new Map();
-    vipVideoAutoplayObserver = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-            const v = entry.target;
-            visibility.set(v, entry.isIntersecting ? entry.intersectionRatio : 0);
-        });
+
+    const applyPlayback = () => {
+        const muted = getVipVideoMutedPreference();
+        const firstVideo = videos[0] || null;
+        const hoveredVideo = vipVideoHoveredListingId
+            ? videos.find((x) => Number(x.dataset.listingId) === vipVideoHoveredListingId) || null
+            : null;
+        const hoveredRatio = hoveredVideo ? (Number(visibility.get(hoveredVideo)) || 0) : 0;
+        const firstRatio = firstVideo ? (Number(visibility.get(firstVideo)) || 0) : 0;
+
         let best = null;
         let bestRatio = 0;
         visibility.forEach((ratio, v) => {
@@ -11780,16 +11815,25 @@ function setupVipVideoAutoplay(row) {
                 best = v;
             }
         });
-        const muted = getVipVideoMutedPreference();
+
+        let candidate = null;
+        if (hoveredVideo && hoveredRatio > 0) {
+            candidate = hoveredVideo;
+        } else if (firstVideo && firstRatio >= 0.55) {
+            candidate = firstVideo;
+        } else if (best && bestRatio >= 0.55) {
+            candidate = best;
+        }
+
         videos.forEach((v) => {
-            const shouldPlay = best && v === best && bestRatio >= 0.55;
             const userPaused = v.dataset.userPaused === '1';
+            const shouldPlay = candidate && v === candidate && !userPaused;
             try {
                 v.muted = muted;
             } catch (e) {
                 null;
             }
-            if (shouldPlay && !userPaused) {
+            if (shouldPlay) {
                 if (!v.getAttribute('src')) {
                     const src = v.dataset.src || '';
                     if (src) v.setAttribute('src', src);
@@ -11809,8 +11853,24 @@ function setupVipVideoAutoplay(row) {
                 }
             }
         });
+    };
+
+    vipVideoAutoplayObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            const v = entry.target;
+            visibility.set(v, entry.isIntersecting ? entry.intersectionRatio : 0);
+        });
+        applyPlayback();
     }, { root: null, threshold: [0, 0.25, 0.55, 0.75, 1] });
     videos.forEach((v) => vipVideoAutoplayObserver.observe(v));
+    if (hoverEnabled && !row.dataset.hoverBound) {
+        row.dataset.hoverBound = '1';
+        row.addEventListener('vipVideoHoverChanged', () => applyPlayback());
+        row.addEventListener('mouseleave', () => {
+            vipVideoHoveredListingId = 0;
+            applyPlayback();
+        });
+    }
     vipVideoAutoplayCleanupTimer = setTimeout(() => {
         try {
             const activeSection = getActiveSectionId();
