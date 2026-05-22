@@ -558,6 +558,16 @@ async function ensureSupabaseProfileRow(client, user) {
 
 function applySupabaseProfileRowToLocalState(row, user) {
     if (!row || typeof row !== 'object') return;
+    const rawBusinessType = String(row.business_type || row.businessType || userProfile.businessType || '').trim() || 'Particulier';
+    const rawWorkCategory = String(row.work_category || row.workCategory || row.category || userProfile.workCategory || '').trim();
+    const normalizedBusinessType =
+        rawBusinessType === 'Particulier' || rawBusinessType === 'Professionnel'
+            ? rawBusinessType
+            : 'Professionnel';
+    const normalizedWorkCategory =
+        normalizedBusinessType === 'Particulier'
+            ? ''
+            : (rawWorkCategory || (rawBusinessType !== normalizedBusinessType ? rawBusinessType : ''));
     userProfile = {
         ...createEmptyUserProfile(),
         ...userProfile,
@@ -567,9 +577,9 @@ function applySupabaseProfileRowToLocalState(row, user) {
             pickFirstValue(row, ['avatar_url', 'profile_pic', 'profilePic', 'picture', 'photo_url']) || userProfile.profilePic,
         coverPic: pickFirstValue(row, ['cover_url', 'cover_pic', 'coverPic', 'cover_url']) || userProfile.coverPic,
         location: row.location || userProfile.location,
-        businessType: row.business_type || row.businessType || userProfile.businessType,
+        businessType: normalizedBusinessType,
         phone: row.phone || row.phone_number || row.phoneNumber || userProfile.phone,
-        workCategory: row.work_category || row.workCategory || row.category || userProfile.workCategory,
+        workCategory: normalizedWorkCategory,
         isVip: !!(row.is_vip ?? row.vip ?? row.isVip ?? userProfile.isVip),
         verified: !!(row.verified ?? row.is_verified ?? userProfile.verified),
         isAdmin: !!(row.is_admin ?? row.isAdmin ?? userProfile.isAdmin),
@@ -1233,17 +1243,52 @@ async function copyReferralLink() {
 function populateWorkCategoriesSelect() {
     const select = document.getElementById('editWorkCategory');
     if (!select) return;
-    select.innerHTML = '<option value="">Select...</option>';
-    const names = [
-        ...categories.filter(c => c.special !== 'other').map(c => c.name),
-        ...allExtraCategories.map(c => c.name)
+    const groups = [
+        { label: 'Restauration & Boissons', items: ['Restaurant', 'Fast-food', 'Café', 'Boulangerie / Pâtisserie', 'Traiteur', 'Food truck', 'Boucherie / Charcuterie', 'Épicerie / Supérette', 'Glacier / Jus'] },
+        { label: 'Hôtellerie & Tourisme', items: ['Hôtel', 'Auberge', 'Maison d’hôtes', 'Resort', 'Agence de voyage', 'Guide touristique'] },
+        { label: 'Automobile & Transport', items: ['Garage / Mécanique', 'Carrosserie / Peinture', 'Lavage auto', 'Pneumatiques', 'Pièces auto', 'Remorquage', 'Location de voiture'] },
+        { label: 'Construction & BTP', items: ['Entreprise de construction', 'Plomberie', 'Électricité', 'Climatisation / HVAC', 'Menuiserie', 'Maçonnerie', 'Peinture', 'Toiture', 'Soudure', 'Aluminium / Vitrerie'] },
+        { label: 'Services à domicile', items: ['Nettoyage', 'Déménagement', 'Jardinage', 'Lutte antiparasitaire'] },
+        { label: 'Santé & Médical', items: ['Cabinet médical', 'Clinique', 'Dentiste', 'Laboratoire', 'Opticien', 'Pharmacie / Parapharmacie', 'Kinésithérapie'] },
+        { label: 'Beauté & Bien-être', items: ['Salon de coiffure', 'Barber', 'Spa / Hammam', 'Esthétique / Soins', 'Onglerie', 'Maquillage'] },
+        { label: 'Éducation & Formation', items: ['École privée', 'Soutien scolaire', 'Centre de formation', 'École de langues', 'Auto-école'] },
+        { label: 'Informatique & Digital', items: ['Développement web / app', 'Réparation informatique', 'Réseaux / Sécurité', 'Design graphique', 'Marketing digital', 'Imprimerie'] },
+        { label: 'Commerce & Boutiques', items: ['Boutique vêtements', 'Boutique électronique', 'Boutique téléphonie', 'Meubles / Déco', 'Quincaillerie', 'Cosmétique / Parfum', 'Librairie', 'Animalerie'] },
+        { label: 'Services professionnels', items: ['Comptabilité', 'Juridique', 'Assurance', 'Conseil', 'Traduction'] },
+        { label: 'Logistique', items: ['Livraison / Coursier', 'Transport de marchandises', 'Entrepôt'] },
+        { label: 'Industrie & Fabrication', items: ['Atelier', 'Usine', 'Métallerie', 'Menuiserie industrielle', 'Textile'] },
+        { label: 'Agriculture & Animaux', items: ['Ferme', 'Pépinière', 'Fournitures agricoles', 'Vétérinaire'] },
+        { label: 'Sport & Loisirs', items: ['Salle de sport', 'Club sportif', 'Coach'] },
+        { label: 'Événementiel', items: ['Photographe', 'Vidéaste', 'DJ', 'Organisation événements'] }
     ];
-    [...new Set(names)].forEach((name) => {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        select.appendChild(opt);
+    select.innerHTML = '<option value="">Sélectionnez...</option>';
+    groups.forEach((g) => {
+        const og = document.createElement('optgroup');
+        og.label = g.label;
+        g.items.forEach((name) => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            og.appendChild(opt);
+        });
+        select.appendChild(og);
     });
+    const other = document.createElement('option');
+    other.value = 'Autre';
+    other.textContent = 'Autre';
+    select.appendChild(other);
+}
+
+function updateEditProfileWorkCategoryVisibility() {
+    const typeEl = document.getElementById('editBusinessType');
+    const workEl = document.getElementById('editWorkCategory');
+    if (!typeEl || !workEl) return;
+    const type = String(typeEl.value || '').trim();
+    const isPro = type === 'Professionnel';
+    const wrap = workEl.closest('.form-group');
+    if (wrap) wrap.style.display = isPro ? '' : 'none';
+    workEl.disabled = !isPro;
+    if (!isPro) workEl.value = '';
 }
 
 function handleIdentityFilePreview(inputId, imgId) {
@@ -4858,6 +4903,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     populateFilterDropdowns();
     populateAllExtraCategories();
     populateWorkCategoriesSelect();
+    const editTypeEl = document.getElementById('editBusinessType');
+    if (editTypeEl && !editTypeEl.dataset.boundWorkVis) {
+        editTypeEl.dataset.boundWorkVis = '1';
+        editTypeEl.addEventListener('change', () => {
+            updateEditProfileWorkCategoryVisibility();
+        });
+    }
+    updateEditProfileWorkCategoryVisibility();
     setupCategoryPickers();
     setupSelectPickers();
     loadUserProfileImages();
@@ -6448,6 +6501,7 @@ function selectPickerChoose(value) {
 function setupSelectPickers() {
     const selectors = [
         '#create-listing-section select',
+        '#editProfileModal select',
         '#editListingModal select',
         '#sortSelect',
         '#filterWilaya',
@@ -6459,7 +6513,7 @@ function setupSelectPickers() {
 }
 
 function setupCategoryPickers() {
-    const ids = ['editWorkCategory'];
+    const ids = [];
     ids.forEach((id) => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -8552,7 +8606,9 @@ document.getElementById('editProfileForm').addEventListener('submit', async (e) 
     const location = document.getElementById('editLocation').value;
     const businessType = document.getElementById('editBusinessType').value;
     const phone = document.getElementById('editPhone')?.value?.trim() || '';
-    const workCategory = document.getElementById('editWorkCategory')?.value || '';
+    const workCategory = businessType === 'Professionnel'
+        ? (document.getElementById('editWorkCategory')?.value || '')
+        : '';
 
     const { error: upsertErr } = await client.from('profiles').upsert(
         {
@@ -8836,6 +8892,7 @@ function updateProfileUI() {
     if (phoneEl) phoneEl.value = userProfile.phone || '';
     const workEl = document.getElementById('editWorkCategory');
     if (workEl) workEl.value = userProfile.workCategory || '';
+    updateEditProfileWorkCategoryVisibility();
     updateFreeVerifiedCounterUI();
     renderVerifiedQuestCard();
     updateUpgradeOfferVisibility();
