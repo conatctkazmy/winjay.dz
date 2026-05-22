@@ -1157,7 +1157,7 @@ html.sidebar-open {
     height: 60px;
     padding: 0 14px;
     background: var(--sidebar-bg);
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 0;
     z-index: 1;
     align-items: center;
     justify-content: space-between;
