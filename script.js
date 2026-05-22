@@ -5335,32 +5335,17 @@ function renderHomeCategorySwipe() {
     const backEl = document.getElementById('homeCategorySwipeBack');
     if (!listEl || !titleEl || !backEl) return;
 
-    const columns = window.innerWidth <= 520 ? 2 : 3;
-    const renderCarousel = (buttonsHtml) => {
-        listEl.innerHTML = `
-            <div class="js-carousel home-category-carousel" data-carousel="home-category" data-columns="${columns}" data-index="0">
-                <div class="carousel-viewport">
-                    <div class="carousel-track">
-                        ${buttonsHtml}
-                    </div>
-                </div>
-            </div>
-        `;
-        initCarouselsInContainer(listEl);
-        lucide.createIcons();
-    };
-
     if (!homeCategorySwipeMode || homeCategorySwipeMode === 'main') {
         homeCategorySwipeMode = 'main';
         titleEl.textContent = t('home_categories_title');
         backEl.style.display = 'none';
         const active = String(currentFilters.category || '').trim();
-        const buttonsHtml = categories.map((c) => {
+        listEl.innerHTML = categories.map((c) => {
             const label = getCategoryLabel(c.name);
             const isActive = active === c.name ? 'active' : '';
-            return `<div class="carousel-slide"><button type="button" class="home-category-swipe-item ${isActive}" data-main="${escapeHtml(c.name)}"><i data-lucide="${escapeHtml(c.icon)}"></i><span class="home-category-swipe-label">${escapeHtml(label)}</span></button></div>`;
+            return `<button type="button" class="home-category-swipe-item ${isActive}" data-main="${escapeHtml(c.name)}"><i data-lucide="${escapeHtml(c.icon)}"></i><span class="home-category-swipe-label">${escapeHtml(label)}</span></button>`;
         }).join('');
-        renderCarousel(buttonsHtml);
+        lucide.createIcons();
         return;
     }
 
@@ -5372,11 +5357,11 @@ function renderHomeCategorySwipe() {
         backEl.style.display = '';
         const subs = Array.isArray(listingSubcategoriesByCategory[main]) ? listingSubcategoriesByCategory[main] : [];
         const activeSub = String(currentFilters.subcategory || '').trim();
-        const buttonsHtml = subs.map((s) => {
+        listEl.innerHTML = subs.map((s) => {
             const isActive = activeSub === s ? 'active' : '';
-            return `<div class="carousel-slide"><button type="button" class="home-category-swipe-item ${isActive}" data-main="${escapeHtml(main)}" data-sub="${escapeHtml(s)}"><i data-lucide="${escapeHtml(mainIcon)}"></i><span class="home-category-swipe-label">${escapeHtml(s)}</span></button></div>`;
+            return `<button type="button" class="home-category-swipe-item ${isActive}" data-main="${escapeHtml(main)}" data-sub="${escapeHtml(s)}"><i data-lucide="${escapeHtml(mainIcon)}"></i><span class="home-category-swipe-label">${escapeHtml(s)}</span></button>`;
         }).join('');
-        renderCarousel(buttonsHtml);
+        lucide.createIcons();
     }
 }
 
