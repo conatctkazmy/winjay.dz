@@ -5278,10 +5278,14 @@ const CATEGORY_LABELS = {
 };
 
 const WORK_CATEGORY_TO_LISTING = {
+    // Hôtellerie & Tourisme
     'Hôtel': { category: 'Hébergement', subcategory: 'Hôtel' },
     'Auberge': { category: 'Hébergement', subcategory: 'Auberge' },
     'Maison d\'hôtes': { category: 'Hébergement', subcategory: 'Maison d\'hôtes' },
     'Resort': { category: 'Hébergement', subcategory: 'Villa de vacances' },
+    'Agence de voyage': { category: 'Voyages', subcategory: 'Agences & packs' },
+    'Guide touristique': { category: 'Voyages', subcategory: 'Excursions' },
+    // Restauration & Boissons
     'Restaurant': { category: 'Boutiques', subcategory: 'Restaurants & cafés' },
     'Fast-food': { category: 'Boutiques', subcategory: 'Restaurants & cafés' },
     'Café': { category: 'Boutiques', subcategory: 'Restaurants & cafés' },
@@ -5291,8 +5295,97 @@ const WORK_CATEGORY_TO_LISTING = {
     'Boucherie / Charcuterie': { category: 'Alimentaires', subcategory: 'Viandes & poissons' },
     'Épicerie / Supérette': { category: 'Boutiques', subcategory: 'Épiceries & supérettes' },
     'Glacier / Jus': { category: 'Boutiques', subcategory: 'Restaurants & cafés' },
-    'Agence de voyage': { category: 'Voyages', subcategory: 'Agences & packs' },
-    'Guide touristique': { category: 'Voyages', subcategory: 'Excursions' }
+    // Automobile & Transport
+    'Garage / Mécanique': { category: 'Automobiles & Véhicules', subcategory: 'Voitures' },
+    'Carrosserie / Peinture': { category: 'Automobiles & Véhicules', subcategory: 'Voitures' },
+    'Lavage auto': { category: 'Automobiles & Véhicules', subcategory: 'Voitures' },
+    'Pneumatiques': { category: 'Pièces détachées', subcategory: 'Pneus & jantes' },
+    'Pièces auto': { category: 'Pièces détachées', subcategory: 'Pièces auto' },
+    'Remorquage': { category: 'Automobiles & Véhicules', subcategory: 'Voitures' },
+    'Location de voiture': { category: 'Automobiles & Véhicules', subcategory: 'Location de voitures' },
+    // Construction & BTP
+    'Entreprise de construction': { category: 'Matériaux & Équipement', subcategory: 'Construction/BTP' },
+    'Plomberie': { category: 'Services', subcategory: 'Services à domicile' },
+    'Électricité': { category: 'Services', subcategory: 'Services à domicile' },
+    'Climatisation / HVAC': { category: 'Services', subcategory: 'Services à domicile' },
+    'Menuiserie': { category: 'Services', subcategory: 'Services à domicile' },
+    'Maçonnerie': { category: 'Matériaux & Équipement', subcategory: 'Construction/BTP' },
+    'Peinture': { category: 'Services', subcategory: 'Services à domicile' },
+    'Toiture': { category: 'Matériaux & Équipement', subcategory: 'Construction/BTP' },
+    'Soudure': { category: 'Matériaux & Équipement', subcategory: 'Construction/BTP' },
+    'Aluminium / Vitrerie': { category: 'Matériaux & Équipement', subcategory: 'Construction/BTP' },
+    // Services à domicile
+    'Nettoyage': { category: 'Services', subcategory: 'Services à domicile' },
+    'Déménagement': { category: 'Services', subcategory: 'Transport' },
+    'Jardinage': { category: 'Services', subcategory: 'Services à personne' },
+    'Lutte antiparasitaire': { category: 'Services', subcategory: 'Services à la personne' },
+    // Santé & Médical
+    'Cabinet médical': { category: 'Santé & Beauté', subcategory: 'Matériel médical' },
+    'Clinique': { category: 'Santé & Beauté', subcategory: 'Matériel médical' },
+    'Dentiste': { category: 'Santé & Beauté', subcategory: 'Matériel médical' },
+    'Laboratoire': { category: 'Santé & Beauté', subcategory: 'Matériel médical' },
+    'Opticien': { category: 'Santé & Beauté', subcategory: 'Bien-être' },
+    'Pharmacie / Parapharmacie': { category: 'Santé & Beauté', subcategory: 'Parfums & Cosmétiques' },
+    'Kinésithérapie': { category: 'Santé & Beauté', subcategory: 'Bien-être' },
+    // Beauté & Bien-être
+    'Salon de coiffure': { category: 'Santé & Beauté', subcategory: 'Coiffure & esthétique' },
+    'Barber': { category: 'Santé & Beauté', subcategory: 'Coiffure & esthétique' },
+    'Spa / Hammam': { category: 'Santé & Beauté', subcategory: 'Bien-être' },
+    'Esthétique / Soins': { category: 'Santé & Beauté', subcategory: 'Coiffure & esthétique' },
+    'Onglerie': { category: 'Santé & Beauté', subcategory: 'Coiffure & esthétique' },
+    'Maquillage': { category: 'Santé & Beauté', subcategory: 'Coiffure & esthétique' },
+    // Éducation & Formation
+    'École privée': { category: 'Services', subcategory: 'Cours & formations' },
+    'Soutien scolaire': { category: 'Services', subcategory: 'Cours & formations' },
+    'Centre de formation': { category: 'Services', subcategory: 'Cours & formations' },
+    'École de langues': { category: 'Services', subcategory: 'Cours & formations' },
+    'Auto-école': { category: 'Services', subcategory: 'Cours & formations' },
+    // Informatique & Digital
+    'Développement web / app': { category: 'Services', subcategory: 'Freelance' },
+    'Réparation informatique': { category: 'Services', subcategory: 'Réparation' },
+    'Réseaux / Sécurité': { category: 'Services', subcategory: 'Freelance' },
+    'Design graphique': { category: 'Services', subcategory: 'Freelance' },
+    'Marketing digital': { category: 'Services', subcategory: 'Freelance' },
+    'Imprimerie': { category: 'Matériaux & Équipement', subcategory: 'Matériel bureau' },
+    // Commerce & Boutiques
+    'Boutique vêtements': { category: 'Vêtements & Mode', subcategory: 'Vêtements' },
+    'Boutique électronique': { category: 'Électroménager & Électronique', subcategory: 'Électroménager' },
+    'Boutique téléphonie': { category: 'Téléphones & Accessoires', subcategory: 'Smartphones' },
+    'Meubles / Déco': { category: 'Meubles & Maison', subcategory: 'Meubles' },
+    'Quincaillerie': { category: 'Matériaux & Équipement', subcategory: 'Construction/BTP' },
+    'Cosmétique / Parfum': { category: 'Santé & Beauté', subcategory: 'Parfums & Cosmétiques' },
+    'Librairie': { category: 'Loisirs & Divertissements', subcategory: 'Livres' },
+    'Animalerie': { category: 'Loisirs & Divertissements', subcategory: 'Animaux' },
+    // Services professionnels
+    'Comptabilité': { category: 'Services', subcategory: 'Freelance' },
+    'Juridique': { category: 'Services', subcategory: 'Freelance' },
+    'Assurance': { category: 'Services', subcategory: 'Freelance' },
+    'Conseil': { category: 'Services', subcategory: 'Freelance' },
+    'Traduction': { category: 'Services', subcategory: 'Freelance' },
+    // Logistique
+    'Livraison / Coursier': { category: 'Services', subcategory: 'Transport' },
+    'Transport de marchandises': { category: 'Automobiles & Véhicules', subcategory: 'Camions & Utilitaires' },
+    'Entrepôt': { category: 'Immobilier', subcategory: 'Locaux commerciaux' },
+    // Industrie & Fabrication
+    'Atelier': { category: 'Matériaux & Équipement', subcategory: 'Industrie' },
+    'Usine': { category: 'Matériaux & Équipement', subcategory: 'Industrie' },
+    'Métallerie': { category: 'Matériaux & Équipement', subcategory: 'Construction/BTP' },
+    'Menuiserie industrielle': { category: 'Matériaux & Équipement', subcategory: 'Industrie' },
+    'Textile': { category: 'Vêtements & Mode', subcategory: 'Vêtements' },
+    // Agriculture & Animaux
+    'Ferme': { category: 'Alimentaires', subcategory: 'Fruits & légumes' },
+    'Pépinière': { category: 'Alimentaires', subcategory: 'Fruits & légumes' },
+    'Fournitures agricoles': { category: 'Matériaux & Équipement', subcategory: 'Agriculture' },
+    'Vétérinaire': { category: 'Services', subcategory: 'Services à la personne' },
+    // Sport & Loisirs
+    'Salle de sport': { category: 'Sport', subcategory: 'Fitness' },
+    'Club sportif': { category: 'Sport', subcategory: 'Sport collectif' },
+    'Coach': { category: 'Services', subcategory: 'Cours & formations' },
+    // Événementiel
+    'Photographe': { category: 'Services', subcategory: 'Événementiel' },
+    'Vidéaste': { category: 'Services', subcategory: 'Événementiel' },
+    'DJ': { category: 'Services', subcategory: 'Événementiel' },
+    'Organisation événements': { category: 'Services', subcategory: 'Événementiel' }
 };
 
 let homeCategorySwipeMode = 'main';
@@ -11877,7 +11970,7 @@ function normalizeText(str) {
 }
 
 function autoFillCategoryFromProfile() {
-    const workCat = userProfile?.work_category;
+    const workCat = userProfile?.workCategory;
     if (!workCat) return;
     const normalizedCat = normalizeText(workCat);
     let mapping = WORK_CATEGORY_TO_LISTING[workCat];
