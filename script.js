@@ -1617,6 +1617,7 @@ function populateWorkCategoriesSelect() {
 
             const currentValue = userProfile?.workCategoryId || '';
             if (currentValue) select.value = currentValue;
+            refreshSelectPicker(select);
         });
 }
 
@@ -1630,6 +1631,7 @@ function updateEditProfileWorkCategoryVisibility() {
     if (wrap) wrap.style.display = isPro ? '' : 'none';
     workEl.disabled = !isPro;
     if (!isPro) workEl.value = '';
+    refreshSelectPicker(workEl);
 }
 
 function handleIdentityFilePreview(inputId, imgId) {
@@ -9886,6 +9888,8 @@ function updateProfileUI() {
     if (tagEl) tagEl.disabled = idLocked;
     if (typeEl) typeEl.disabled = idLocked;
     if (workEl) workEl.disabled = idLocked;
+    if (typeEl) refreshSelectPicker(typeEl);
+    if (workEl) refreshSelectPicker(workEl);
     updateFreeVerifiedCounterUI();
     renderVerifiedQuestCard();
     updateUpgradeOfferVisibility();
@@ -9899,6 +9903,7 @@ function updateProfileUI() {
 }
 
 function isProfileIdentityLocked() {
+    if (userProfile?.isAdmin) return false;
     const startedAt = userProfile?.identityInitializedAt ? new Date(userProfile.identityInitializedAt).getTime() : 0;
     if (!startedAt) return false;
     const ageMs = Date.now() - startedAt;
