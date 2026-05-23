@@ -5274,6 +5274,63 @@ function setupHomeCategorySwipe() {
 
     if (!wrap.dataset.bound) {
         wrap.dataset.bound = '1';
+        let dragIgnoreClickUntil = 0;
+        let dragActive = false;
+        let dragMoved = false;
+        let dragStartX = 0;
+        let dragStartScrollLeft = 0;
+        let dragPointerId = null;
+
+        const onPointerDown = (e) => {
+            if (!e || e.button !== 0) return;
+            if (e.pointerType && e.pointerType !== 'mouse') return;
+            dragActive = true;
+            dragMoved = false;
+            dragPointerId = e.pointerId;
+            dragStartX = e.clientX;
+            dragStartScrollLeft = listEl.scrollLeft || 0;
+            listEl.classList.add('is-dragging');
+            try {
+                listEl.setPointerCapture?.(e.pointerId);
+            } catch (err) {
+                null;
+            }
+            try {
+                e.preventDefault?.();
+            } catch (err) {
+                null;
+            }
+        };
+
+        const onPointerMove = (e) => {
+            if (!dragActive) return;
+            if (dragPointerId !== null && e.pointerId !== dragPointerId) return;
+            const dx = e.clientX - dragStartX;
+            if (!dragMoved && Math.abs(dx) > 6) dragMoved = true;
+            if (!dragMoved) return;
+            listEl.scrollLeft = dragStartScrollLeft - dx;
+            try {
+                e.preventDefault?.();
+            } catch (err) {
+                null;
+            }
+        };
+
+        const endDrag = (e) => {
+            if (!dragActive) return;
+            if (dragPointerId !== null && e && e.pointerId !== dragPointerId) return;
+            dragActive = false;
+            dragPointerId = null;
+            listEl.classList.remove('is-dragging');
+            if (dragMoved) {
+                dragIgnoreClickUntil = Date.now() + 350;
+            }
+        };
+
+        listEl.addEventListener('pointerdown', onPointerDown, { passive: false });
+        listEl.addEventListener('pointermove', onPointerMove, { passive: false });
+        listEl.addEventListener('pointerup', endDrag);
+        listEl.addEventListener('pointercancel', endDrag);
 
         backEl.addEventListener('click', () => {
             homeCategorySwipeMode = 'main';
@@ -5285,6 +5342,7 @@ function setupHomeCategorySwipe() {
         });
 
         listEl.addEventListener('click', (e) => {
+            if (Date.now() < dragIgnoreClickUntil) return;
             const btn = e.target?.closest?.('.home-category-swipe-item');
             if (!btn) return;
             const main = btn.getAttribute('data-main') || '';
