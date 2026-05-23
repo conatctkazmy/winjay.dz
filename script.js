@@ -6394,17 +6394,47 @@ const listingDynamicFieldSchemas = {
     ],
     "Téléphones & Accessoires::*": [
         { key: 'brand', label: 'Marque', type: 'text', required: true, placeholder: 'ex: Samsung' },
-        { key: 'model', label: 'Modèle', type: 'text', required: true, placeholder: 'ex: S22' },
-        { key: 'storage_gb', label: 'Stockage (GB)', type: 'number', required: false, min: 4, max: 2000 },
-        { key: 'ram_gb', label: 'RAM (GB)', type: 'number', required: false, min: 1, max: 128 },
-        { key: 'color', label: 'Couleur', type: 'text', required: false }
+        { key: 'model', label: 'Modèle', type: 'text', required: true, placeholder: 'ex: S22' }
     ],
     "Téléphones & Accessoires::Smartphones": [
         { key: 'brand', label: 'Marque', type: 'text', required: true },
         { key: 'model', label: 'Modèle', type: 'text', required: true },
         { key: 'storage_gb', label: 'Stockage (GB)', type: 'number', required: true, min: 4, max: 2000 },
+        { key: 'ram_gb', label: 'RAM (GB)', type: 'number', required: false, min: 1, max: 128 },
         { key: 'battery_health', label: 'Batterie', type: 'select', required: false, options: ['Bonne', 'Moyenne', 'À changer'] },
-        { key: 'dual_sim', label: 'Double SIM', type: 'select', required: false, options: ['Oui', 'Non'] }
+        { key: 'dual_sim', label: 'Double SIM', type: 'select', required: false, options: ['Oui', 'Non'] },
+        { key: 'network', label: 'Réseau', type: 'select', required: false, options: ['3G', '4G', '5G'] },
+        { key: 'color', label: 'Couleur', type: 'text', required: false }
+    ],
+    "Téléphones & Accessoires::Téléphones simples": [
+        { key: 'brand', label: 'Marque', type: 'text', required: true },
+        { key: 'model', label: 'Modèle', type: 'text', required: true },
+        { key: 'dual_sim', label: 'Double SIM', type: 'select', required: false, options: ['Oui', 'Non'] },
+        { key: 'network', label: 'Réseau', type: 'select', required: false, options: ['2G', '3G', '4G'] },
+        { key: 'color', label: 'Couleur', type: 'text', required: false }
+    ],
+    "Téléphones & Accessoires::Tablettes": [
+        { key: 'brand', label: 'Marque', type: 'text', required: true },
+        { key: 'model', label: 'Modèle', type: 'text', required: true },
+        { key: 'screen_inches', label: 'Écran (pouces)', type: 'number', required: false, min: 6, max: 30 },
+        { key: 'storage_gb', label: 'Stockage (GB)', type: 'number', required: true, min: 4, max: 2000 },
+        { key: 'connectivity', label: 'Connectivité', type: 'select', required: false, options: ['Wi‑Fi', '4G', '5G'] },
+        { key: 'color', label: 'Couleur', type: 'text', required: false }
+    ],
+    "Téléphones & Accessoires::Accessoires (chargeur/écouteurs)": [
+        { key: 'accessory_type', label: 'Type d’accessoire', type: 'select', required: true, options: ['Chargeur', 'Câble', 'Écouteurs', 'Casque', 'Power bank', 'Coque', 'Verre trempé', 'Support voiture', 'Autre'] },
+        { key: 'brand', label: 'Marque', type: 'text', required: false, placeholder: 'ex: Anker' },
+        { key: 'compatibility', label: 'Compatibilité', type: 'text', required: true, when: { key: 'accessory_type', in: ['Coque', 'Verre trempé'] }, placeholder: 'ex: iPhone 14 / Galaxy S23' },
+        { key: 'connector', label: 'Connecteur', type: 'select', required: true, when: { key: 'accessory_type', in: ['Chargeur', 'Câble', 'Écouteurs', 'Casque', 'Power bank'] }, options: ['USB‑C', 'Lightning', 'Micro‑USB', 'Jack 3.5', 'Sans fil', 'Autre'] },
+        { key: 'wattage_w', label: 'Puissance (W)', type: 'number', required: false, when: { key: 'accessory_type', in: ['Chargeur'] }, min: 1, max: 300 },
+        { key: 'capacity_mah', label: 'Capacité (mAh)', type: 'number', required: false, when: { key: 'accessory_type', in: ['Power bank'] }, min: 500, max: 200000 },
+        { key: 'wireless', label: 'Sans fil', type: 'select', required: false, when: { key: 'accessory_type', in: ['Écouteurs', 'Casque'] }, options: ['Oui', 'Non'] }
+    ],
+    "Téléphones & Accessoires::Réparation": [
+        { key: 'repair_type', label: 'Type de réparation', type: 'select', required: true, options: ['Écran', 'Batterie', 'Port de charge', 'Caméra', 'Logiciel', 'Autre'] },
+        { key: 'compatibility', label: 'Modèle concerné', type: 'text', required: true, placeholder: 'ex: iPhone 12 / Galaxy A52' },
+        { key: 'warranty', label: 'Garantie', type: 'select', required: false, options: ['Oui', 'Non'] },
+        { key: 'availability', label: 'Disponibilité', type: 'text', required: false, placeholder: 'ex: 7j/7' }
     ],
     "Informatique::*": [
         { key: 'computer_type', label: 'Type', type: 'select', required: true, options: ['Laptop', 'Desktop', 'Gaming PC', 'MacBook / iMac', 'Parts'] },
