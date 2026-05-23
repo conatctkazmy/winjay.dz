@@ -6407,11 +6407,31 @@ const listingDynamicFieldSchemas = {
         { key: 'dual_sim', label: 'Double SIM', type: 'select', required: false, options: ['Oui', 'Non'] }
     ],
     "Informatique::*": [
-        { key: 'brand', label: 'Marque', type: 'text', required: false },
-        { key: 'model', label: 'Modèle', type: 'text', required: false },
-        { key: 'cpu', label: 'CPU', type: 'text', required: false, placeholder: 'ex: i5 10th gen' },
-        { key: 'ram_gb', label: 'RAM (GB)', type: 'number', required: false, min: 1, max: 512 },
-        { key: 'storage', label: 'Stockage', type: 'text', required: false, placeholder: 'ex: 512GB SSD' }
+        { key: 'computer_type', label: 'Type', type: 'select', required: true, options: ['Laptop', 'Desktop', 'Gaming PC', 'MacBook / iMac', 'Parts'] },
+        { key: 'brand', label: 'Marque', type: 'text', required: false, placeholder: 'ex: Dell / HP / Apple' },
+        { key: 'model', label: 'Modèle', type: 'text', required: false, placeholder: 'ex: Latitude 5420' },
+        { key: 'condition', label: 'État', type: 'select', required: false, options: ['Neuf', 'Comme neuf', 'Bon état', 'Usé', 'Pour pièces'] },
+        { key: 'warranty', label: 'Garantie', type: 'select', required: false, options: ['Oui', 'Non'] },
+
+        { key: 'cpu', label: 'CPU', type: 'text', required: true, when: { key: 'computer_type', in: ['Laptop', 'Desktop', 'Gaming PC', 'MacBook / iMac'] }, placeholder: 'ex: i5-1135G7 / Ryzen 5 5600X' },
+        { key: 'ram_gb', label: 'RAM (GB)', type: 'number', required: true, when: { key: 'computer_type', in: ['Laptop', 'Desktop', 'Gaming PC', 'MacBook / iMac'] }, min: 1, max: 512 },
+        { key: 'storage', label: 'Stockage', type: 'text', required: true, when: { key: 'computer_type', in: ['Laptop', 'Desktop', 'Gaming PC', 'MacBook / iMac'] }, placeholder: 'ex: 512GB SSD + 1TB HDD' },
+        { key: 'gpu', label: 'GPU', type: 'text', required: false, when: { key: 'computer_type', in: ['Laptop', 'Desktop', 'Gaming PC', 'MacBook / iMac'] }, placeholder: 'ex: RTX 4060 / Iris Xe' },
+        { key: 'os', label: 'Système', type: 'select', required: false, when: { key: 'computer_type', in: ['Laptop', 'Desktop', 'Gaming PC', 'MacBook / iMac'] }, options: ['Windows 11', 'Windows 10', 'Linux', 'macOS', 'Sans OS'] },
+
+        { key: 'screen_inches', label: 'Écran (pouces)', type: 'number', required: false, when: { key: 'computer_type', in: ['Laptop', 'MacBook / iMac'] }, min: 9, max: 40 },
+        { key: 'screen_resolution', label: 'Résolution', type: 'text', required: false, when: { key: 'computer_type', in: ['Laptop', 'MacBook / iMac'] }, placeholder: 'ex: 1920x1080' },
+        { key: 'battery_health', label: 'Batterie', type: 'select', required: false, when: { key: 'computer_type', in: ['Laptop', 'MacBook / iMac'] }, options: ['Bonne', 'Moyenne', 'À changer'] },
+        { key: 'keyboard_layout', label: 'Clavier', type: 'select', required: false, when: { key: 'computer_type', in: ['Laptop', 'MacBook / iMac'] }, options: ['AZERTY', 'QWERTY', 'AR', 'Autre'] },
+
+        { key: 'form_factor', label: 'Format', type: 'select', required: false, when: { key: 'computer_type', in: ['Desktop', 'Gaming PC'] }, options: ['Tower', 'SFF', 'Mini PC', 'All-in-one', 'Autre'] },
+        { key: 'psu_watts', label: 'Alimentation (W)', type: 'number', required: false, when: { key: 'computer_type', in: ['Desktop', 'Gaming PC'] }, min: 100, max: 2000 },
+        { key: 'cooling', label: 'Refroidissement', type: 'select', required: false, when: { key: 'computer_type', in: ['Desktop', 'Gaming PC'] }, options: ['Air', 'Water', 'Stock', 'Autre'] },
+
+        { key: 'apple_chip', label: 'Chip (Apple)', type: 'select', required: false, when: { key: 'computer_type', in: ['MacBook / iMac'] }, options: ['Intel', 'M1', 'M2', 'M3', 'M4'] },
+
+        { key: 'part_type', label: 'Type de pièce', type: 'select', required: true, when: { key: 'computer_type', in: ['Parts'] }, options: ['GPU', 'CPU', 'RAM', 'SSD', 'HDD', 'Carte mère', 'Alimentation (PSU)', 'Boîtier', 'Écran', 'Réseau', 'Autre'] },
+        { key: 'compatibility', label: 'Compatibilité', type: 'text', required: false, when: { key: 'computer_type', in: ['Parts'] }, placeholder: 'ex: DDR4 / LGA1700 / AM4' }
     ],
     "Informatique::PC Portables": [
         { key: 'brand', label: 'Marque', type: 'text', required: true },
@@ -6521,9 +6541,37 @@ function getListingDynamicSchema(category, subcategory) {
     const cat = normalizeListingCategory(String(category || '').trim(), String(subcategory || '').trim());
     const sub = String(subcategory || '').trim();
     const key = `${cat}::${sub}`;
+    if (cat === 'Informatique') {
+        const fallback = `${cat}::*`;
+        return Array.isArray(listingDynamicFieldSchemas[fallback]) ? listingDynamicFieldSchemas[fallback] : [];
+    }
     if (Array.isArray(listingDynamicFieldSchemas[key])) return listingDynamicFieldSchemas[key];
     const fallback = `${cat}::*`;
     return Array.isArray(listingDynamicFieldSchemas[fallback]) ? listingDynamicFieldSchemas[fallback] : [];
+}
+
+function isDynamicFieldVisible(f, values) {
+    const cond = f?.when;
+    if (!cond) return true;
+    const key = String(cond?.key || '').trim();
+    if (!key) return true;
+    const actual = values?.[key];
+    if (Array.isArray(cond?.in)) return cond.in.map((x) => String(x)).includes(String(actual || ''));
+    if (cond?.equals !== undefined) return String(actual || '') === String(cond.equals);
+    if (cond?.notEquals !== undefined) return String(actual || '') !== String(cond.notEquals);
+    return true;
+}
+
+function inferComputerType(category, subcategory) {
+    const cat = normalizeListingCategory(String(category || '').trim(), String(subcategory || '').trim());
+    if (cat !== 'Informatique') return '';
+    const sub = normalizeText(String(subcategory || '').trim());
+    if (sub.includes('portable') || sub.includes('laptop') || sub.includes('pc portable')) return 'Laptop';
+    if (sub.includes('bureau') || sub.includes('desktop')) return 'Desktop';
+    if (sub.includes('gamer') || sub.includes('gaming')) return 'Gaming PC';
+    if (sub.includes('mac') || sub.includes('imac') || sub.includes('macbook')) return 'MacBook / iMac';
+    if (sub.includes('composant') || sub.includes('piece') || sub.includes('pièce') || sub.includes('gpu') || sub.includes('cpu') || sub.includes('ram') || sub.includes('stockage') || sub.includes('ssd') || sub.includes('hdd')) return 'Parts';
+    return '';
 }
 
 function collectListingDynamicFieldValues() {
@@ -6555,13 +6603,27 @@ function renderListingDynamicFields(seedValues = null) {
     const schema = getListingDynamicSchema(category, subcategory);
     const current = collectListingDynamicFieldValues();
     const values = { ...(current || {}), ...((seedValues && typeof seedValues === 'object') ? seedValues : {}) };
+    if (normalizeListingCategory(String(category || '').trim(), String(subcategory || '').trim()) === 'Informatique' && !String(values?.computer_type || '').trim()) {
+        const inferred = inferComputerType(category, subcategory);
+        if (inferred) values.computer_type = inferred;
+    }
     if (!schema.length) {
         group.style.display = 'none';
         container.innerHTML = '';
         return;
     }
     group.style.display = '';
+    if (!container.dataset.boundDynamicRerender) {
+        container.dataset.boundDynamicRerender = '1';
+        container.addEventListener('change', (e) => {
+            const t = e?.target;
+            if (!t?.getAttribute) return;
+            const key = String(t.getAttribute('data-dynamic-key') || '').trim();
+            if (key === 'computer_type') renderListingDynamicFields();
+        });
+    }
     container.innerHTML = schema
+        .filter((f) => isDynamicFieldVisible(f, values))
         .map((f) => {
             const key = String(f.key || '').trim();
             if (!key) return '';
@@ -6570,6 +6632,7 @@ function renderListingDynamicFields(seedValues = null) {
             const value = values[key] ?? '';
             const placeholder = escapeHtml(String(f.placeholder || ''));
             if (String(f.type || '') === 'select') {
+                const inputId = `listingDynamic__${key}`;
                 const options = Array.isArray(f.options) ? f.options : [];
                 const opts = ['<option value="" disabled' + (!value ? ' selected' : '') + '>Sélectionnez</option>']
                     .concat(
@@ -6583,7 +6646,7 @@ function renderListingDynamicFields(seedValues = null) {
                 return `
                     <div class="dynamic-field">
                         <label>${label}${required ? ' *' : ''}</label>
-                        <select data-dynamic-key="${escapeHtml(key)}" data-dynamic-type="select">${opts}</select>
+                        <select id="${escapeHtml(inputId)}" data-dynamic-key="${escapeHtml(key)}" data-dynamic-type="select">${opts}</select>
                     </div>
                 `;
             }
@@ -6591,22 +6654,26 @@ function renderListingDynamicFields(seedValues = null) {
                 const min = Number.isFinite(Number(f.min)) ? ` min="${Number(f.min)}"` : '';
                 const max = Number.isFinite(Number(f.max)) ? ` max="${Number(f.max)}"` : '';
                 const val = value === 0 || value ? String(value) : '';
+                const inputId = `listingDynamic__${key}`;
                 return `
                     <div class="dynamic-field">
                         <label>${label}${required ? ' *' : ''}</label>
-                        <input type="number"${min}${max} data-dynamic-key="${escapeHtml(key)}" data-dynamic-type="number" value="${escapeHtml(val)}" placeholder="${placeholder}">
+                        <input id="${escapeHtml(inputId)}" type="number"${min}${max} data-dynamic-key="${escapeHtml(key)}" data-dynamic-type="number" value="${escapeHtml(val)}" placeholder="${placeholder}">
                     </div>
                 `;
             }
             const val = value === 0 || value ? String(value) : '';
+            const inputId = `listingDynamic__${key}`;
             return `
                 <div class="dynamic-field">
                     <label>${label}${required ? ' *' : ''}</label>
-                    <input type="text" data-dynamic-key="${escapeHtml(key)}" data-dynamic-type="text" value="${escapeHtml(val)}" placeholder="${placeholder}">
+                    <input id="${escapeHtml(inputId)}" type="text" data-dynamic-key="${escapeHtml(key)}" data-dynamic-type="text" value="${escapeHtml(val)}" placeholder="${placeholder}">
                 </div>
             `;
         })
         .join('');
+    Array.from(container.querySelectorAll('select')).forEach((el) => enhanceSelectToPicker(el));
+    Array.from(container.querySelectorAll('select')).forEach((el) => refreshSelectPicker(el));
 }
 
 function validateListingDynamicFields() {
@@ -6616,6 +6683,7 @@ function validateListingDynamicFields() {
     const values = collectListingDynamicFieldValues();
     for (const f of schema) {
         if (!f?.required) continue;
+        if (!isDynamicFieldVisible(f, values)) continue;
         const k = String(f.key || '').trim();
         const v = values[k];
         if (v === undefined || v === null || String(v).trim() === '') {
@@ -6632,6 +6700,7 @@ function renderListingDynamicDetailRows(item) {
     if (!schema.length) return '';
     const rows = schema
         .map((f) => {
+            if (!isDynamicFieldVisible(f, details)) return '';
             const k = String(f.key || '').trim();
             if (!k) return '';
             const v = details[k];
