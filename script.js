@@ -6448,6 +6448,36 @@ const listingDynamicFieldSchemas = {
         { key: 'storage', label: 'Stockage', type: 'text', required: true },
         { key: 'gpu', label: 'GPU', type: 'text', required: false }
     ],
+    "Informatique::Écrans": [
+        { key: 'screen_type', label: 'Type d’écran', type: 'select', required: true, options: ['Monitor', 'TV', 'Projector'] },
+        { key: 'brand', label: 'Marque', type: 'text', required: true },
+        { key: 'model', label: 'Modèle', type: 'text', required: false },
+        { key: 'size_inches', label: 'Taille (pouces)', type: 'number', required: true, min: 10, max: 300 },
+        { key: 'resolution', label: 'Résolution', type: 'select', required: false, options: ['HD', 'Full HD', '2K', '4K', '8K'] },
+        { key: 'panel', label: 'Dalle', type: 'select', required: false, options: ['IPS', 'VA', 'TN', 'OLED', 'Autre'] },
+        { key: 'refresh_hz', label: 'Fréquence (Hz)', type: 'number', required: false, min: 30, max: 1000 },
+        { key: 'ports', label: 'Ports', type: 'text', required: false, placeholder: 'ex: HDMI, DP, USB-C' },
+        { key: 'condition', label: 'État', type: 'select', required: false, options: ['Neuf', 'Comme neuf', 'Bon état', 'Usé'] },
+        { key: 'warranty', label: 'Garantie', type: 'select', required: false, options: ['Oui', 'Non'] }
+    ],
+    "Informatique::Stockage (SSD/HDD)": [
+        { key: 'storage_type', label: 'Type', type: 'select', required: true, options: ['SSD', 'HDD', 'NVMe', 'External'] },
+        { key: 'capacity_gb', label: 'Capacité (GB)', type: 'number', required: true, min: 4, max: 100000 },
+        { key: 'form_factor', label: 'Format', type: 'select', required: false, options: ['2.5"', '3.5"', 'M.2', 'USB', 'Autre'] },
+        { key: 'interface', label: 'Interface', type: 'select', required: false, options: ['SATA', 'NVMe', 'USB 3.0', 'USB-C', 'Autre'] },
+        { key: 'health', label: 'État santé', type: 'select', required: false, options: ['Neuf', 'Bon', 'Moyen', 'À remplacer'] },
+        { key: 'condition', label: 'État', type: 'select', required: false, options: ['Neuf', 'Comme neuf', 'Bon état', 'Usé'] },
+        { key: 'warranty', label: 'Garantie', type: 'select', required: false, options: ['Oui', 'Non'] }
+    ],
+    "Informatique::Logiciels": [
+        { key: 'software_type', label: 'Type', type: 'select', required: true, options: ['OS', 'Office', 'Antivirus', 'Design', 'Other'] },
+        { key: 'name', label: 'Nom', type: 'text', required: true, placeholder: 'ex: Microsoft Office' },
+        { key: 'version', label: 'Version', type: 'text', required: false, placeholder: 'ex: 2024' },
+        { key: 'platform', label: 'Plateforme', type: 'select', required: true, options: ['Windows', 'macOS', 'Android', 'iOS', 'Other'] },
+        { key: 'license_type', label: 'Licence', type: 'select', required: true, options: ['Lifetime', 'Subscription', 'Trial', 'Key only'] },
+        { key: 'delivery', label: 'Livraison', type: 'select', required: false, options: ['Email', 'Account transfer', 'Physical'] },
+        { key: 'seats', label: 'Appareils / utilisateurs', type: 'number', required: false, min: 1, max: 1000 }
+    ],
     "Électroménager & Électronique::*": [
         { key: 'brand', label: 'Marque', type: 'text', required: true },
         { key: 'model', label: 'Modèle', type: 'text', required: false },
@@ -6542,6 +6572,8 @@ function getListingDynamicSchema(category, subcategory) {
     const sub = String(subcategory || '').trim();
     const key = `${cat}::${sub}`;
     if (cat === 'Informatique') {
+        const specialSubcategories = new Set(['Écrans', 'Stockage (SSD/HDD)', 'Logiciels']);
+        if (specialSubcategories.has(sub) && Array.isArray(listingDynamicFieldSchemas[key])) return listingDynamicFieldSchemas[key];
         const fallback = `${cat}::*`;
         return Array.isArray(listingDynamicFieldSchemas[fallback]) ? listingDynamicFieldSchemas[fallback] : [];
     }
