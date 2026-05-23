@@ -30,6 +30,8 @@ function createEmptyUserProfile() {
         businessType: "Particulier",
         phone: "",
         workCategory: "",
+        identityInitializedAt: null,
+        identityChangeCount: 0,
         joinedDate: "",
         rating: 0,
         reviews: 0,
@@ -899,6 +901,8 @@ function applySupabaseProfileRowToLocalState(row, user) {
         businessType: normalizedBusinessType,
         phone: row.phone || row.phone_number || row.phoneNumber || userProfile.phone,
         workCategory: normalizedWorkCategory,
+        identityInitializedAt: row.identity_initialized_at || row.identityInitializedAt || userProfile.identityInitializedAt || null,
+        identityChangeCount: Number(row.identity_change_count ?? row.identityChangeCount ?? userProfile.identityChangeCount ?? 0) || 0,
         isVip: !!(row.is_vip ?? row.vip ?? row.isVip ?? userProfile.isVip),
         verified: !!(row.verified ?? row.is_verified ?? userProfile.verified),
         isAdmin: !!(row.is_admin ?? row.isAdmin ?? userProfile.isAdmin),
@@ -9358,6 +9362,20 @@ document.getElementById('editProfileForm').addEventListener('submit', async (e) 
         return;
     }
 
+    const location = document.getElementById('editLocation').value;
+    const businessType = document.getElementById('editBusinessType').value;
+    const phone = document.getElementById('editPhone')?.value?.trim() || '';
+    const workCategory = businessType === 'Professionnel'
+        ? (document.getElementById('editWorkCategory')?.value || '')
+        : '';
+
+    const requestedIdentityKey = `${tagValue}|${businessType}|${workCategory}`;
+    const currentIdentityKey = `${userProfile.tag}|${userProfile.businessType}|${userProfile.workCategory || ''}`;
+    if (requestedIdentityKey !== currentIdentityKey && isProfileIdentityLocked()) {
+        showToast('You can only change username/category once within 7 days', 'alert-circle');
+        return;
+    }
+
     const { data: existingProfile, error: existingErr } = await client
         .from('profiles')
         .select('id')
@@ -9385,13 +9403,6 @@ document.getElementById('editProfileForm').addEventListener('submit', async (e) 
             null;
         }
     }
-
-    const location = document.getElementById('editLocation').value;
-    const businessType = document.getElementById('editBusinessType').value;
-    const phone = document.getElementById('editPhone')?.value?.trim() || '';
-    const workCategory = businessType === 'Professionnel'
-        ? (document.getElementById('editWorkCategory')?.value || '')
-        : '';
 
     const { error: upsertErr } = await client.from('profiles').upsert(
         {
@@ -9678,6 +9689,12 @@ function updateProfileUI() {
     const workEl = document.getElementById('editWorkCategory');
     if (workEl) workEl.value = userProfile.workCategory || '';
     updateEditProfileWorkCategoryVisibility();
+    const idLocked = isProfileIdentityLocked();
+    const tagEl = document.getElementById('editTag');
+    const typeEl = document.getElementById('editBusinessType');
+    if (tagEl) tagEl.disabled = idLocked;
+    if (typeEl) typeEl.disabled = idLocked;
+    if (workEl) workEl.disabled = idLocked;
     updateFreeVerifiedCounterUI();
     renderVerifiedQuestCard();
     updateUpgradeOfferVisibility();
@@ -9688,6 +9705,15 @@ function updateProfileUI() {
     lucide.createIcons();
     refreshMyProfileFollowCounts();
     refreshSidebarFollowing();
+}
+
+function isProfileIdentityLocked() {
+    const startedAt = userProfile?.identityInitializedAt ? new Date(userProfile.identityInitializedAt).getTime() : 0;
+    if (!startedAt) return false;
+    const ageMs = Date.now() - startedAt;
+    const windowMs = 7 * 24 * 60 * 60 * 1000;
+    if (ageMs > windowMs) return true;
+    return (Number(userProfile?.identityChangeCount) || 0) >= 1;
 }
 
 async function refreshMyProfileFollowCounts() {
