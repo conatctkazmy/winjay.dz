@@ -137,6 +137,10 @@ html.app-loading main {
     visibility: hidden;
 }
 
+html.app-loading .navbar {
+    visibility: hidden;
+}
+
 .navbar {
     position: fixed;
     top: 0;
