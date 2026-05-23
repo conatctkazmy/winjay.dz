@@ -6463,7 +6463,12 @@ const listingDynamicFieldSchemas = {
     "Informatique::Stockage (SSD/HDD)": [
         { key: 'storage_type', label: 'Type', type: 'select', required: true, options: ['SSD', 'HDD', 'NVMe', 'External'] },
         { key: 'capacity_gb', label: 'Capacité (GB)', type: 'number', required: true, min: 4, max: 100000 },
-        { key: 'form_factor', label: 'Format', type: 'select', required: false, options: ['2.5"', '3.5"', 'M.2', 'USB', 'Autre'] },
+        { key: 'form_factor', label: 'Format', type: 'select', required: false, optionsBy: { key: 'storage_type', map: {
+            'HDD': [{ value: '2.5', label: '2.5"' }, { value: '3.5', label: '3.5"' }, { value: 'external', label: 'External' }],
+            'SSD': [{ value: '2.5', label: '2.5"' }, { value: 'm2', label: 'M.2' }, { value: 'external', label: 'External' }],
+            'NVMe': [{ value: 'm2', label: 'M.2' }],
+            'External': [{ value: 'usb', label: 'USB' }, { value: 'usbc', label: 'USB‑C' }]
+        }, default: [{ value: '2.5', label: '2.5"' }, { value: '3.5', label: '3.5"' }, { value: 'm2', label: 'M.2' }, { value: 'usb', label: 'USB' }, { value: 'usbc', label: 'USB‑C' }, { value: 'other', label: 'Autre' }] } },
         { key: 'interface', label: 'Interface', type: 'select', required: false, options: ['SATA', 'NVMe', 'USB 3.0', 'USB-C', 'Autre'] },
         { key: 'health', label: 'État santé', type: 'select', required: false, options: ['Neuf', 'Bon', 'Moyen', 'À remplacer'] },
         { key: 'condition', label: 'État', type: 'select', required: false, options: ['Neuf', 'Comme neuf', 'Bon état', 'Usé'] },
@@ -6606,6 +6611,44 @@ function inferComputerType(category, subcategory) {
     return '';
 }
 
+function normalizeDynamicSelectOptions(rawOptions) {
+    const opts = Array.isArray(rawOptions) ? rawOptions : [];
+    return opts
+        .map((o) => {
+            if (!o) return null;
+            if (typeof o === 'string') return { value: o, label: o };
+            if (typeof o === 'object') {
+                const v = String(o.value ?? '').trim();
+                const l = String(o.label ?? v).trim();
+                if (!v) return null;
+                return { value: v, label: l || v };
+            }
+            return null;
+        })
+        .filter(Boolean);
+}
+
+function getDynamicSelectOptionsForField(f, values) {
+    const by = f?.optionsBy;
+    if (by && typeof by === 'object') {
+        const k = String(by.key || '').trim();
+        const map = by.map && typeof by.map === 'object' ? by.map : null;
+        const selected = k ? String(values?.[k] || '') : '';
+        const raw = map && Object.prototype.hasOwnProperty.call(map, selected) ? map[selected] : (Array.isArray(by.default) ? by.default : []);
+        return normalizeDynamicSelectOptions(raw);
+    }
+    return normalizeDynamicSelectOptions(f?.options);
+}
+
+function formatDynamicSelectValueForDisplay(f, rawValue, values) {
+    const v = String(rawValue ?? '');
+    if (!v) return '';
+    if (String(f?.type || '') !== 'select') return v;
+    const opts = getDynamicSelectOptionsForField(f, values || {});
+    const match = opts.find((o) => String(o.value) === v);
+    return match ? String(match.label || match.value) : v;
+}
+
 function collectListingDynamicFieldValues() {
     const container = document.getElementById('listingDynamicFields');
     if (!container) return {};
@@ -6651,7 +6694,7 @@ function renderListingDynamicFields(seedValues = null) {
             const t = e?.target;
             if (!t?.getAttribute) return;
             const key = String(t.getAttribute('data-dynamic-key') || '').trim();
-            if (key === 'computer_type') renderListingDynamicFields();
+            if (key === 'computer_type' || key === 'storage_type') renderListingDynamicFields();
         });
     }
     container.innerHTML = schema
@@ -6665,13 +6708,16 @@ function renderListingDynamicFields(seedValues = null) {
             const placeholder = escapeHtml(String(f.placeholder || ''));
             if (String(f.type || '') === 'select') {
                 const inputId = `listingDynamic__${key}`;
-                const options = Array.isArray(f.options) ? f.options : [];
-                const opts = ['<option value="" disabled' + (!value ? ' selected' : '') + '>Sélectionnez</option>']
+                const options = getDynamicSelectOptionsForField(f, values);
+                const allowedValues = new Set(options.map((o) => String(o.value)));
+                const selectedValue = allowedValues.has(String(value)) ? String(value) : '';
+                const opts = ['<option value="" disabled' + (!selectedValue ? ' selected' : '') + '>Sélectionnez</option>']
                     .concat(
                         options.map((o) => {
-                            const v = String(o || '');
-                            const sel = String(value) === v ? ' selected' : '';
-                            return `<option value="${escapeHtml(v)}"${sel}>${escapeHtml(v)}</option>`;
+                            const v = String(o.value || '');
+                            const l = String(o.label || o.value || '');
+                            const sel = selectedValue === v ? ' selected' : '';
+                            return `<option value="${escapeHtml(v)}"${sel}>${escapeHtml(l)}</option>`;
                         })
                     )
                     .join('');
@@ -6738,7 +6784,7 @@ function renderListingDynamicDetailRows(item) {
             const v = details[k];
             if (v === undefined || v === null || String(v).trim() === '') return '';
             const label = escapeHtml(String(f.label || k));
-            let value = String(v);
+            let value = formatDynamicSelectValueForDisplay(f, v, details);
             if (k === 'mileage_km') {
                 const n = Number(v);
                 value = Number.isFinite(n) ? `${new Intl.NumberFormat('fr-DZ').format(n)} km` : String(v);
@@ -7479,11 +7525,19 @@ function renderSelectPickerOptions(options, currentValue) {
     const list = document.getElementById('selectPickerList');
     if (!list) return;
     const cur = String(currentValue || '');
+    if (!list.dataset.boundChoose) {
+        list.dataset.boundChoose = '1';
+        list.addEventListener('click', (e) => {
+            const btn = e?.target?.closest?.('.select-picker-option');
+            if (!btn) return;
+            selectPickerChoose(String(btn.dataset.value || ''));
+        });
+    }
     list.innerHTML = (options || []).map((opt) => {
         const active = String(opt.value) === cur ? ' active' : '';
-        const safeValue = String(opt.value).replace(/"/g, '&quot;');
+        const safeValue = escapeHtml(String(opt.value || ''));
         const safeLabel = String(opt.label).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return `<button type="button" class="select-picker-option${active}" onclick="selectPickerChoose(&quot;${safeValue}&quot;)">${safeLabel}</button>`;
+        return `<button type="button" class="select-picker-option${active}" data-value="${safeValue}">${safeLabel}</button>`;
     }).join('');
 }
 
