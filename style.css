@@ -2312,6 +2312,11 @@ html[dir="rtl"] .is-touch-device main {
     padding: 0 0 6px;
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.home-category-swipe-list::-webkit-scrollbar {
+    display: none;
 }
 
 .home-category-carousel {
