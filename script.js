@@ -6652,6 +6652,80 @@ function renderListingDynamicDetailRows(item) {
     return rows;
 }
 
+function renderHotelDetailRows(item) {
+    const category = normalizeListingCategory(String(item?.category || '').trim(), String(item?.subcategory || '').trim());
+    if (category !== 'Hébergement') return '';
+    const hotel = item?.details?.hotel && typeof item.details.hotel === 'object' ? item.details.hotel : null;
+    if (!hotel) return '';
+
+    const rooms = Array.isArray(hotel.rooms) ? hotel.rooms : [];
+    const prices = rooms.map((r) => Number(r?.price_per_night) || 0).filter((n) => n > 0);
+    const from = prices.length ? Math.min(...prices) : null;
+    const services = Array.isArray(hotel.services) ? hotel.services.filter(Boolean) : [];
+    const payments = Array.isArray(hotel.payments) ? hotel.payments.filter(Boolean) : [];
+
+    const parts = [
+        hotel.stars ? { label: 'Étoiles', value: `${hotel.stars}★` } : null,
+        hotel.check_in ? { label: 'Check-in', value: String(hotel.check_in) } : null,
+        hotel.check_out ? { label: 'Check-out', value: String(hotel.check_out) } : null,
+        rooms.length ? { label: 'Chambres', value: String(rooms.length) } : null,
+        from ? { label: 'À partir de / nuit', value: `${new Intl.NumberFormat('fr-DZ').format(from)} DZD` } : null,
+        services.length ? { label: 'Services', value: services.join(', ') } : null,
+        payments.length ? { label: 'Paiement', value: payments.join(', ') } : null
+    ].filter(Boolean);
+
+    return parts.map((p) => `
+        <div class="kv-row">
+            <div class="kv-label">${escapeHtml(p.label)}</div>
+            <div class="kv-value">${escapeHtml(p.value)}</div>
+        </div>
+    `).join('');
+}
+
+function renderListingDetailsCardRows(item) {
+    const category = normalizeListingCategory(String(item?.category || '').trim(), String(item?.subcategory || '').trim());
+    const isHotel = category === 'Hébergement';
+    const isJob = category === 'Emploi';
+    const isRealEstate = category === 'Immobilier';
+    const isShop = category === 'Boutiques';
+    const isTravel = category === 'Voyages';
+    const isService = category === 'Services';
+
+    const hideCondition = isHotel || isJob || isRealEstate || isShop || isTravel || isService;
+    const hideDelivery = isHotel || isJob || isRealEstate || isTravel || isService || isShop;
+    const hideAvailability = isHotel || isJob || isRealEstate || isShop || isTravel || isService;
+
+    let rows = '';
+    if (!hideAvailability) {
+        rows += `
+            <div class="kv-row">
+                <div class="kv-label">Disponibilité</div>
+                <div class="kv-value">${escapeHtml(item.availability || '—')}</div>
+            </div>
+        `;
+    }
+    if (!hideCondition) {
+        rows += `
+            <div class="kv-row">
+                <div class="kv-label">État</div>
+                <div class="kv-value">${escapeHtml(item.condition || '—')}</div>
+            </div>
+        `;
+    }
+    if (!hideDelivery) {
+        rows += `
+            <div class="kv-row">
+                <div class="kv-label">Livraison</div>
+                <div class="kv-value">${escapeHtml(item.delivery || '—')}</div>
+            </div>
+        `;
+    }
+
+    rows += renderListingDynamicDetailRows(item);
+    rows += renderHotelDetailRows(item);
+    return rows;
+}
+
 function setupListingSubcategorySelects() {
     const mainAdd = document.getElementById('listingCategory');
     const subAdd = document.getElementById('listingSubcategory');
@@ -6685,7 +6759,13 @@ function toggleHotelFieldsVisibility() {
     if (!catEl || !hotelSection) return;
     const cat = catEl.value || '';
     const sub = subEl?.value || '';
-    const isHotel = normalizeListingCategory(cat, sub) === 'Hébergement';
+    const normalized = normalizeListingCategory(cat, sub);
+    const isHotel = normalized === 'Hébergement';
+    const isJob = normalized === 'Emploi';
+    const isRealEstate = normalized === 'Immobilier';
+    const isShop = normalized === 'Boutiques';
+    const isTravel = normalized === 'Voyages';
+    const isService = normalized === 'Services';
     hotelSection.style.display = isHotel ? 'block' : 'none';
 
     const groupFor = (id) => document.getElementById(id)?.closest?.('.form-group') || null;
@@ -6697,18 +6777,42 @@ function toggleHotelFieldsVisibility() {
         const el = document.getElementById(id);
         if (!el) return;
         el.value = value;
+        try {
+            if (el.tagName === 'SELECT') refreshSelectPicker(el);
+        } catch (e) {
+            null;
+        }
     };
 
-    hideGroup('listingCondition', isHotel);
-    hideGroup('listingPriceType', isHotel);
-    hideGroup('listingDelivery', isHotel);
-    hideGroup('listingAvailability', isHotel);
+    const hideCondition = isHotel || isJob || isRealEstate || isShop || isTravel || isService;
+    const hideDelivery = isHotel || isJob || isRealEstate || isTravel || isService || isShop;
+    const hideAvailability = isHotel || isJob || isRealEstate || isShop || isTravel || isService;
+    const hidePriceType = isHotel || isJob;
+    const hidePrice = isJob;
+
+    hideGroup('listingCondition', hideCondition);
+    hideGroup('listingPriceType', hidePriceType);
+    hideGroup('listingDelivery', hideDelivery);
+    hideGroup('listingAvailability', hideAvailability);
+    hideGroup('listingPrice', hidePrice);
+
+    if (hideCondition) {
+        setValue('listingCondition', 'New');
+    }
+    if (hideDelivery) {
+        setValue('listingDelivery', 'Pickup only');
+    }
+    if (hideAvailability) {
+        setValue('listingAvailability', 'Available');
+    }
 
     if (isHotel) {
-        setValue('listingCondition', 'New');
         setValue('listingPriceType', 'Fixed');
-        setValue('listingDelivery', 'Pickup only');
-        setValue('listingAvailability', 'Available');
+    }
+    if (isJob) {
+        setValue('listingPriceType', 'Free');
+        const priceEl = document.getElementById('listingPrice');
+        if (priceEl) priceEl.value = '0';
     }
 
     const priceGroup = groupFor('listingPrice');
@@ -6726,7 +6830,15 @@ function toggleHotelFieldsVisibility() {
     const tagsInput = document.getElementById('listingTags');
     if (tagsInput) {
         if (!tagsInput.dataset.defaultPlaceholder) tagsInput.dataset.defaultPlaceholder = tagsInput.placeholder || '';
-        tagsInput.placeholder = isHotel ? 'ex: vue mer, famille, spa, centre-ville' : (tagsInput.dataset.defaultPlaceholder || '');
+        const defaultPh = tagsInput.dataset.defaultPlaceholder || '';
+        const ph = isHotel
+            ? 'ex: vue mer, famille, spa, centre-ville'
+            : (isJob
+                ? 'ex: serveur, alger, temps plein'
+                : (isRealEstate
+                    ? 'ex: f3, bab ezzouar, vue mer'
+                    : defaultPh));
+        tagsInput.placeholder = ph;
     }
 }
 
@@ -9004,7 +9116,9 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         const description = document.getElementById('listingDescription')?.value?.trim?.() || '';
         const category = document.getElementById('listingCategory').value;
         const subcategory = document.getElementById('listingSubcategory')?.value || '';
-        const isHotelListing = normalizeListingCategory(category, subcategory) === 'Hébergement';
+        const normalizedCategory = normalizeListingCategory(category, subcategory);
+        const isHotelListing = normalizedCategory === 'Hébergement';
+        const isJobListing = normalizedCategory === 'Emploi';
         let condition = document.getElementById('listingCondition')?.value || '';
         let priceType = document.getElementById('listingPriceType')?.value || '';
         let price = Number(document.getElementById('listingPrice').value) || 0;
@@ -9052,6 +9166,23 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 const priceEl = document.getElementById('listingPrice');
                 if (priceEl) priceEl.value = String(price);
             }
+            const hotelData = collectHotelData();
+            if (hotelData) {
+                mergedDetails = { ...(mergedDetails || {}), hotel: hotelData };
+                details = Object.keys(mergedDetails).length ? mergedDetails : null;
+            }
+        }
+
+        if (isJobListing) {
+            condition = 'New';
+            priceType = 'Free';
+            price = 0;
+            delivery = 'Pickup only';
+            availability = 'Available';
+            const priceEl = document.getElementById('listingPrice');
+            if (priceEl) priceEl.value = '0';
+            const priceTypeEl = document.getElementById('listingPriceType');
+            if (priceTypeEl) priceTypeEl.value = 'Free';
         }
 
         if (!title) {
@@ -14182,19 +14313,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                             <div class="kv-card-title"><i data-lucide="list-check"></i> Détails</div>
                         </div>
                         <div class="kv-rows">
-                            <div class="kv-row">
-                                <div class="kv-label">Disponibilité</div>
-                                <div class="kv-value">${escapeHtml(item.availability || '—')}</div>
-                            </div>
-                            <div class="kv-row">
-                                <div class="kv-label">État</div>
-                                <div class="kv-value">${escapeHtml(item.condition || '—')}</div>
-                            </div>
-                            <div class="kv-row">
-                                <div class="kv-label">Livraison</div>
-                                <div class="kv-value">${escapeHtml(item.delivery || '—')}</div>
-                            </div>
-                            ${renderListingDynamicDetailRows(item)}
+                            ${renderListingDetailsCardRows(item)}
                         </div>
                     </div>
                     <div class="kv-card">
