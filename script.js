@@ -1580,7 +1580,7 @@ function populateWorkCategoriesSelect() {
 
     client
         .from('business_categories')
-        .select('id, group_name, name, listing_category, listing_subcategory, active')
+        .select('id, group_name, group_name_en, group_name_ar, name, name_en, name_ar, listing_category, listing_subcategory, active')
         .eq('active', true)
         .order('group_name', { ascending: true })
         .order('name', { ascending: true })
@@ -1590,7 +1590,11 @@ function populateWorkCategoriesSelect() {
             data.forEach((row) => {
                 if (!row?.id) return;
                 businessCategoriesById[String(row.id)] = row;
-                const group = String(row.group_name || 'Other');
+                const group = currentLang === 'ar'
+                    ? String(row.group_name_ar || row.group_name_en || row.group_name || 'Other')
+                    : (currentLang === 'en'
+                        ? String(row.group_name_en || row.group_name || 'Other')
+                        : String(row.group_name || 'Other'));
                 if (!grouped.has(group)) grouped.set(group, []);
                 grouped.get(group).push(row);
             });
@@ -1601,7 +1605,11 @@ function populateWorkCategoriesSelect() {
                 rows.forEach((row) => {
                     const opt = document.createElement('option');
                     opt.value = String(row.id);
-                    opt.textContent = String(row.name || '');
+                    opt.textContent = currentLang === 'ar'
+                        ? String(row.name_ar || row.name_en || row.name || '')
+                        : (currentLang === 'en'
+                            ? String(row.name_en || row.name || '')
+                            : String(row.name || ''));
                     og.appendChild(opt);
                 });
                 select.appendChild(og);
@@ -9708,7 +9716,20 @@ function updateProfileUI() {
     const phoneText = userProfile.phone ? String(userProfile.phone) : '—';
     const phoneDisplay = document.getElementById('profilePhone');
     if (phoneDisplay) phoneDisplay.textContent = phoneText;
-    const workText = userProfile.workCategory ? String(userProfile.workCategory) : '—';
+    let workText = userProfile.workCategory ? String(userProfile.workCategory) : '—';
+    try {
+        const id = userProfile?.workCategoryId ? String(userProfile.workCategoryId) : '';
+        const row = id ? businessCategoriesById?.[id] : null;
+        if (row) {
+            workText = currentLang === 'ar'
+                ? String(row.name_ar || row.name_en || row.name || workText)
+                : (currentLang === 'en'
+                    ? String(row.name_en || row.name || workText)
+                    : String(row.name || workText));
+        }
+    } catch (e) {
+        null;
+    }
     const workDisplay = document.getElementById('profileWorkCategory');
     if (workDisplay) workDisplay.textContent = workText;
     document.getElementById('profileRatingContainer').innerHTML = getRatingHTML(userProfile.rating, userProfile.reviews);
