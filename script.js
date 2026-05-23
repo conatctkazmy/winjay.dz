@@ -5482,9 +5482,21 @@ loadThemeModeFromStorage();
 document.addEventListener('DOMContentLoaded', async () => {
     setPendingReferralFromUrl();
     initLanguage();
+    try {
+        lucide.createIcons();
+    } catch (e) {
+        null;
+    }
     updateNavbarAuthUI();
     initSupabase();
     await bootstrapSupabaseAuth();
+    updateNavbarAuthUI();
+    try {
+        const keepBooting = (isLoggedIn() || hasSupabaseAuthTokenLikely()) && !hasLoadedSupabaseProfile;
+        if (!keepBooting) document.documentElement.classList.remove('navbar-booting');
+    } catch (e) {
+        document.documentElement.classList.remove('navbar-booting');
+    }
     bootstrapLivePresence();
     if (!supabaseClient) {
         loadUserProfileFromStorage();
@@ -10042,6 +10054,11 @@ function updateProfileUI() {
     document.getElementById('profileTag').textContent = userProfile.tag;
     document.getElementById('profilePic').src = userProfile.profilePic;
     document.getElementById('navProfilePic').src = userProfile.profilePic;
+    try {
+        document.documentElement.classList.remove('navbar-booting');
+    } catch (e) {
+        null;
+    }
     document.getElementById('profileCover').src = userProfile.coverPic;
     document.getElementById('profileLocation').textContent = userProfile.location;
     document.getElementById('profileBusiness').textContent = userProfile.businessType;
