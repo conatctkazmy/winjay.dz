@@ -130,7 +130,15 @@ html {
 }
 
 html.app-loading body {
-    overflow: auto;
+    overflow: hidden;
+}
+
+html.app-loading main {
+    visibility: hidden;
+}
+
+html.app-loading .navbar {
+    visibility: hidden;
 }
 
 .navbar {
@@ -372,7 +380,6 @@ html.app-loading body {
     border: 2px solid transparent;
     cursor: pointer;
     padding: 0;
-    position: relative;
 }
 
 .profile-btn:hover {
@@ -383,31 +390,6 @@ html.app-loading body {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    opacity: 1;
-    transition: opacity 0.15s ease;
-}
-
-.nav-avatar-skeleton {
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    pointer-events: none;
-}
-
-html.navbar-booting .profile-menu-wrapper {
-    pointer-events: none;
-}
-
-html.navbar-booting .nav-avatar-skeleton {
-    display: block;
-}
-
-html.navbar-booting #navProfilePic {
-    opacity: 0;
-}
-
-html:not(.navbar-booting) .nav-avatar-skeleton {
-    display: none;
 }
 
 .profile-menu-wrapper {
