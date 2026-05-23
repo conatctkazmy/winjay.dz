@@ -1562,195 +1562,25 @@ async function copyReferralLink() {
 function populateWorkCategoriesSelect() {
     const select = document.getElementById('editWorkCategory');
     if (!select) return;
-    const makeItem = (value, fr, en, ar) => ({ value, fr, en, ar });
-    const label = (fr, en, ar) => ({ fr, en, ar });
-    const groups = [
-        {
-            label: label('Restauration & Boissons', 'Food & Beverage', 'الأطعمة والمشروبات'),
-            items: [
-                makeItem('Restaurant', 'Restaurant', 'Restaurant', 'مطعم'),
-                makeItem('Fast-food', 'Fast-food', 'Fast food', 'وجبات سريعة'),
-                makeItem('Café', 'Café', 'Café', 'مقهى'),
-                makeItem('Boulangerie / Pâtisserie', 'Boulangerie / Pâtisserie', 'Bakery / Pastry', 'مخبزة / حلويات'),
-                makeItem('Traiteur', 'Traiteur', 'Catering', 'تموين'),
-                makeItem('Food truck', 'Food truck', 'Food truck', 'شاحنة طعام'),
-                makeItem('Boucherie / Charcuterie', 'Boucherie / Charcuterie', 'Butcher / Deli', 'ملحمة / لحوم'),
-                makeItem('Épicerie / Supérette', 'Épicerie / Supérette', 'Grocery / Mini-market', 'بقالة / سوبرماركت'),
-                makeItem('Glacier / Jus', 'Glacier / Jus', 'Ice cream / Juice', 'آيس كريم / عصائر')
-            ]
-        },
-        {
-            label: label('Hôtellerie & Tourisme', 'Hospitality & Tourism', 'الفنادق والسياحة'),
-            items: [
-                makeItem('Hôtel', 'Hôtel', 'Hotel', 'فندق'),
-                makeItem('Auberge', 'Auberge', 'Hostel', 'نُزُل'),
-                makeItem('Maison d’hôtes', 'Maison d’hôtes', 'Guesthouse', 'دار ضيافة'),
-                makeItem('Resort', 'Resort', 'Resort', 'منتجع'),
-                makeItem('Agence de voyage', 'Agence de voyage', 'Travel agency', 'وكالة سفر'),
-                makeItem('Guide touristique', 'Guide touristique', 'Tour guide', 'مرشد سياحي')
-            ]
-        },
-        {
-            label: label('Automobile & Transport', 'Automotive & Transport', 'السيارات والنقل'),
-            items: [
-                makeItem('Garage / Mécanique', 'Garage / Mécanique', 'Mechanic shop', 'ميكانيكي / ورشة'),
-                makeItem('Carrosserie / Peinture', 'Carrosserie / Peinture', 'Body & paint', 'هيكل / طلاء'),
-                makeItem('Lavage auto', 'Lavage auto', 'Car wash', 'غسيل سيارات'),
-                makeItem('Pneumatiques', 'Pneumatiques', 'Tires', 'إطارات'),
-                makeItem('Pièces auto', 'Pièces auto', 'Auto parts', 'قطع غيار'),
-                makeItem('Remorquage', 'Remorquage', 'Towing', 'سحب السيارات'),
-                makeItem('Location de voiture', 'Location de voiture', 'Car rental', 'تأجير سيارات')
-            ]
-        },
-        {
-            label: label('Construction & BTP', 'Construction & Trades', 'البناء والحِرَف'),
-            items: [
-                makeItem('Entreprise de construction', 'Entreprise de construction', 'Construction company', 'شركة بناء'),
-                makeItem('Plomberie', 'Plomberie', 'Plumbing', 'سباكة'),
-                makeItem('Électricité', 'Électricité', 'Electrical', 'كهرباء'),
-                makeItem('Climatisation / HVAC', 'Climatisation / HVAC', 'HVAC', 'تكييف / تهوية'),
-                makeItem('Menuiserie', 'Menuiserie', 'Carpentry', 'نجارة'),
-                makeItem('Maçonnerie', 'Maçonnerie', 'Masonry', 'بناء'),
-                makeItem('Peinture', 'Peinture', 'Painting', 'دهان'),
-                makeItem('Toiture', 'Toiture', 'Roofing', 'أسقف'),
-                makeItem('Soudure', 'Soudure', 'Welding', 'لحام'),
-                makeItem('Aluminium / Vitrerie', 'Aluminium / Vitrerie', 'Aluminum / Glass', 'ألمنيوم / زجاج')
-            ]
-        },
-        {
-            label: label('Services à domicile', 'Home Services', 'خدمات منزلية'),
-            items: [
-                makeItem('Nettoyage', 'Nettoyage', 'Cleaning', 'تنظيف'),
-                makeItem('Déménagement', 'Déménagement', 'Moving', 'نقل الأثاث'),
-                makeItem('Jardinage', 'Jardinage', 'Gardening', 'بستنة'),
-                makeItem('Lutte antiparasitaire', 'Lutte antiparasitaire', 'Pest control', 'مكافحة الحشرات')
-            ]
-        },
-        {
-            label: label('Santé & Médical', 'Health & Medical', 'الصحة والطب'),
-            items: [
-                makeItem('Cabinet médical', 'Cabinet médical', 'Doctor office', 'عيادة'),
-                makeItem('Clinique', 'Clinique', 'Clinic', 'مصحة'),
-                makeItem('Dentiste', 'Dentiste', 'Dentist', 'طبيب أسنان'),
-                makeItem('Laboratoire', 'Laboratoire', 'Laboratory', 'مخبر'),
-                makeItem('Opticien', 'Opticien', 'Optician', 'نظاراتي'),
-                makeItem('Pharmacie / Parapharmacie', 'Pharmacie / Parapharmacie', 'Pharmacy', 'صيدلية'),
-                makeItem('Kinésithérapie', 'Kinésithérapie', 'Physiotherapy', 'علاج طبيعي')
-            ]
-        },
-        {
-            label: label('Beauté & Bien-être', 'Beauty & Wellness', 'الجمال والعناية'),
-            items: [
-                makeItem('Salon de coiffure', 'Salon de coiffure', 'Hair salon', 'صالون شعر'),
-                makeItem('Barber', 'Barber', 'Barber', 'حلاقة رجال'),
-                makeItem('Spa / Hammam', 'Spa / Hammam', 'Spa / Hammam', 'سبا / حمام'),
-                makeItem('Esthétique / Soins', 'Esthétique / Soins', 'Skincare', 'تجميل / عناية'),
-                makeItem('Onglerie', 'Onglerie', 'Nails', 'أظافر'),
-                makeItem('Maquillage', 'Maquillage', 'Makeup', 'مكياج')
-            ]
-        },
-        {
-            label: label('Éducation & Formation', 'Education & Training', 'التعليم والتدريب'),
-            items: [
-                makeItem('École privée', 'École privée', 'Private school', 'مدرسة خاصة'),
-                makeItem('Soutien scolaire', 'Soutien scolaire', 'Tutoring', 'دروس دعم'),
-                makeItem('Centre de formation', 'Centre de formation', 'Training center', 'مركز تكوين'),
-                makeItem('École de langues', 'École de langues', 'Language school', 'مدرسة لغات'),
-                makeItem('Auto-école', 'Auto-école', 'Driving school', 'مدرسة سياقة')
-            ]
-        },
-        {
-            label: label('Informatique & Digital', 'IT & Digital', 'المعلوماتية والرقمي'),
-            items: [
-                makeItem('Développement web / app', 'Développement web / app', 'Web / app development', 'تطوير ويب / تطبيقات'),
-                makeItem('Réparation informatique', 'Réparation informatique', 'Computer repair', 'صيانة حواسيب'),
-                makeItem('Réseaux / Sécurité', 'Réseaux / Sécurité', 'Network / Security', 'شبكات / أمن'),
-                makeItem('Design graphique', 'Design graphique', 'Graphic design', 'تصميم جرافيك'),
-                makeItem('Marketing digital', 'Marketing digital', 'Digital marketing', 'تسويق رقمي'),
-                makeItem('Imprimerie', 'Imprimerie', 'Printing', 'طباعة')
-            ]
-        },
-        {
-            label: label('Commerce & Boutiques', 'Retail & Shops', 'التجارة والمتاجر'),
-            items: [
-                makeItem('Boutique vêtements', 'Boutique vêtements', 'Clothing shop', 'متجر ملابس'),
-                makeItem('Boutique électronique', 'Boutique électronique', 'Electronics shop', 'متجر إلكترونيات'),
-                makeItem('Boutique téléphonie', 'Boutique téléphonie', 'Phone shop', 'متجر هواتف'),
-                makeItem('Meubles / Déco', 'Meubles / Déco', 'Furniture / Decor', 'أثاث / ديكور'),
-                makeItem('Quincaillerie', 'Quincaillerie', 'Hardware store', 'عتاد / أدوات'),
-                makeItem('Cosmétique / Parfum', 'Cosmétique / Parfum', 'Cosmetics / Perfume', 'تجميل / عطور'),
-                makeItem('Librairie', 'Librairie', 'Bookstore', 'مكتبة'),
-                makeItem('Animalerie', 'Animalerie', 'Pet shop', 'متجر حيوانات')
-            ]
-        },
-        {
-            label: label('Services professionnels', 'Business Services', 'خدمات مهنية'),
-            items: [
-                makeItem('Comptabilité', 'Comptabilité', 'Accounting', 'محاسبة'),
-                makeItem('Juridique', 'Juridique', 'Legal services', 'خدمات قانونية'),
-                makeItem('Assurance', 'Assurance', 'Insurance', 'تأمين'),
-                makeItem('Conseil', 'Conseil', 'Consulting', 'استشارات'),
-                makeItem('Traduction', 'Traduction', 'Translation', 'ترجمة')
-            ]
-        },
-        {
-            label: label('Logistique', 'Logistics', 'اللوجستيك'),
-            items: [
-                makeItem('Livraison / Coursier', 'Livraison / Coursier', 'Delivery / Courier', 'توصيل / ساعي'),
-                makeItem('Transport de marchandises', 'Transport de marchandises', 'Freight transport', 'نقل بضائع'),
-                makeItem('Entrepôt', 'Entrepôt', 'Warehouse', 'مستودع')
-            ]
-        },
-        {
-            label: label('Industrie & Fabrication', 'Industry & Manufacturing', 'الصناعة والتصنيع'),
-            items: [
-                makeItem('Atelier', 'Atelier', 'Workshop', 'ورشة'),
-                makeItem('Usine', 'Usine', 'Factory', 'مصنع'),
-                makeItem('Métallerie', 'Métallerie', 'Metalwork', 'حدادة'),
-                makeItem('Menuiserie industrielle', 'Menuiserie industrielle', 'Industrial carpentry', 'نجارة صناعية'),
-                makeItem('Textile', 'Textile', 'Textiles', 'نسيج')
-            ]
-        },
-        {
-            label: label('Agriculture & Animaux', 'Agriculture & Animals', 'الزراعة والحيوانات'),
-            items: [
-                makeItem('Ferme', 'Ferme', 'Farm', 'مزرعة'),
-                makeItem('Pépinière', 'Pépinière', 'Plant nursery', 'مشتلة'),
-                makeItem('Fournitures agricoles', 'Fournitures agricoles', 'Agricultural supplies', 'مستلزمات زراعية'),
-                makeItem('Vétérinaire', 'Vétérinaire', 'Veterinarian', 'طبيب بيطري')
-            ]
-        },
-        {
-            label: label('Sport & Loisirs', 'Sports & Leisure', 'الرياضة والترفيه'),
-            items: [
-                makeItem('Salle de sport', 'Salle de sport', 'Gym', 'قاعة رياضة'),
-                makeItem('Club sportif', 'Club sportif', 'Sports club', 'نادي رياضي'),
-                makeItem('Coach', 'Coach', 'Coach', 'مدرب')
-            ]
-        },
-        {
-            label: label('Événementiel', 'Events', 'الفعاليات'),
-            items: [
-                makeItem('Photographe', 'Photographe', 'Photographer', 'مصور'),
-                makeItem('Vidéaste', 'Vidéaste', 'Videographer', 'مصوّر فيديو'),
-                makeItem('DJ', 'DJ', 'DJ', 'دي جي'),
-                makeItem('Organisation événements', 'Organisation événements', 'Event planning', 'تنظيم فعاليات')
-            ]
-        }
-    ];
+
     const placeholder = currentLang === 'ar' ? 'اختر...' : (currentLang === 'en' ? 'Select...' : 'Sélectionnez...');
     select.innerHTML = `<option value="">${placeholder}</option>`;
-    groups.forEach((g) => {
+
+    // Dynamically build from listing categories to ensure perfect sync
+    for (const [category, subcategories] of Object.entries(listingSubcategoriesByCategory)) {
         const og = document.createElement('optgroup');
-        og.label = g.label[currentLang] || g.label.fr;
-        g.items.forEach((it) => {
+        const labelObj = CATEGORY_LABELS[category] || { fr: category };
+        og.label = labelObj[currentLang] || labelObj.fr;
+
+        subcategories.forEach((sub) => {
             const opt = document.createElement('option');
-            opt.value = it.value;
-            opt.textContent = it[currentLang] || it.fr;
+            opt.value = sub;
+            opt.textContent = sub; // Subcategories are currently in FR only
             og.appendChild(opt);
         });
         select.appendChild(og);
-    });
+    }
+
     const other = document.createElement('option');
     other.value = 'Autre';
     other.textContent = currentLang === 'ar' ? 'أخرى' : (currentLang === 'en' ? 'Other' : 'Autre');
@@ -6647,10 +6477,6 @@ const listingDynamicFieldSchemas = {
         { key: 'price', label: 'Prix', type: 'text', required: false, placeholder: 'ex: 2000 DA' },
         { key: 'availability', label: 'Disponibilité', type: 'text', required: false, placeholder: 'ex: 7j/7' },
         { key: 'experience', label: 'Expérience', type: 'text', required: false, placeholder: 'ex: 5 ans' }
-    ],
-    "Hébergement::*": [
-        { key: 'property_type', label: 'Type', type: 'select', required: true, options: ['Hôtel', 'Auberge', 'Résidence hôtelière', 'Appartement meublé', 'Villa de vacances', 'Chalet', 'Maison d\'hôtes'] },
-        { key: 'stars', label: 'Étoiles', type: 'text', required: false, placeholder: 'ex: 3' }
     ]
 };
 
@@ -6826,6 +6652,57 @@ function toggleHotelFieldsVisibility() {
     const sub = subEl?.value || '';
     const isHotel = normalizeListingCategory(cat, sub) === 'Hébergement';
     hotelSection.style.display = isHotel ? 'block' : 'none';
+
+    const groupFor = (id) => document.getElementById(id)?.closest?.('.form-group') || null;
+    const hideGroup = (id, hidden) => {
+        const g = groupFor(id);
+        if (g) g.style.display = hidden ? 'none' : '';
+    };
+    const setValue = (id, value) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.value = value;
+    };
+
+    hideGroup('listingCondition', isHotel);
+    hideGroup('listingPriceType', isHotel);
+    hideGroup('listingDelivery', isHotel);
+    hideGroup('listingAvailability', isHotel);
+
+    if (isHotel) {
+        setValue('listingCondition', 'New');
+        setValue('listingPriceType', 'Fixed');
+        setValue('listingDelivery', 'Pickup only');
+        setValue('listingAvailability', 'Available');
+    }
+
+    const priceGroup = groupFor('listingPrice');
+    const priceLabel = priceGroup?.querySelector?.('label') || null;
+    const priceInput = document.getElementById('listingPrice');
+    if (priceLabel) {
+        if (!priceLabel.dataset.defaultText) priceLabel.dataset.defaultText = priceLabel.textContent || '';
+        priceLabel.textContent = isHotel ? 'Prix (DA) - à partir de' : (priceLabel.dataset.defaultText || '');
+    }
+    if (priceInput) {
+        if (!priceInput.dataset.defaultPlaceholder) priceInput.dataset.defaultPlaceholder = priceInput.placeholder || '';
+        priceInput.placeholder = isHotel ? 'Prix minimum par nuit' : (priceInput.dataset.defaultPlaceholder || '');
+    }
+
+    const tagsInput = document.getElementById('listingTags');
+    if (tagsInput) {
+        if (!tagsInput.dataset.defaultPlaceholder) tagsInput.dataset.defaultPlaceholder = tagsInput.placeholder || '';
+        tagsInput.placeholder = isHotel ? 'ex: vue mer, famille, spa, centre-ville' : (tagsInput.dataset.defaultPlaceholder || '');
+    }
+}
+
+function getHotelMinRoomPriceFromForm() {
+    const container = document.getElementById('hotelRoomsList');
+    if (!container) return null;
+    const prices = Array.from(container.querySelectorAll('input[id^="hotelRoomPrice_"]'))
+        .map((el) => Number(el?.value) || 0)
+        .filter((n) => n > 0);
+    if (!prices.length) return null;
+    return Math.min(...prices);
 }
 
 let hotelRoomCount = 0;
@@ -9090,16 +8967,17 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
 
         const title = document.getElementById('listingTitle').value.trim();
         const description = document.getElementById('listingDescription')?.value?.trim?.() || '';
-        const condition = document.getElementById('listingCondition')?.value || '';
-        const priceType = document.getElementById('listingPriceType')?.value || '';
-        const price = Number(document.getElementById('listingPrice').value) || 0;
         const category = document.getElementById('listingCategory').value;
         const subcategory = document.getElementById('listingSubcategory')?.value || '';
+        const isHotelListing = normalizeListingCategory(category, subcategory) === 'Hébergement';
+        let condition = document.getElementById('listingCondition')?.value || '';
+        let priceType = document.getElementById('listingPriceType')?.value || '';
+        let price = Number(document.getElementById('listingPrice').value) || 0;
         const wilaya = document.getElementById('listingWilaya').value;
         const city = document.getElementById('listingCity')?.value || '';
-        const delivery = document.getElementById('listingDelivery')?.value || '';
+        let delivery = document.getElementById('listingDelivery')?.value || '';
         const contactPhone = document.getElementById('listingContactPhone')?.value?.trim?.() || '';
-        const availability = document.getElementById('listingAvailability')?.value || 'Available';
+        let availability = document.getElementById('listingAvailability')?.value || 'Available';
         const tagsRaw = document.getElementById('listingTags')?.value || '';
         const tags = Array.from(
             new Map(
@@ -9123,6 +9001,23 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
         const baseDetails = existingListing?.details && typeof existingListing.details === 'object' ? existingListing.details : {};
         let mergedDetails = { ...(baseDetails || {}), ...(detailsRaw || {}) };
         let details = Object.keys(mergedDetails).length ? mergedDetails : null;
+
+        if (isHotelListing) {
+            condition = 'New';
+            priceType = 'Fixed';
+            delivery = 'Pickup only';
+            availability = 'Available';
+            if (priceType !== 'Free' && price <= 0) {
+                const minPrice = getHotelMinRoomPriceFromForm();
+                if (!minPrice || minPrice <= 0) {
+                    showToast('Add at least 1 room with a nightly price', 'alert-circle');
+                    return;
+                }
+                price = minPrice;
+                const priceEl = document.getElementById('listingPrice');
+                if (priceEl) priceEl.value = String(price);
+            }
+        }
 
         if (!title) {
             showToast('Title is required', 'alert-circle');
@@ -11982,28 +11877,51 @@ function autoFillCategoryFromProfile() {
     const workCat = userProfile?.workCategory;
     if (!workCat) return false;
     const normalizedCat = normalizeText(workCat);
-    let mapping = WORK_CATEGORY_TO_LISTING[workCat];
-    if (!mapping) {
-        for (const [key, value] of Object.entries(WORK_CATEGORY_TO_LISTING)) {
-            if (normalizeText(key) === normalizedCat) {
-                mapping = value;
-                break;
-            }
+
+    // 1. Try to find the parent category directly from listingSubcategoriesByCategory
+    let foundCategory = null;
+    let exactSubcategory = null;
+
+    for (const [cat, subs] of Object.entries(listingSubcategoriesByCategory)) {
+        const match = subs.find(s => normalizeText(s) === normalizedCat);
+        if (match) {
+            foundCategory = cat;
+            exactSubcategory = match;
+            break;
         }
     }
-    if (!mapping) return false;
+
+    // 2. Fallback to WORK_CATEGORY_TO_LISTING for legacy/custom mappings
+    if (!foundCategory) {
+        let mapping = WORK_CATEGORY_TO_LISTING[workCat];
+        if (!mapping) {
+            for (const [key, value] of Object.entries(WORK_CATEGORY_TO_LISTING)) {
+                if (normalizeText(key) === normalizedCat) {
+                    mapping = value;
+                    break;
+                }
+            }
+        }
+        if (mapping) {
+            foundCategory = mapping.category;
+            exactSubcategory = mapping.subcategory;
+        }
+    }
+
+    if (!foundCategory || !exactSubcategory) return false;
+
     const catSelect = document.getElementById('listingCategory');
     const subSelect = document.getElementById('listingSubcategory');
     if (!catSelect || !subSelect) return false;
-    
-    catSelect.value = mapping.category;
+
+    catSelect.value = foundCategory;
     // Pre-populate subcategory list
-    populateListingSubcategorySelect(subSelect, mapping.category, mapping.subcategory);
-    
+    populateListingSubcategorySelect(subSelect, foundCategory, exactSubcategory);
+
     catSelect.dispatchEvent(new Event('change'));
-    subSelect.value = mapping.subcategory;
+    subSelect.value = exactSubcategory;
     subSelect.dispatchEvent(new Event('change'));
-    
+
     toggleHotelFieldsVisibility();
     return true;
 }
