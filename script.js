@@ -30,6 +30,7 @@ function createEmptyUserProfile() {
         businessType: "Particulier",
         phone: "",
         workCategory: "",
+        workCategoryId: null,
         identityInitializedAt: null,
         identityChangeCount: 0,
         joinedDate: "",
@@ -881,6 +882,7 @@ function applySupabaseProfileRowToLocalState(row, user) {
     if (!row || typeof row !== 'object') return;
     const rawBusinessType = String(row.business_type || row.businessType || userProfile.businessType || '').trim() || 'Particulier';
     const rawWorkCategory = String(row.work_category || row.workCategory || row.category || userProfile.workCategory || '').trim();
+    const rawWorkCategoryId = row.work_category_id || row.workCategoryId || userProfile.workCategoryId || null;
     const normalizedBusinessType =
         rawBusinessType === 'Particulier' || rawBusinessType === 'Professionnel'
             ? rawBusinessType
@@ -901,6 +903,7 @@ function applySupabaseProfileRowToLocalState(row, user) {
         businessType: normalizedBusinessType,
         phone: row.phone || row.phone_number || row.phoneNumber || userProfile.phone,
         workCategory: normalizedWorkCategory,
+        workCategoryId: rawWorkCategoryId,
         identityInitializedAt: row.identity_initialized_at || row.identityInitializedAt || userProfile.identityInitializedAt || null,
         identityChangeCount: Number(row.identity_change_count ?? row.identityChangeCount ?? userProfile.identityChangeCount ?? 0) || 0,
         isVip: !!(row.is_vip ?? row.vip ?? row.isVip ?? userProfile.isVip),
@@ -1570,25 +1573,43 @@ function populateWorkCategoriesSelect() {
     const placeholder = currentLang === 'ar' ? 'اختر...' : (currentLang === 'en' ? 'Select...' : 'Sélectionnez...');
     select.innerHTML = `<option value="">${placeholder}</option>`;
 
-    // Dynamically build from listing categories to ensure perfect sync
-    for (const [category, subcategories] of Object.entries(listingSubcategoriesByCategory)) {
-        const og = document.createElement('optgroup');
-        const labelObj = CATEGORY_LABELS[category] || { fr: category };
-        og.label = labelObj[currentLang] || labelObj.fr;
+    businessCategoriesById = {};
 
-        subcategories.forEach((sub) => {
-            const opt = document.createElement('option');
-            opt.value = sub;
-            opt.textContent = sub; // Subcategories are currently in FR only
-            og.appendChild(opt);
+    const client = initSupabase();
+    if (!client) return;
+
+    client
+        .from('business_categories')
+        .select('id, group_name, name, listing_category, listing_subcategory, active')
+        .eq('active', true)
+        .order('group_name', { ascending: true })
+        .order('name', { ascending: true })
+        .then(({ data, error }) => {
+            if (error || !Array.isArray(data)) return;
+            const grouped = new Map();
+            data.forEach((row) => {
+                if (!row?.id) return;
+                businessCategoriesById[String(row.id)] = row;
+                const group = String(row.group_name || 'Other');
+                if (!grouped.has(group)) grouped.set(group, []);
+                grouped.get(group).push(row);
+            });
+
+            grouped.forEach((rows, group) => {
+                const og = document.createElement('optgroup');
+                og.label = group;
+                rows.forEach((row) => {
+                    const opt = document.createElement('option');
+                    opt.value = String(row.id);
+                    opt.textContent = String(row.name || '');
+                    og.appendChild(opt);
+                });
+                select.appendChild(og);
+            });
+
+            const currentValue = userProfile?.workCategoryId || '';
+            if (currentValue) select.value = currentValue;
         });
-        select.appendChild(og);
-    }
-
-    const other = document.createElement('option');
-    other.value = 'Autre';
-    other.textContent = currentLang === 'ar' ? 'أخرى' : (currentLang === 'en' ? 'Other' : 'Autre');
-    select.appendChild(other);
 }
 
 function updateEditProfileWorkCategoryVisibility() {
@@ -5087,6 +5108,8 @@ const listingSubcategoriesByCategory = {
     "Voyages": ["Agences & packs", "Omra & Hadj", "Billets & transport", "Hôtels", "Excursions", "Location saisonnière"],
     "Services": ["Services à domicile", "Cours & formations", "Transport", "Événementiel", "Freelance", "Réparation", "Services à la personne"]
 };
+
+let businessCategoriesById = {};
 
 const allExtraCategories = [];
 
@@ -9365,12 +9388,20 @@ document.getElementById('editProfileForm').addEventListener('submit', async (e) 
     const location = document.getElementById('editLocation').value;
     const businessType = document.getElementById('editBusinessType').value;
     const phone = document.getElementById('editPhone')?.value?.trim() || '';
-    const workCategory = businessType === 'Professionnel'
+    const workCategoryId = businessType === 'Professionnel'
         ? (document.getElementById('editWorkCategory')?.value || '')
         : '';
+    const workCategoryName = businessType === 'Professionnel'
+        ? (document.getElementById('editWorkCategory')?.selectedOptions?.[0]?.textContent || '')
+        : '';
 
-    const requestedIdentityKey = `${tagValue}|${businessType}|${workCategory}`;
-    const currentIdentityKey = `${userProfile.tag}|${userProfile.businessType}|${userProfile.workCategory || ''}`;
+    if (businessType === 'Professionnel' && !workCategoryId) {
+        showToast('Work category is required', 'alert-circle');
+        return;
+    }
+
+    const requestedIdentityKey = `${tagValue}|${businessType}|${workCategoryId}`;
+    const currentIdentityKey = `${userProfile.tag}|${userProfile.businessType}|${userProfile.workCategoryId || ''}`;
     if (requestedIdentityKey !== currentIdentityKey && isProfileIdentityLocked()) {
         showToast('You can only change username/category once within 7 days', 'alert-circle');
         return;
@@ -9412,7 +9443,8 @@ document.getElementById('editProfileForm').addEventListener('submit', async (e) 
             location,
             business_type: businessType,
             phone,
-            work_category: workCategory
+            work_category_id: businessType === 'Professionnel' ? workCategoryId : null,
+            work_category: businessType === 'Professionnel' ? workCategoryName : ''
         },
         { onConflict: 'id' }
     );
@@ -9687,7 +9719,14 @@ function updateProfileUI() {
     const phoneEl = document.getElementById('editPhone');
     if (phoneEl) phoneEl.value = userProfile.phone || '';
     const workEl = document.getElementById('editWorkCategory');
-    if (workEl) workEl.value = userProfile.workCategory || '';
+    if (workEl) {
+        workEl.value = userProfile.workCategoryId || '';
+        if (!workEl.value && userProfile.workCategory) {
+            const target = normalizeText(userProfile.workCategory);
+            const match = Array.from(workEl.options || []).find((o) => normalizeText(o.textContent) === target);
+            if (match) workEl.value = match.value;
+        }
+    }
     updateEditProfileWorkCategoryVisibility();
     const idLocked = isProfileIdentityLocked();
     const tagEl = document.getElementById('editTag');
@@ -11900,25 +11939,37 @@ function normalizeText(str) {
 }
 
 function autoFillCategoryFromProfile() {
-    const workCat = userProfile?.workCategory;
-    if (!workCat) return false;
+    const isPro = userProfile?.businessType === 'Professionnel';
+    const workCatId = userProfile?.workCategoryId ? String(userProfile.workCategoryId) : '';
+    const workCat = userProfile?.workCategory || '';
     const normalizedCat = normalizeText(workCat);
 
     // 1. Try to find the parent category directly from listingSubcategoriesByCategory
     let foundCategory = null;
     let exactSubcategory = null;
 
-    for (const [cat, subs] of Object.entries(listingSubcategoriesByCategory)) {
-        const match = subs.find(s => normalizeText(s) === normalizedCat);
-        if (match) {
+    if (isPro && workCatId && businessCategoriesById?.[workCatId]) {
+        const row = businessCategoriesById[workCatId];
+        const cat = String(row.listing_category || '').trim();
+        const sub = String(row.listing_subcategory || '').trim();
+        if (cat && sub) {
             foundCategory = cat;
-            exactSubcategory = match;
-            break;
+            exactSubcategory = sub;
         }
+    }
+
+    for (const [cat, subs] of Object.entries(listingSubcategoriesByCategory)) {
+        if (foundCategory) break;
+        const match = subs.find(s => normalizeText(s) === normalizedCat);
+        if (!match) continue;
+        foundCategory = cat;
+        exactSubcategory = match;
+        break;
     }
 
     // 2. Fallback to WORK_CATEGORY_TO_LISTING for legacy/custom mappings
     if (!foundCategory) {
+        if (!workCat) return false;
         let mapping = WORK_CATEGORY_TO_LISTING[workCat];
         if (!mapping) {
             for (const [key, value] of Object.entries(WORK_CATEGORY_TO_LISTING)) {
