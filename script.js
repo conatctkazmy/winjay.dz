@@ -6385,6 +6385,22 @@ const listingDynamicFieldSchemas = {
         { key: 'delivery_available', label: 'Livraison', type: 'select', required: false, options: ['Oui', 'Non'] },
         { key: 'conditions', label: 'Conditions', type: 'text', required: false, placeholder: 'ex: permis + âge' }
     ],
+    "Automobiles & Véhicules::Bus & Minibus": [
+        { key: 'make', label: 'Marque', type: 'text', required: true },
+        { key: 'model', label: 'Modèle', type: 'text', required: true },
+        { key: 'year', label: 'Année', type: 'number', required: true, min: 1950, max: 2035 },
+        { key: 'mileage_km', label: 'Kilométrage (km)', type: 'number', required: false, min: 0, max: 8000000 },
+        { key: 'fuel', label: 'Carburant', type: 'select', required: false, options: ['Diesel', 'Essence', 'Hybride', 'Électrique', 'GPL'] },
+        { key: 'seats', label: 'Places', type: 'number', required: false, min: 2, max: 120 }
+    ],
+    "Automobiles & Véhicules::Engins & Machines": [
+        { key: 'machine_type', label: 'Type', type: 'select', required: true, options: ['Tracteur', 'Pelle', 'Chargeuse', 'Bulldozer', 'Grue', 'Chariot élévateur', 'Compresseur', 'Générateur', 'Autre'] },
+        { key: 'brand', label: 'Marque', type: 'text', required: true },
+        { key: 'model', label: 'Modèle', type: 'text', required: false },
+        { key: 'year', label: 'Année', type: 'number', required: false, min: 1950, max: 2035 },
+        { key: 'hours', label: 'Heures', type: 'number', required: false, min: 0, max: 500000 },
+        { key: 'fuel', label: 'Carburant', type: 'select', required: false, options: ['Diesel', 'Essence', 'Hybride', 'Électrique', 'GPL'] }
+    ],
     "Pièces détachées::*": [
         { key: 'part_type', label: 'Type de pièce', type: 'text', required: true, placeholder: 'ex: alternateur' },
         { key: 'vehicle_type', label: 'Pour', type: 'select', required: false, options: ['Auto', 'Moto', 'Camion', 'Autre'] },
