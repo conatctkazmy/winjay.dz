@@ -5603,7 +5603,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const editIdFromUrl = Number(editParam) || 0;
 
     if (listingsGrid && (!Array.isArray(listings) || listings.length === 0)) {
+        homeInitialListingsLoading = true;
+        homeInitialListingsLoaded = false;
         listingsGrid.innerHTML = getHomeListingsSkeletonHTML(12);
+        const empty = document.getElementById('emptyState');
+        if (empty) empty.style.display = 'none';
+        const gridEl = document.getElementById('listingsGrid');
+        if (gridEl) gridEl.style.display = 'grid';
+        if (pagination) pagination.innerHTML = '';
+        updateLoadMoreListingsUI();
+        renderVipVideoSection();
     }
     if (!listingsLoadMoreBound) {
         listingsLoadMoreBound = true;
