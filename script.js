@@ -4451,14 +4451,45 @@ function getAnalyticsSessionId() {
 }
 
 const analyticsDedupeKeys = new Set();
+const analyticsQueue = [];
+let analyticsGateOpen = false;
+let analyticsGateSetup = false;
 
-async function trackAnalyticsEvent(eventName, { listingId = null, category = null, wilaya = null, meta = null, dedupeKey = '' } = {}) {
-    if (DEMO_MODE) return;
-    const name = String(eventName || '').trim();
-    if (!name) return;
-    const key = dedupeKey ? String(dedupeKey) : `${name}:${listingId ?? ''}`;
-    if (analyticsDedupeKeys.has(key)) return;
-    analyticsDedupeKeys.add(key);
+function setupAnalyticsGate() {
+    if (analyticsGateSetup) return;
+    analyticsGateSetup = true;
+    const open = () => {
+        if (analyticsGateOpen) return;
+        analyticsGateOpen = true;
+        while (analyticsQueue.length) {
+            const job = analyticsQueue.shift();
+            if (!job) continue;
+            sendAnalyticsEventNow(job.name, job.opts, job.key);
+        }
+    };
+    try {
+        window.addEventListener('pointerdown', open, { once: true, capture: true, passive: true });
+    } catch (e) {
+        null;
+    }
+    try {
+        window.addEventListener('keydown', open, { once: true, capture: true });
+    } catch (e) {
+        null;
+    }
+    try {
+        if (window.requestIdleCallback) window.requestIdleCallback(open, { timeout: 3500 });
+    } catch (e) {
+        null;
+    }
+    try {
+        setTimeout(open, 3500);
+    } catch (e) {
+        null;
+    }
+}
+
+async function sendAnalyticsEventNow(name, opts, key) {
     const client = initSupabase();
     if (!client) return;
     const payload = {
@@ -4467,11 +4498,11 @@ async function trackAnalyticsEvent(eventName, { listingId = null, category = nul
         anon_id: currentSupabaseUserId ? null : getAnonVisitorId(),
         session_id: getAnalyticsSessionId(),
         section: getCurrentSectionId(),
-        listing_id: Number.isFinite(Number(listingId)) ? Number(listingId) : null,
-        category: category ? String(category) : null,
-        wilaya: wilaya ? String(wilaya) : null,
+        listing_id: Number.isFinite(Number(opts?.listingId)) ? Number(opts.listingId) : null,
+        category: opts?.category ? String(opts.category) : null,
+        wilaya: opts?.wilaya ? String(opts.wilaya) : null,
         device: getDeviceInfo(),
-        meta: meta && typeof meta === 'object' ? meta : null
+        meta: opts?.meta && typeof opts.meta === 'object' ? opts.meta : null
     };
     try {
         const { error } = await client.from('analytics_events').insert(payload);
@@ -4481,6 +4512,21 @@ async function trackAnalyticsEvent(eventName, { listingId = null, category = nul
     } catch (e) {
         analyticsDedupeKeys.delete(key);
     }
+}
+
+async function trackAnalyticsEvent(eventName, { listingId = null, category = null, wilaya = null, meta = null, dedupeKey = '' } = {}) {
+    if (DEMO_MODE) return;
+    const name = String(eventName || '').trim();
+    if (!name) return;
+    const key = dedupeKey ? String(dedupeKey) : `${name}:${listingId ?? ''}`;
+    if (analyticsDedupeKeys.has(key)) return;
+    analyticsDedupeKeys.add(key);
+    setupAnalyticsGate();
+    if (!analyticsGateOpen) {
+        analyticsQueue.push({ name, key, opts: { listingId, category, wilaya, meta } });
+        return;
+    }
+    sendAnalyticsEventNow(name, { listingId, category, wilaya, meta }, key);
 }
 
 function trackListingContactAction(kind, listingId) {
@@ -5497,7 +5543,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupListingVideoUploader();
     updateListingVideoGroupVisibility();
     populateWilayas();
-    loadAlgeriaCommunesData();
     populateCategories();
     setupHomeCategorySwipe();
     setupListingSubcategorySelects();
@@ -5838,6 +5883,31 @@ function populateCitySelect(selectEl, wilayaLabel, selectedValue = '') {
     refreshSelectPicker(selectEl);
 }
 
+function populateCitySelectLazy(selectEl, wilayaLabel, selectedValue = '') {
+    if (!selectEl) return;
+    const label = String(wilayaLabel || '').trim();
+    if (!label) {
+        selectEl.innerHTML = '<option value="" disabled selected>Sélectionnez une ville / commune</option>';
+        selectEl.disabled = true;
+        refreshSelectPicker(selectEl);
+        return;
+    }
+    if (communesByWilayaCode) {
+        populateCitySelect(selectEl, label, selectedValue);
+        return;
+    }
+    selectEl.innerHTML = '<option value="" disabled selected>Chargement...</option>';
+    selectEl.disabled = true;
+    refreshSelectPicker(selectEl);
+    loadAlgeriaCommunesData()
+        .then(() => {
+            populateCitySelect(selectEl, label, selectedValue);
+        })
+        .catch(() => {
+            populateCitySelect(selectEl, label, selectedValue);
+        });
+}
+
 function setupListingCitySelects() {
     const addWilaya = document.getElementById('listingWilaya');
     const addCity = document.getElementById('listingCity');
@@ -5845,12 +5915,12 @@ function setupListingCitySelects() {
     const editCity = document.getElementById('editListingCity');
 
     if (addWilaya && addCity) {
-        const refresh = () => populateCitySelect(addCity, addWilaya.value, '');
+        const refresh = () => populateCitySelectLazy(addCity, addWilaya.value, '');
         addWilaya.addEventListener('change', refresh);
         refresh();
     }
     if (editWilaya && editCity) {
-        const refresh = () => populateCitySelect(editCity, editWilaya.value, editCity.value || '');
+        const refresh = () => populateCitySelectLazy(editCity, editWilaya.value, editCity.value || '');
         editWilaya.addEventListener('change', refresh);
         refresh();
     }
