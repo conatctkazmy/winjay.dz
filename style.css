@@ -143,6 +143,16 @@ html.app-loading .profile-btn img {
     opacity: 0;
 }
 
+html.nav-avatar-loading .navbar .profile-btn {
+    background: linear-gradient(90deg, var(--light-gray) 25%, var(--border-color) 50%, var(--light-gray) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+html.nav-avatar-loading .navbar .profile-btn img {
+    opacity: 0;
+}
+
 .navbar {
     position: fixed;
     top: 0;

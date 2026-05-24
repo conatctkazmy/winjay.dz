@@ -10043,6 +10043,13 @@ function updateNavbarAuthUI() {
     if (freeVerifiedPill) freeVerifiedPill.style.display = profileReady && !verified ? '' : 'none';
     if (profileMenu) profileMenu.style.display = loggedIn ? '' : 'none';
     if (sidebarCoursesItem) sidebarCoursesItem.style.display = loggedIn ? '' : 'none';
+
+    try {
+        const showSkeleton = likelyLoggedIn && !profileReady;
+        document.documentElement.classList.toggle('nav-avatar-loading', !!showSkeleton);
+    } catch (e) {
+        null;
+    }
 }
 
 function updateProfileUI() {
