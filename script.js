@@ -5482,6 +5482,11 @@ loadThemeModeFromStorage();
 document.addEventListener('DOMContentLoaded', async () => {
     setPendingReferralFromUrl();
     initLanguage();
+    try {
+        document.documentElement.classList.remove('app-loading');
+    } catch (e) {
+        null;
+    }
     updateNavbarAuthUI();
     initSupabase();
     await bootstrapSupabaseAuth();
@@ -5643,7 +5648,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     }
-    document.documentElement.classList.remove('app-loading');
+    try {
+        document.documentElement.classList.remove('app-loading');
+    } catch (e) {
+        null;
+    }
 });
 
 function setupPasswordNoSpaceInputs() {

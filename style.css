@@ -130,15 +130,17 @@ html {
 }
 
 html.app-loading body {
-    overflow: hidden;
+    overflow: auto;
 }
 
-html.app-loading main {
-    visibility: hidden;
+html.app-loading .profile-btn {
+    background: linear-gradient(90deg, var(--light-gray) 25%, var(--border-color) 50%, var(--light-gray) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
 }
 
-html.app-loading .navbar {
-    visibility: hidden;
+html.app-loading .profile-btn img {
+    opacity: 0;
 }
 
 .navbar {
