@@ -641,6 +641,7 @@ function mapSupabaseListingRow(row, profilesById = {}) {
     const images = Array.isArray(row?.listing_images) ? row.listing_images.slice() : [];
     images.sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
     const firstUrl = images[0]?.url || '';
+    const firstThumb = images[0]?.thumbnail_url || '';
     const ownerId = row?.owner_id || null;
     const profileRow = ownerId ? profilesById[ownerId] || null : null;
     const sellerFromProfile = profileRow ? mapProfileRowToSeller(profileRow) : buildSellerPlaceholder(ownerId);
@@ -662,6 +663,9 @@ function mapSupabaseListingRow(row, profilesById = {}) {
         category: normalizedCategory,
         image: firstUrl || 'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?w=500',
         images: images.map((x) => x.url).filter(Boolean),
+        cardImage: firstThumb || firstUrl || '',
+        cardImages: images.map((x) => x.thumbnail_url || x.url).filter(Boolean),
+        listing_images_meta: images.map((x) => ({ url: x.url, thumbnail_url: x.thumbnail_url || '', sort_order: x.sort_order })),
         city: row.city || '',
         contact_phone: row.contact_phone || '',
         tags: Array.isArray(row.tags) ? row.tags.filter(Boolean) : [],
@@ -690,7 +694,7 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = fal
     let query = client
         .from('listings')
         .select(
-            'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, sort_order)'
+            'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)'
         )
         .order('created_at', { ascending: false });
     const safeLimitRaw = Number(limit);
@@ -6193,6 +6197,69 @@ async function requestVipListingVideoAttach({ listingId, tmpPath } = {}) {
     }
 }
 
+const LISTING_THUMB_MAX_PX = 520;
+const LISTING_THUMB_QUALITY = 0.78;
+
+async function createListingThumbnailBlob(file, { maxPx = LISTING_THUMB_MAX_PX, quality = LISTING_THUMB_QUALITY } = {}) {
+    const f = file;
+    if (!f || !String(f.type || '').startsWith('image/')) return null;
+    let bitmap = null;
+    let img = null;
+    let objectUrl = '';
+    try {
+        try {
+            bitmap = await createImageBitmap(f);
+        } catch (e) {
+            bitmap = null;
+        }
+        let w = bitmap?.width || 0;
+        let h = bitmap?.height || 0;
+        if (!w || !h) {
+            objectUrl = URL.createObjectURL(f);
+            img = await new Promise((resolve) => {
+                const el = new Image();
+                el.onload = () => resolve(el);
+                el.onerror = () => resolve(null);
+                el.src = objectUrl;
+            });
+            w = img?.naturalWidth || img?.width || 0;
+            h = img?.naturalHeight || img?.height || 0;
+        }
+        if (!w || !h) return null;
+        const scale = Math.min(1, Number(maxPx) > 0 ? (Number(maxPx) / Math.max(w, h)) : 1);
+        const outW = Math.max(1, Math.round(w * scale));
+        const outH = Math.max(1, Math.round(h * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = outW;
+        canvas.height = outH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        if (bitmap) ctx.drawImage(bitmap, 0, 0, outW, outH);
+        else if (img) ctx.drawImage(img, 0, 0, outW, outH);
+        else return null;
+        const blob = await new Promise((resolve) => {
+            canvas.toBlob((b) => resolve(b || null), 'image/webp', quality);
+        });
+        if (blob) return blob;
+        return await new Promise((resolve) => {
+            canvas.toBlob((b) => resolve(b || null), 'image/jpeg', quality);
+        });
+    } catch (e) {
+        return null;
+    } finally {
+        try {
+            bitmap?.close?.();
+        } catch (e) {
+            null;
+        }
+        try {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        } catch (e) {
+            null;
+        }
+    }
+}
+
 async function manualUploadSelectedListingVideo() {
     startAutoListingVideoUpload({ source: 'retry' });
 }
@@ -9532,16 +9599,31 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             const listingId = Number(editingListingId);
             const objectPaths = [];
             const finalUrls = [];
+            const finalThumbUrls = [];
+            const existingThumbByUrl = new Map(
+                (existingListing?.listing_images_meta || [])
+                    .map((x) => [String(x?.url || ''), String(x?.thumbnail_url || '')])
+                    .filter((pair) => pair[0])
+            );
             for (let i = 0; i < imagePlan.length; i++) {
                 const entry = imagePlan[i];
                 if (entry.kind === 'existing') {
                     finalUrls.push(entry.url);
+                    finalThumbUrls.push(existingThumbByUrl.get(entry.url) || '');
                     continue;
                 }
                 const f = entry.file;
                 const safeName = String(f.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_');
                 const objectPath = `${userId}/${listingId}/${Date.now()}_${i + 1}_${safeName}`;
                 objectPaths.push(objectPath);
+                const thumbBlob = await createListingThumbnailBlob(f);
+                let thumbPath = '';
+                if (thumbBlob) {
+                    const ext = String(thumbBlob.type || '').includes('webp') ? 'webp' : 'jpg';
+                    const base = safeName.replace(/\.[^.]+$/, '');
+                    thumbPath = `${userId}/${listingId}/thumb_${Date.now()}_${i + 1}_${base}.${ext}`;
+                    objectPaths.push(thumbPath);
+                }
                 const { error: uploadErr } = await withTimeout(
                     client.storage
                         .from(LISTING_IMAGES_BUCKET)
@@ -9561,6 +9643,21 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                     return;
                 }
                 finalUrls.push(publicUrl);
+                let thumbUrl = '';
+                if (thumbBlob && thumbPath) {
+                    const { error: thumbErr } = await withTimeout(
+                        client.storage
+                            .from(LISTING_IMAGES_BUCKET)
+                            .upload(thumbPath, thumbBlob, { cacheControl: '3600', upsert: false, contentType: thumbBlob.type || undefined }),
+                        20000,
+                        'Thumbnail upload timed out'
+                    );
+                    if (!thumbErr) {
+                        const { data: thumbPublic } = client.storage.from(LISTING_IMAGES_BUCKET).getPublicUrl(thumbPath);
+                        thumbUrl = thumbPublic?.publicUrl || '';
+                    }
+                }
+                finalThumbUrls.push(thumbUrl || '');
             }
             if (isVipAccount && listingVideoTmpMeta?.path) {
                 const attachRes = await requestVipListingVideoAttach({ listingId, tmpPath: listingVideoTmpMeta.path });
@@ -9608,7 +9705,12 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 showToast(msg.includes('row-level security') ? 'Listings: permission denied (RLS)' : msg, 'alert-circle');
                 return;
             }
-            const imageRows = finalUrls.map((u, i) => ({ listing_id: listingId, url: u, sort_order: i + 1 }));
+            const imageRows = finalUrls.map((u, i) => ({
+                listing_id: listingId,
+                url: u,
+                thumbnail_url: finalThumbUrls[i] || null,
+                sort_order: i + 1
+            }));
             const { error: delErr } = await withTimeout(
                 client.from('listing_images').delete().eq('listing_id', listingId),
                 15000,
@@ -9681,6 +9783,14 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             const safeName = String(f.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_');
             const objectPath = `${userId}/${listingId}/${Date.now()}_${i + 1}_${safeName}`;
             objectPaths.push(objectPath);
+            const thumbBlob = await createListingThumbnailBlob(f);
+            let thumbPath = '';
+            if (thumbBlob) {
+                const ext = String(thumbBlob.type || '').includes('webp') ? 'webp' : 'jpg';
+                const base = safeName.replace(/\.[^.]+$/, '');
+                thumbPath = `${userId}/${listingId}/thumb_${Date.now()}_${i + 1}_${base}.${ext}`;
+                objectPaths.push(thumbPath);
+            }
             const { error: uploadErr } = await withTimeout(
                 client.storage
                     .from(LISTING_IMAGES_BUCKET)
@@ -9706,7 +9816,21 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 showToast('Failed to generate image URL', 'alert-circle');
                 return;
             }
-            imageRows.push({ listing_id: listingId, url: publicUrl, sort_order: i + 1 });
+            let thumbUrl = '';
+            if (thumbBlob && thumbPath) {
+                const { error: thumbErr } = await withTimeout(
+                    client.storage
+                        .from(LISTING_IMAGES_BUCKET)
+                        .upload(thumbPath, thumbBlob, { cacheControl: '3600', upsert: false, contentType: thumbBlob.type || undefined }),
+                    20000,
+                    'Thumbnail upload timed out'
+                );
+                if (!thumbErr) {
+                    const { data: thumbPublic } = client.storage.from(LISTING_IMAGES_BUCKET).getPublicUrl(thumbPath);
+                    thumbUrl = thumbPublic?.publicUrl || '';
+                }
+            }
+            imageRows.push({ listing_id: listingId, url: publicUrl, thumbnail_url: thumbUrl || null, sort_order: i + 1 });
         }
 
         const { error: imgErr } = await withTimeout(
@@ -13032,7 +13156,6 @@ function createVipVideoCardHTML(item) {
     const pulse = pendingHeartPulses.has(item.id) && isFavorite;
     const availability = String(item.availability || '').toLowerCase();
     const badgeText = availability === 'sold' ? 'Sold' : (availability === 'reserved' ? 'Reserved' : '');
-    const carouselImages = getListingImagesForDetail(item).slice(0, 2);
     const videoUrl = getListingVideoPublicUrl(item);
     const muted = getVipVideoMutedPreference();
     const muteIcon = muted ? 'volume-x' : 'volume-2';
@@ -13043,7 +13166,7 @@ function createVipVideoCardHTML(item) {
                 <button type="button" class="vip-video-mute-btn" data-listing-id="${item.id}" data-muted="${muted ? '1' : '0'}" aria-label="${muted ? 'Activer le son' : 'Couper le son'}" onclick="toggleVipVideoMuted(event, ${item.id})"><i data-lucide="${muteIcon}"></i></button>
                 <button type="button" class="vip-video-pause-btn" data-listing-id="${item.id}" data-paused="0" aria-label="Pause" onclick="toggleVipVideoPaused(event, ${item.id})"><i data-lucide="pause"></i></button>
             </div>`
-        : `<div class="card-media-wrap"><img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
+        : `<div class="card-media-wrap"><img src="${item.cardImage || item.image}" data-src="${item.cardImage || item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
     return `
         <div class="card" onclick="handleCardOpen(event, ${item.id})">
             <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
@@ -13415,7 +13538,7 @@ function createCardHTML(item) {
     const pulse = pendingHeartPulses.has(item.id) && isFavorite;
     const availability = String(item.availability || '').toLowerCase();
     const badgeText = availability === 'sold' ? 'Sold' : (availability === 'reserved' ? 'Reserved' : '');
-    const carouselImages = getListingImagesForDetail(item).slice(0, 8);
+    const carouselImages = getListingImagesForCard(item).slice(0, 8);
     const videoBadge = hasListingVideo(item) ? `<span class="video-play-badge"><i data-lucide="play"></i></span>` : '';
     const mediaHTML = carouselImages.length > 1
         ? `<div class="card-media-wrap"><div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
@@ -13429,7 +13552,7 @@ function createCardHTML(item) {
                     ${carouselImages.map((_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
                 </div>
             </div></div>`
-        : `<div class="card-media-wrap">${videoBadge}<img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
+        : `<div class="card-media-wrap">${videoBadge}<img src="${item.cardImage || item.image}" data-src="${item.cardImage || item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
     return `
         <div class="card" onclick="handleCardOpen(event, ${item.id})">
             <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
@@ -14467,6 +14590,22 @@ function getListingImagesForDetail(item) {
     return urls;
 }
 
+function getListingImagesForCard(item) {
+    const urls = [];
+    const push = (u) => {
+        const v = String(u || '').trim();
+        if (!v) return;
+        if (!urls.includes(v)) urls.push(v);
+    };
+    if (Array.isArray(item?.cardImages) && item.cardImages.length) item.cardImages.forEach(push);
+    push(item?.cardImage);
+    if (!urls.length) {
+        if (Array.isArray(item?.images)) item.images.forEach(push);
+        push(item?.image);
+    }
+    return urls;
+}
+
 function setListingDetailImage(listingId, index) {
     const urls = getListingImagesForDetail(listings.find((l) => l.id === listingId));
     const maxIdx = urls.length > 1 ? Math.max(0, urls.length - 2) : Math.max(0, urls.length - 1);
@@ -14558,7 +14697,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
             <div class="similar-grid">
                 ${similarListings.map(s => `
                     <div class="card" onclick="openListingDetail(${s.id})" style="cursor: pointer;">
-                        <img src="${s.image}" alt="${s.title}" class="card-img" style="height: 120px;">
+                        <img src="${s.cardImage || s.image}" alt="${s.title}" class="card-img" style="height: 120px;">
                         <div class="card-content" style="padding: 10px;">
                             <div class="card-price" style="font-size: 1rem;">${new Intl.NumberFormat('fr-DZ').format(s.price)} DA</div>
                             <div class="card-title" style="font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${s.title}</div>
