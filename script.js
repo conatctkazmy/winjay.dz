@@ -542,6 +542,22 @@ function scheduleMarketplaceRenders() {
     }, 50);
 }
 
+function endBootUI() {
+    try {
+        if (window.__winjayBootTimer) {
+            clearTimeout(window.__winjayBootTimer);
+            window.__winjayBootTimer = null;
+        }
+    } catch (e) {
+        null;
+    }
+    try {
+        document.documentElement.classList.remove('app-booting');
+    } catch (e) {
+        null;
+    }
+}
+
 function updateLoadMoreListingsUI() {
     const wrap = document.getElementById('loadMoreListingsWrap');
     const btn = document.getElementById('loadMoreListingsBtn');
@@ -5661,15 +5677,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (content) {
             content.innerHTML = getSellerProfileSkeletonHTML();
         }
+        endBootUI();
         await openSellerProfile(tag.toLowerCase(), 'listings', { pushState: false });
     } else if (newListingParam) {
         openCreateListingPage({ pushState: false });
+        endBootUI();
     } else if (Number.isFinite(editIdFromUrl) && editIdFromUrl > 0) {
         await listingsPromise;
         openEditListingPageById(editIdFromUrl, { pushState: false });
+        endBootUI();
     } else if (Number.isFinite(listingIdFromUrl) && listingIdFromUrl > 0) {
         await listingsPromise;
         openListingDetail(listingIdFromUrl, { pushState: false });
+        endBootUI();
     } else {
         if (lastSection === 'seller-profile-section') {
             const storedTag = (localStorage.getItem(SELLER_PROFILE_LAST_TAG_STORAGE_KEY) || '').trim();
@@ -5679,12 +5699,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (content) {
                     content.innerHTML = getSellerProfileSkeletonHTML();
                 }
+                endBootUI();
                 await openSellerProfile(storedTag.toLowerCase());
             } else {
                 showSection('home-section');
+                endBootUI();
             }
         } else {
             showSection(lastSection);
+            endBootUI();
         }
     }
 

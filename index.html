@@ -9,6 +9,14 @@
     <script>
         document.documentElement.classList.add('app-loading');
         document.documentElement.classList.add('nav-avatar-loading');
+        document.documentElement.classList.add('app-booting');
+        try {
+            window.__winjayBootTimer = window.setTimeout(() => {
+                try {
+                    document.documentElement.classList.remove('app-booting');
+                } catch (e) {}
+            }, 2500);
+        } catch (e) {}
         try {
             const theme = localStorage.getItem('winjayThemeV1') || '';
             document.documentElement.classList.toggle('dark-mode', theme === 'dark');
@@ -95,6 +103,23 @@
             </div>
         </div>
     </nav>
+
+    <div id="bootScreen" class="boot-screen" aria-hidden="true">
+        <div class="boot-screen-inner">
+            <div class="boot-screen-top">
+                <div class="skeleton-block boot-line boot-line-title"></div>
+                <div class="skeleton-block boot-line boot-line-sub"></div>
+            </div>
+            <div class="skeleton-grid boot-grid">
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+            </div>
+        </div>
+    </div>
 
     <div id="mobileSearchExpand" class="mobile-search-expand">
         <div class="search-container mobile-search-container" style="position: relative;">
