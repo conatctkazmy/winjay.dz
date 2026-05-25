@@ -482,7 +482,7 @@ let listingsLoadMoreBound = false;
 let lucideRenderTimer = null;
 let marketplaceRenderTimer = null;
 let lastCarouselSwipeAt = 0;
-let homeInitialListingsLoading = false;
+let homeInitialListingsLoading = true;
 let homeInitialListingsLoaded = false;
 
 function scheduleLucideCreateIcons() {
@@ -13522,7 +13522,9 @@ function renderListings() {
     listingsGrid.innerHTML = totalItems > 0 ?
         pageItems.map(item => createCardHTML(item)).join('') :
         '';
-    document.getElementById('emptyState').style.display = totalItems === 0 && vipItems.length === 0 ? 'block' : 'none';
+    const isHome = getActiveSectionId() === 'home-section';
+    const shouldShowEmpty = totalItems === 0 && vipItems.length === 0 && (!isHome || (homeInitialListingsLoaded && !homeInitialListingsLoading));
+    document.getElementById('emptyState').style.display = shouldShowEmpty ? 'block' : 'none';
     document.getElementById('listingsGrid').style.display = totalItems === 0 ? 'none' : 'grid';
     renderPagination(totalPages);
     updateLoadMoreListingsUI();
