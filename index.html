@@ -237,7 +237,7 @@
         <div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebarOverlay()"></div>
 
         <main id="content-area">
-            <section id="home-section" class="content-section">
+            <section id="home-section" class="content-section active">
                 <div class="hero">
                     <h1 data-i18n="home_hero_title">Trouvez ce dont vous avez besoin, localement.</h1>
                     <p data-i18n="home_hero_subtitle">Le meilleur marché pour tout.</p>
@@ -357,7 +357,7 @@
                 <div id="myProfileContent">
                     <div class="profile-header">
                         <div class="cover-photo-container">
-                            <img src="https://images.unsplash.com/photo-1557683316-973673baf926?w=1200" alt="Couverture" id="profileCover">
+                            <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%271%27%20height%3D%271%27%3E%3C/svg%3E" alt="Couverture" id="profileCover">
                             <button class="edit-cover-btn" onclick="openImageEditor('cover')">
                                 <i data-lucide="camera"></i>
                             </button>
@@ -365,7 +365,7 @@
                         </div>
                         <div class="profile-info-container">
                             <div class="profile-pic-wrapper">
-                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="Profil" id="profilePic">
+                                <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%271%27%20height%3D%271%27%3E%3C/svg%3E" alt="Profil" id="profilePic">
                                 <button class="edit-profile-pic-btn" onclick="openImageEditor('avatar')">
                                     <i data-lucide="camera"></i>
                                 </button>
@@ -374,18 +374,18 @@
                             <div class="profile-details">
                                 <div class="profile-text">
                                     <div class="name-badge">
-                                        <h2 id="profileName">Guest</h2>
+                                        <h2 id="profileName"></h2>
                                     </div>
-                                    <p id="profileTag">@guest</p>
+                                    <p id="profileTag"></p>
                                     <div id="profileRatingContainer"></div>
                                     <div class="profile-bio-box">
                                         <div class="bio-item">
                                             <i data-lucide="map-pin"></i>
-                                            <span id="profileLocation">Alger, Algérie</span>
+                                            <span id="profileLocation">—</span>
                                         </div>
                                         <div class="bio-item">
                                             <i data-lucide="briefcase"></i>
-                                            <span id="profileBusiness">Particulier</span>
+                                            <span id="profileBusiness">—</span>
                                         </div>
                                         <div class="bio-item">
                                             <i data-lucide="phone"></i>
@@ -408,6 +408,63 @@
                                             <span><span id="profileFollowingCount">0</span> abonnements</span>
                                         </div>
                                     </div>
+                                    <script>
+                                        (function () {
+                                            try {
+                                                const raw = localStorage.getItem('winjayUserProfileV1');
+                                                if (!raw) return;
+                                                const p = JSON.parse(raw);
+                                                if (!p || typeof p !== 'object') return;
+                                                const name = typeof p.name === 'string' ? p.name.trim() : '';
+                                                const tag = typeof p.tag === 'string' ? p.tag.trim() : '';
+                                                const profilePic = typeof p.profilePic === 'string' ? p.profilePic.trim() : '';
+                                                const coverPic = typeof p.coverPic === 'string' ? p.coverPic.trim() : '';
+                                                const location = typeof p.location === 'string' ? p.location.trim() : '';
+                                                const businessType = typeof p.businessType === 'string' ? p.businessType.trim() : '';
+                                                const phone = typeof p.phone === 'string' ? p.phone.trim() : '';
+                                                const workCategory = typeof p.workCategory === 'string' ? p.workCategory.trim() : '';
+                                                const joinedDate = typeof p.joinedDate === 'string' ? p.joinedDate.trim() : '';
+                                                const safeName = name && name.toLowerCase() !== 'guest' ? name : '';
+                                                const safeTag = tag && tag.toLowerCase() !== '@guest' ? (tag.startsWith('@') ? tag : '@' + tag) : '';
+                                                if (safeName) {
+                                                    const el = document.getElementById('profileName');
+                                                    if (el) el.textContent = safeName;
+                                                }
+                                                if (safeTag) {
+                                                    const el = document.getElementById('profileTag');
+                                                    if (el) el.textContent = safeTag;
+                                                }
+                                                if (location) {
+                                                    const el = document.getElementById('profileLocation');
+                                                    if (el) el.textContent = location;
+                                                }
+                                                if (businessType) {
+                                                    const el = document.getElementById('profileBusiness');
+                                                    if (el) el.textContent = businessType;
+                                                }
+                                                if (phone) {
+                                                    const el = document.getElementById('profilePhone');
+                                                    if (el) el.textContent = phone;
+                                                }
+                                                if (workCategory) {
+                                                    const el = document.getElementById('profileWorkCategory');
+                                                    if (el) el.textContent = workCategory;
+                                                }
+                                                if (joinedDate) {
+                                                    const el = document.getElementById('profileJoined');
+                                                    if (el) el.textContent = joinedDate;
+                                                }
+                                                if (profilePic) {
+                                                    const el = document.getElementById('profilePic');
+                                                    if (el && el.getAttribute('src') !== profilePic) el.setAttribute('src', profilePic);
+                                                }
+                                                if (coverPic) {
+                                                    const el = document.getElementById('profileCover');
+                                                    if (el && el.getAttribute('src') !== coverPic) el.setAttribute('src', coverPic);
+                                                }
+                                            } catch (e) {}
+                                        })();
+                                    </script>
                                 </div>
                                 <div class="profile-actions-row">
                                     <button class="edit-profile-btn" type="button" onclick="openModal('editProfileModal')">Edit profile</button>
