@@ -2349,7 +2349,7 @@ function formatTime(seconds) {
     return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function renderChatMessageBody(m) {
+function renderChatMessageBody(m, metaHTML = '') {
     const kind = m.kind || (m.url ? 'file' : 'text');
     const status = String(m?.status || '');
     const overlay =
@@ -2360,7 +2360,7 @@ function renderChatMessageBody(m) {
                 : '');
     if (kind === 'image') {
         const url = String(m.url || '');
-        return `<div class="chat-media-wrap"><img src="${url}" alt="${escapeHtml(m.name || 'Image')}" class="chat-media image" onclick="openLightbox('${url}')">${overlay}</div>`;
+        return `<div class="chat-media-wrap"><img src="${url}" alt="${escapeHtml(m.name || 'Image')}" class="chat-media image" onclick="openLightbox('${url}')">${overlay}${metaHTML ? `<div class="chat-media-meta">${metaHTML}</div>` : ''}</div>`;
     }
     if (kind === 'video') {
         const url = String(m.url || '');
@@ -2371,6 +2371,7 @@ function renderChatMessageBody(m) {
                 <div class="chat-video-play"><i data-lucide="play"></i></div>
                 <div class="chat-video-duration">0:00</div>
                 ${overlay}
+                ${metaHTML ? `<div class="chat-media-meta">${metaHTML}</div>` : ''}
             </div>
         `;
     }
@@ -2381,20 +2382,18 @@ function renderChatMessageBody(m) {
                 <div class="voice-message" data-voice-id="${id}">
                     <button class="voice-play" onclick="toggleVoicePlayback('${id}')"><i data-lucide="play"></i></button>
                     <div class="voice-wave" onclick="seekVoice(event, '${id}')"><div class="voice-wave-fill"></div></div>
-                    <div class="voice-times">
-                        <span class="voice-current">0:00</span>
-                        <span class="voice-duration">0:00</span>
-                    </div>
+                    <span class="voice-length">0:00</span>
                     <audio class="voice-audio" preload="metadata" src="${m.url}"></audio>
                 </div>
                 ${overlay}
+                ${metaHTML ? `<div class="chat-media-meta">${metaHTML}</div>` : ''}
             </div>
         `;
     }
     if (kind === 'file') {
         const name = escapeHtml(m.name || 'Fichier');
         const url = String(m.url || '');
-        return `<div class="chat-media-wrap"><a class="chat-file" href="${url}" download="${name}"><i data-lucide="file"></i><span>${name}</span></a>${overlay}</div>`;
+        return `<div class="chat-media-wrap"><a class="chat-file" href="${url}" download="${name}"><i data-lucide="file"></i><span>${name}</span></a>${overlay}${metaHTML ? `<div class="chat-media-meta">${metaHTML}</div>` : ''}</div>`;
     }
     return `<p>${escapeHtml(m.text || '')}</p>`;
 }
@@ -4858,12 +4857,10 @@ function getVoiceContainerById(voiceId) {
 
 function syncVoiceUI(container, audio) {
     const fill = container.querySelector('.voice-wave-fill');
-    const currentEl = container.querySelector('.voice-current');
-    const durationEl = container.querySelector('.voice-duration');
+    const durationEl = container.querySelector('.voice-length');
     const duration = audio.duration || 0;
     const current = audio.currentTime || 0;
     if (fill) fill.style.width = duration > 0 ? `${(current / duration) * 100}%` : '0%';
-    if (currentEl) currentEl.textContent = formatTime(current);
     if (durationEl) durationEl.textContent = formatTime(duration);
 }
 
@@ -4878,9 +4875,7 @@ function initVoiceMessage(container) {
         icon?.setAttribute('data-lucide', 'play');
         const fill = container.querySelector('.voice-wave-fill');
         if (fill) fill.style.width = '0%';
-        const currentEl = container.querySelector('.voice-current');
-        if (currentEl) currentEl.textContent = '0:00';
-        const durationEl = container.querySelector('.voice-duration');
+        const durationEl = container.querySelector('.voice-length');
         if (durationEl) durationEl.textContent = formatTime(audio.duration || 0);
         if (activeVoiceAudio === audio) {
             activeVoiceAudio = null;
@@ -5310,6 +5305,9 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
         const indicatorHTML = indicatorName
             ? `<span class="chat-indicator ${escapeHtml(String(m.status || 'sent'))}"><i data-lucide="${escapeHtml(indicatorName)}"></i></span>`
             : '';
+        const metaInner = `<span class="chat-time">${escapeHtml(m.time || '')}</span>${indicatorHTML}`;
+        const isMedia = !!(m.kind && m.kind !== 'text');
+        const metaHTML = isMedia ? metaInner : `<div class="chat-meta">${metaInner}</div>`;
         const retryHTML = String(m.status || '') === 'failed'
             ? `<button type="button" class="chat-retry-btn" onclick="retryChatMessage('${escapeHtml(String(m.id || ''))}')">Retry</button>`
             : '';
@@ -5317,11 +5315,8 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
         const statusClass = m.status ? `msg-${escapeHtml(String(m.status))}` : '';
         return `
             <div class="chat-message ${escapeHtml(m.type || '')} ${kindClass} ${statusClass}" data-message-id="${escapeHtml(String(m.id || ''))}">
-                ${renderChatMessageBody(m)}
-                <div class="chat-meta">
-                    <span class="chat-time">${escapeHtml(m.time || '')}</span>
-                    ${indicatorHTML}
-                </div>
+                ${renderChatMessageBody(m, isMedia ? metaHTML : '')}
+                ${isMedia ? '' : metaHTML}
                 ${retryHTML}
             </div>
         `;

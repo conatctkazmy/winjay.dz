@@ -3899,10 +3899,11 @@ body.dark-mode .listing-status-badge {
     position: relative;
     overflow-wrap: anywhere;
     word-break: break-word;
+    padding-bottom: 26px;
 }
 
 .chat-message p {
-    margin-bottom: 4px;
+    margin-bottom: 0;
     line-height: 1.4;
 }
 
@@ -3910,10 +3911,12 @@ body.dark-mode .listing-status-badge {
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: 8px;
-    margin-top: 6px;
+    gap: 5px;
     font-size: 0.72rem;
-    opacity: 0.85;
+    opacity: 0.9;
+    position: absolute;
+    right: 10px;
+    bottom: 6px;
 }
 
 .chat-time {
@@ -3979,10 +3982,38 @@ body.dark-mode .listing-status-badge {
 
 .chat-message.has-media {
     padding: 10px 12px;
+    padding-bottom: 10px;
 }
 
 .chat-media-wrap {
     position: relative;
+}
+
+.chat-media-meta {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.55);
+    opacity: 0.95;
+}
+
+.chat-message.received .chat-media-meta {
+    color: rgba(15, 20, 25, 0.85);
+    text-shadow: none;
+}
+
+.chat-message.received .chat-meta {
+    color: rgba(15, 20, 25, 0.75);
+}
+
+.chat-message.sent .chat-meta {
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .chat-media-overlay {
@@ -4428,26 +4459,13 @@ body.dark-mode .listing-status-badge {
     background-color: rgba(255, 255, 255, 0.35);
 }
 
-.voice-times {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 54px;
-    text-align: right;
-}
-
-.voice-current {
+.voice-length {
     font-size: 0.8rem;
-    font-weight: 800;
+    font-weight: 900;
     line-height: 1;
-    opacity: 0.95;
-}
-
-.voice-duration {
-    font-size: 0.75rem;
-    font-weight: 700;
-    line-height: 1;
-    opacity: 0.75;
+    opacity: 0.9;
+    min-width: 44px;
+    text-align: right;
 }
 
 .chat-message.received .voice-wave {
