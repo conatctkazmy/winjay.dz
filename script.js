@@ -2049,6 +2049,67 @@ let recordedVideoBlob = null;
 let activeVoiceAudio = null;
 let activeVoiceContainer = null;
 let activeVoiceRafId = null;
+let lastVoicePlaybackSnapshot = null;
+let pendingActiveChatRefresh = false;
+
+function snapshotActiveVoicePlayback() {
+    if (!activeVoiceAudio || !activeVoiceContainer) return null;
+    const voiceId = activeVoiceContainer.getAttribute('data-voice-id') || '';
+    if (!voiceId) return null;
+    return {
+        voiceId,
+        currentTime: Number(activeVoiceAudio.currentTime) || 0,
+        wasPlaying: !activeVoiceAudio.paused && !activeVoiceAudio.ended
+    };
+}
+
+function restoreVoicePlayback(snapshot) {
+    if (!snapshot?.voiceId) return;
+    const container = getVoiceContainerById(snapshot.voiceId);
+    if (!container) return;
+    const audio = container.querySelector('.voice-audio');
+    if (!audio) return;
+
+    const applyTime = () => {
+        try {
+            const t = Math.max(0, Number(snapshot.currentTime) || 0);
+            if (Number.isFinite(audio.duration) && audio.duration > 0) {
+                audio.currentTime = Math.min(audio.duration, t);
+            } else {
+                audio.currentTime = t;
+            }
+        } catch (e) {
+            null;
+        }
+        syncVoiceUI(container, audio);
+    };
+
+    if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        applyTime();
+    } else {
+        audio.addEventListener('loadedmetadata', applyTime, { once: true });
+        audio.addEventListener('loadeddata', applyTime, { once: true });
+    }
+
+    if (snapshot.wasPlaying && document.visibilityState === 'visible') {
+        audio.play().then(() => {
+            activeVoiceAudio = audio;
+            activeVoiceContainer = container;
+            setVoicePlayIcon(container, 'pause');
+            startActiveVoiceRaf();
+            scheduleLucideCreateIcons();
+        }).catch(() => {
+            activeVoiceAudio = null;
+            activeVoiceContainer = null;
+            stopActiveVoiceRaf();
+            setVoicePlayIcon(container, 'play');
+            scheduleLucideCreateIcons();
+        });
+    } else {
+        setVoicePlayIcon(container, 'play');
+        scheduleLucideCreateIcons();
+    }
+}
 let voiceShouldSend = true;
 let voiceTimerInterval = null;
 let voiceRecordingStart = 0;
@@ -2904,6 +2965,31 @@ function setupChatFeatures() {
         if (actions.contains(e.target) || inputBar.contains(e.target)) return;
         actions.classList.remove('active');
     });
+
+    if (!window.__winjayChatVisibilityHooked) {
+        window.__winjayChatVisibilityHooked = true;
+        document.addEventListener(
+            'visibilitychange',
+            () => {
+                if (document.visibilityState === 'hidden') {
+                    lastVoicePlaybackSnapshot = snapshotActiveVoicePlayback();
+                    return;
+                }
+                if (pendingActiveChatRefresh) {
+                    pendingActiveChatRefresh = false;
+                    if (getActiveSectionId() === 'messages-section' && activeChatTag) {
+                        switchChat(activeChatTag);
+                        return;
+                    }
+                }
+                if (lastVoicePlaybackSnapshot?.wasPlaying) {
+                    restoreVoicePlayback(lastVoicePlaybackSnapshot);
+                }
+                lastVoicePlaybackSnapshot = null;
+            },
+            { passive: true }
+        );
+    }
 }
 
 let chatUnseenNewCount = 0;
@@ -4617,7 +4703,11 @@ function setupMessagesRealtime() {
                 await refreshLiveChatsFromSupabase();
                 renderMessagesList();
                 if (activeChatTag && mockChats[activeChatTag]?.userId === row.sender_id) {
-                    await switchChat(activeChatTag);
+                    if (document.visibilityState !== 'visible') {
+                        pendingActiveChatRefresh = true;
+                    } else {
+                        await switchChat(activeChatTag);
+                    }
                 }
                 await refreshUnreadMessageCount();
             }
@@ -5298,6 +5388,8 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
     closeChatActions();
     const previousActiveChatTag = activeChatTag;
     activeChatTag = tag;
+    const voiceSnapshot = previousActiveChatTag === tag ? snapshotActiveVoicePlayback() : null;
+    if (previousActiveChatTag !== tag) stopActiveVoicePlayback();
 
     if (!skipFetch && !DEMO_MODE && currentSupabaseUserId && chat.userId) {
         const client = initSupabase();
@@ -5428,6 +5520,7 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
     if (!isModal) renderMessagesList();
     initVoiceMessagesInChat(chatMessages);
     initChatVideoThumbsInChat(chatMessages);
+    if (voiceSnapshot) restoreVoicePlayback(voiceSnapshot);
 
     if (wasNearBottom) {
         stickChatToBottom(chatMessages, { force: true, attempts: 3 });
