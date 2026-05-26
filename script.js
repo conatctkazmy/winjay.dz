@@ -2911,17 +2911,16 @@ const renderedChatMessageCounts = new Map();
 
 function isChatNearBottom(el) {
     if (!el) return true;
-    const gap = el.scrollHeight - (el.scrollTop + el.clientHeight);
-    return gap < 120;
+    return el.scrollTop < 120;
 }
 
 function updateChatJumpLatestButton() {
     const btn = document.getElementById('chatJumpLatest');
     const messagesEl = document.getElementById('chatMessages');
     if (!btn || !messagesEl) return;
-    const nearBottom = isChatNearBottom(messagesEl);
-    if (nearBottom) chatUnseenNewCount = 0;
-    const shouldShow = !nearBottom || chatUnseenNewCount > 0;
+    const nearLatest = isChatNearBottom(messagesEl);
+    if (nearLatest) chatUnseenNewCount = 0;
+    const shouldShow = !nearLatest || chatUnseenNewCount > 0;
     btn.style.display = shouldShow ? 'inline-flex' : 'none';
     if (!shouldShow) return;
     btn.textContent = chatUnseenNewCount > 0 ? `New messages (${chatUnseenNewCount})` : 'Jump to latest';
@@ -2944,7 +2943,7 @@ function jumpChatToLatest() {
     const messagesEl = document.getElementById('chatMessages');
     if (!messagesEl) return;
     chatUnseenNewCount = 0;
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    messagesEl.scrollTop = 0;
     updateChatJumpLatestButton();
 }
 
@@ -5275,7 +5274,7 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
                     .from('messages')
                     .select(select)
                     .or(`and(sender_id.eq.${currentSupabaseUserId},receiver_id.eq.${chat.userId}),and(sender_id.eq.${chat.userId},receiver_id.eq.${currentSupabaseUserId})`)
-                    .order('created_at', { ascending: true })
+                    .order('created_at', { ascending: false })
                     .limit(120);
 
             let data = null;
@@ -5333,9 +5332,10 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
     const messageItems = document.querySelectorAll(`.message-item${isModal ? '-modal' : ''}`);
     const isSameChat = previousActiveChatTag === tag;
     const prevScrollTop = chatMessages ? chatMessages.scrollTop : 0;
-    const wasNearBottom =
+    const prevScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
+    const wasNearLatest =
         !!chatMessages &&
-        (!isSameChat || (chatMessages.scrollHeight - (chatMessages.scrollTop + chatMessages.clientHeight) < 120));
+        (!isSameChat || isChatNearBottom(chatMessages));
     if (!isSameChat) chatUnseenNewCount = 0;
     const prevRenderedCount = renderedChatMessageCounts.get(tag) || 0;
 
@@ -5352,7 +5352,7 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
             if (existingIds.has(String(m.id))) return;
             chat.messages.push(m);
         });
-        chat.messages.sort((a, b) => String(a?.created_at || '').localeCompare(String(b?.created_at || '')));
+        chat.messages.sort((a, b) => String(b?.created_at || '').localeCompare(String(a?.created_at || '')));
     }
 
     const displayTag = chat?.tag || tag;
@@ -5395,16 +5395,18 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
     initVoiceMessagesInChat(chatMessages);
     initChatVideoThumbsInChat(chatMessages);
 
-    if (wasNearBottom) {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (wasNearLatest) {
+        chatMessages.scrollTop = 0;
     } else {
-        chatMessages.scrollTop = prevScrollTop;
+        const nextScrollHeight = chatMessages.scrollHeight;
+        const delta = Math.max(0, nextScrollHeight - prevScrollHeight);
+        chatMessages.scrollTop = prevScrollTop + delta;
     }
     renderedChatMessageCounts.set(tag, Array.isArray(chat.messages) ? chat.messages.length : 0);
     if (isSameChat) {
         const nextCount = renderedChatMessageCounts.get(tag) || 0;
         const delta = Math.max(0, nextCount - prevRenderedCount);
-        if (delta > 0 && !wasNearBottom) chatUnseenNewCount += delta;
+        if (delta > 0 && !wasNearLatest) chatUnseenNewCount += delta;
     }
     if (!isModal) updateChatJumpLatestButton();
     if (!isModal) {
