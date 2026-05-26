@@ -3934,6 +3934,30 @@ body.dark-mode .listing-status-badge {
     opacity: 1;
 }
 
+.chat-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chat-indicator i {
+    width: 14px;
+    height: 14px;
+}
+
+.chat-message.sent .chat-indicator {
+    opacity: 0.95;
+}
+
+.chat-message.sent .chat-indicator.sending,
+.chat-message.sent .chat-indicator.uploading {
+    opacity: 0.75;
+}
+
+.chat-message.sent .chat-indicator.failed {
+    opacity: 1;
+}
+
 .chat-retry-btn {
     margin-top: 8px;
     padding: 7px 10px;
@@ -3981,6 +4005,45 @@ body.dark-mode .listing-status-badge {
 .chat-media-overlay.failed {
     background: rgba(180, 35, 24, 0.32);
     color: #fff;
+}
+
+.chat-video-thumb {
+    cursor: pointer;
+}
+
+.chat-video-thumb .chat-video {
+    pointer-events: none;
+}
+
+.chat-video-play {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: radial-gradient(circle at center, rgba(0,0,0,0.35), rgba(0,0,0,0.05) 55%, rgba(0,0,0,0) 70%);
+}
+
+.chat-video-play i {
+    width: 32px;
+    height: 32px;
+}
+
+.chat-video-duration {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    padding: 4px 8px;
+    border-radius: 9999px;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 900;
+}
+
+.chat-message.has-media .voice-message {
+    margin-top: 0;
 }
 
 .chat-message.received {
@@ -5537,6 +5600,13 @@ body.dark-mode .listing-status-badge {
     max-width: 90%;
     max-height: 90%;
     object-fit: contain;
+}
+
+.lightbox-modal video {
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
+    background: #000;
 }
 
 .lightbox-close {

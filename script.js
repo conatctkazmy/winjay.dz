@@ -2310,6 +2310,14 @@ function getChatMessageStatusLabel(m) {
     return '';
 }
 
+function getChatSentIndicatorIconName(m) {
+    if (!m || m.type !== 'sent') return '';
+    const s = String(m?.status || '');
+    if (s === 'sending' || s === 'uploading') return 'clock-3';
+    if (s === 'failed') return 'alert-circle';
+    return 'check';
+}
+
 async function retryChatMessage(pendingId) {
     const tag = findPendingMessageTagById(pendingId);
     if (!tag) return;
@@ -2356,7 +2364,15 @@ function renderChatMessageBody(m) {
     }
     if (kind === 'video') {
         const url = String(m.url || '');
-        return `<div class="chat-media-wrap"><video src="${url}" controls class="chat-media"></video>${overlay}</div>`;
+        const id = escapeHtml(m.id || '');
+        return `
+            <div class="chat-media-wrap chat-video-thumb" data-video-id="${id}" onclick="openChatVideoLightbox('${url}')">
+                <video src="${url}" class="chat-media chat-video" preload="metadata" playsinline muted></video>
+                <div class="chat-video-play"><i data-lucide="play"></i></div>
+                <div class="chat-video-duration">0:00</div>
+                ${overlay}
+            </div>
+        `;
     }
     if (kind === 'audio') {
         const id = escapeHtml(m.id || '');
@@ -5290,8 +5306,10 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
     `;
 
     chatMessages.innerHTML = chat.messages.map(m => {
-        const statusLabel = getChatMessageStatusLabel(m);
-        const statusHTML = statusLabel ? `<span class="chat-status ${escapeHtml(String(m.status || ''))}">${escapeHtml(statusLabel)}</span>` : '';
+        const indicatorName = getChatSentIndicatorIconName(m);
+        const indicatorHTML = indicatorName
+            ? `<span class="chat-indicator ${escapeHtml(String(m.status || 'sent'))}"><i data-lucide="${escapeHtml(indicatorName)}"></i></span>`
+            : '';
         const retryHTML = String(m.status || '') === 'failed'
             ? `<button type="button" class="chat-retry-btn" onclick="retryChatMessage('${escapeHtml(String(m.id || ''))}')">Retry</button>`
             : '';
@@ -5302,7 +5320,7 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
                 ${renderChatMessageBody(m)}
                 <div class="chat-meta">
                     <span class="chat-time">${escapeHtml(m.time || '')}</span>
-                    ${statusHTML}
+                    ${indicatorHTML}
                 </div>
                 ${retryHTML}
             </div>
@@ -5310,6 +5328,7 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
     }).join('');
     if (!isModal) renderMessagesList();
     initVoiceMessagesInChat(chatMessages);
+    initChatVideoThumbsInChat(chatMessages);
 
     if (wasNearBottom) {
         chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -5335,6 +5354,24 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
     const micBtn = document.getElementById(`chatMicBtn${prefix}`);
     if (micBtn) micBtn.disabled = false;
     lucide.createIcons();
+}
+
+function initChatVideoThumbsInChat(chatMessagesEl) {
+    if (!chatMessagesEl) return;
+    chatMessagesEl.querySelectorAll('.chat-video-thumb').forEach((wrap) => {
+        const video = wrap.querySelector('video');
+        const durationEl = wrap.querySelector('.chat-video-duration');
+        if (!video || !durationEl) return;
+        if (video.dataset.boundDuration) return;
+        video.dataset.boundDuration = '1';
+        video.onloadedmetadata = () => {
+            try {
+                durationEl.textContent = formatTime(video.duration || 0);
+            } catch (e) {
+                durationEl.textContent = '0:00';
+            }
+        };
+    });
 }
 
 function closeChatMobile() {
@@ -15674,6 +15711,40 @@ function openLightbox(imageSrc) {
 
 function closeLightbox() {
     document.getElementById('imageLightbox').classList.remove('active');
+}
+
+function openChatVideoLightbox(videoSrc) {
+    const el = document.getElementById('chatLightboxVideo');
+    if (el) {
+        el.pause();
+        el.removeAttribute('src');
+        el.src = videoSrc;
+        try {
+            el.currentTime = 0;
+        } catch (e) {
+            null;
+        }
+    }
+    document.getElementById('chatVideoLightbox')?.classList?.add('active');
+    scheduleLucideCreateIcons();
+}
+
+function closeChatVideoLightbox() {
+    const el = document.getElementById('chatLightboxVideo');
+    if (el) {
+        try {
+            el.pause();
+        } catch (e) {
+            null;
+        }
+        try {
+            el.removeAttribute('src');
+            el.load?.();
+        } catch (e) {
+            null;
+        }
+    }
+    document.getElementById('chatVideoLightbox')?.classList?.remove('active');
 }
 
 function switchToRegister() {
