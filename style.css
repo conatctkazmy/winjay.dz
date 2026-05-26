@@ -4523,13 +4523,9 @@ body.dark-mode .listing-status-badge {
     border-radius: 9999px;
     cursor: pointer;
     overflow: hidden;
-    background-image: repeating-linear-gradient(
-        90deg,
-        rgba(255, 255, 255, 0.18) 0px,
-        rgba(255, 255, 255, 0.18) 2px,
-        rgba(255, 255, 255, 0) 2px,
-        rgba(255, 255, 255, 0) 6px
-    );
+    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.32) 1px, rgba(255, 255, 255, 0) 1.5px);
+    background-size: 7px 10px;
+    background-position: left center;
     opacity: 0.9;
 }
 
@@ -4540,14 +4536,10 @@ body.dark-mode .listing-status-badge {
     height: 100%;
     width: 0%;
     border-radius: 9999px;
-    background-color: rgba(255, 255, 255, 0.22);
-    background-image: repeating-linear-gradient(
-        90deg,
-        rgba(255, 255, 255, 0.95) 0px,
-        rgba(255, 255, 255, 0.95) 2px,
-        rgba(255, 255, 255, 0) 2px,
-        rgba(255, 255, 255, 0) 6px
-    );
+    background-color: rgba(255, 255, 255, 0.12);
+    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.92) 1px, rgba(255, 255, 255, 0) 1.5px);
+    background-size: 7px 10px;
+    background-position: left center;
 }
 
 .voice-wave-fill::after {
@@ -4564,24 +4556,16 @@ body.dark-mode .listing-status-badge {
 }
 
 .chat-message.received .voice-wave {
-    background-image: repeating-linear-gradient(
-        90deg,
-        rgba(15, 20, 25, 0.22) 0px,
-        rgba(15, 20, 25, 0.22) 2px,
-        rgba(15, 20, 25, 0) 2px,
-        rgba(15, 20, 25, 0) 6px
-    );
+    background-image: radial-gradient(circle, rgba(15, 20, 25, 0.28) 1px, rgba(15, 20, 25, 0) 1.5px);
+    background-size: 7px 10px;
+    background-position: left center;
 }
 
 .chat-message.received .voice-wave-fill {
     background-color: rgba(255, 107, 0, 0.22);
-    background-image: repeating-linear-gradient(
-        90deg,
-        rgba(255, 107, 0, 0.95) 0px,
-        rgba(255, 107, 0, 0.95) 2px,
-        rgba(255, 107, 0, 0) 2px,
-        rgba(255, 107, 0, 0) 6px
-    );
+    background-image: radial-gradient(circle, rgba(255, 107, 0, 0.92) 1px, rgba(255, 107, 0, 0) 1.5px);
+    background-size: 7px 10px;
+    background-position: left center;
 }
 
 .chat-message.received .voice-wave-fill::after {
