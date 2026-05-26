@@ -3985,6 +3985,34 @@ body.dark-mode .listing-status-badge {
     padding-bottom: 10px;
 }
 
+.chat-message.has-media:not(.kind-audio) {
+    padding: 0;
+    background: transparent;
+    color: var(--text-main);
+}
+
+.chat-message.sent.has-media:not(.kind-audio) {
+    background: transparent;
+    color: var(--text-main);
+}
+
+.chat-message.has-media:not(.kind-audio) .chat-media-wrap {
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+}
+
+.chat-message.sent.has-media:not(.kind-audio) .chat-media-wrap {
+    border-color: rgba(255, 107, 0, 0.35);
+}
+
+.chat-message.has-media:not(.kind-audio) .chat-media {
+    margin-top: 0;
+    max-width: 340px;
+    border-radius: 16px;
+}
+
 .chat-media-wrap {
     position: relative;
 }
@@ -4004,8 +4032,8 @@ body.dark-mode .listing-status-badge {
 }
 
 .chat-message.received .chat-media-meta {
-    color: rgba(15, 20, 25, 0.85);
-    text-shadow: none;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.55);
 }
 
 .chat-message.received .chat-meta {
@@ -4075,6 +4103,14 @@ body.dark-mode .listing-status-badge {
 
 .chat-message.has-media .voice-message {
     margin-top: 0;
+}
+
+.chat-message.kind-audio {
+    max-width: 78%;
+}
+
+.chat-message.kind-audio .chat-media-wrap {
+    padding-bottom: 18px;
 }
 
 .chat-message.received {
@@ -4402,10 +4438,10 @@ body.dark-mode .listing-status-badge {
 .voice-message {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
     max-width: 360px;
-    margin-top: 6px;
+    margin-top: 0;
 }
 
 .voice-message .voice-audio {
@@ -4413,8 +4449,8 @@ body.dark-mode .listing-status-badge {
 }
 
 .voice-play {
-    width: 38px;
-    height: 38px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     border: none;
     cursor: pointer;
@@ -4429,14 +4465,14 @@ body.dark-mode .listing-status-badge {
 }
 
 .voice-play i {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
 }
 
 .voice-wave {
     position: relative;
     flex: 1;
-    height: 14px;
+    height: 12px;
     border-radius: 9999px;
     cursor: pointer;
     overflow: hidden;

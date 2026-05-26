@@ -5311,7 +5311,7 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
         const retryHTML = String(m.status || '') === 'failed'
             ? `<button type="button" class="chat-retry-btn" onclick="retryChatMessage('${escapeHtml(String(m.id || ''))}')">Retry</button>`
             : '';
-        const kindClass = (m.kind && m.kind !== 'text') ? 'has-media' : '';
+        const kindClass = (m.kind && m.kind !== 'text') ? `has-media kind-${escapeHtml(String(m.kind))}` : '';
         const statusClass = m.status ? `msg-${escapeHtml(String(m.status))}` : '';
         return `
             <div class="chat-message ${escapeHtml(m.type || '')} ${kindClass} ${statusClass}" data-message-id="${escapeHtml(String(m.id || ''))}">
