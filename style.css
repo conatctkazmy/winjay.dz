@@ -4120,15 +4120,7 @@ body.dark-mode .listing-status-badge {
 }
 
 .chat-message.kind-audio .chat-media-wrap {
-    padding-bottom: 18px;
-}
-
-.chat-message.kind-audio .chat-media-meta {
-    bottom: 6px;
-}
-
-.chat-message.kind-audio .voice-message {
-    padding-right: 56px;
+    padding-bottom: 0;
 }
 
 .chat-message.received {
@@ -4456,10 +4448,47 @@ body.dark-mode .listing-status-badge {
 .voice-message {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     width: 100%;
     max-width: 360px;
     margin-top: 0;
+}
+
+.voice-main {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.voice-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+    padding-right: 6px;
+}
+
+.voice-time {
+    font-size: 0.78rem;
+    font-weight: 900;
+    line-height: 1;
+    opacity: 0.9;
+    min-width: 36px;
+}
+
+.voice-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 900;
+    line-height: 1;
+    opacity: 0.92;
+    min-width: 0;
+    white-space: nowrap;
 }
 
 .voice-message .voice-audio {
@@ -4490,7 +4519,7 @@ body.dark-mode .listing-status-badge {
 .voice-wave {
     position: relative;
     flex: 1;
-    height: 12px;
+    height: 10px;
     border-radius: 9999px;
     cursor: pointer;
     overflow: hidden;
@@ -4525,43 +4554,13 @@ body.dark-mode .listing-status-badge {
     content: '';
     position: absolute;
     top: 50%;
-    right: -4px;
+    right: 0;
     width: 8px;
     height: 8px;
     border-radius: 50%;
     transform: translateY(-50%);
     background-color: rgba(255, 255, 255, 0.95);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-}
-
-.voice-length {
-    font-size: 0.8rem;
-    font-weight: 900;
-    line-height: 1;
-    opacity: 0.9;
-    min-width: 44px;
-    text-align: right;
-}
-
-.voice-times-inline {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 6px;
-    min-width: 88px;
-    justify-content: flex-end;
-}
-
-.voice-elapsed {
-    font-size: 0.8rem;
-    font-weight: 900;
-    line-height: 1;
-    opacity: 0.9;
-    min-width: 44px;
-    text-align: right;
-}
-
-.voice-sep {
-    opacity: 0.6;
 }
 
 .chat-message.received .voice-wave {
@@ -4583,6 +4582,10 @@ body.dark-mode .listing-status-badge {
         rgba(255, 107, 0, 0) 2px,
         rgba(255, 107, 0, 0) 6px
     );
+}
+
+.chat-message.received .voice-wave-fill::after {
+    background-color: rgba(255, 107, 0, 0.95);
 }
 
 .chat-message.received .voice-play {

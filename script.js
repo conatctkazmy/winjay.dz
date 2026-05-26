@@ -2382,16 +2382,16 @@ function renderChatMessageBody(m, metaHTML = '') {
             <div class="chat-media-wrap">
                 <div class="voice-message" data-voice-id="${id}">
                     <button class="voice-play" onclick="toggleVoicePlayback('${id}')"><i data-lucide="play"></i></button>
-                    <div class="voice-wave" onclick="seekVoice(event, '${id}')"><div class="voice-wave-fill"></div></div>
-                    <div class="voice-times-inline">
-                        <span class="voice-elapsed">0:00</span>
-                        <span class="voice-sep">/</span>
-                    <span class="voice-length">0:00</span>
+                    <div class="voice-main">
+                        <div class="voice-wave" onclick="seekVoice(event, '${id}')"><div class="voice-wave-fill"></div></div>
+                        <div class="voice-bottom">
+                            <span class="voice-time">0:00</span>
+                            ${metaHTML ? `<span class="voice-meta">${metaHTML}</span>` : ''}
+                        </div>
                     </div>
                     <audio class="voice-audio" preload="metadata" src="${m.url}"></audio>
                 </div>
                 ${overlay}
-                ${metaHTML ? `<div class="chat-media-meta">${metaHTML}</div>` : ''}
             </div>
         `;
     }
@@ -4884,8 +4884,8 @@ function stopActiveVoicePlayback() {
         setVoicePlayIcon(activeVoiceContainer, 'play');
         const fill = activeVoiceContainer.querySelector('.voice-wave-fill');
         if (fill) fill.style.width = '0%';
-        const elapsedEl = activeVoiceContainer.querySelector('.voice-elapsed');
-        if (elapsedEl) elapsedEl.textContent = '0:00';
+        const timeEl = activeVoiceContainer.querySelector('.voice-time');
+        if (timeEl) timeEl.textContent = '0:00';
     }
     activeVoiceAudio = null;
     activeVoiceContainer = null;
@@ -4912,13 +4912,11 @@ function setVoicePlayIcon(container, iconName) {
 
 function syncVoiceUI(container, audio) {
     const fill = container.querySelector('.voice-wave-fill');
-    const elapsedEl = container.querySelector('.voice-elapsed');
-    const durationEl = container.querySelector('.voice-length');
+    const timeEl = container.querySelector('.voice-time');
     const duration = audio.duration || 0;
     const current = audio.currentTime || 0;
     if (fill) fill.style.width = duration > 0 ? `${(current / duration) * 100}%` : '0%';
-    if (elapsedEl) elapsedEl.textContent = formatTime(current);
-    if (durationEl) durationEl.textContent = formatTime(duration);
+    if (timeEl) timeEl.textContent = audio.paused ? formatTime(duration) : formatTime(current);
 }
 
 function startActiveVoiceRaf() {
@@ -4972,16 +4970,15 @@ function initVoiceMessage(container) {
         if (activeVoiceAudio !== audio) return;
         setVoicePlayIcon(container, 'play');
         stopActiveVoiceRaf();
+        syncVoiceUI(container, audio);
         scheduleLucideCreateIcons();
     };
     audio.onended = () => {
         setVoicePlayIcon(container, 'play');
         const fill = container.querySelector('.voice-wave-fill');
         if (fill) fill.style.width = '0%';
-        const elapsedEl = container.querySelector('.voice-elapsed');
-        if (elapsedEl) elapsedEl.textContent = '0:00';
-        const durationEl = container.querySelector('.voice-length');
-        if (durationEl) durationEl.textContent = formatTime(audio.duration || 0);
+        const timeEl = container.querySelector('.voice-time');
+        if (timeEl) timeEl.textContent = formatTime(audio.duration || 0);
         if (activeVoiceAudio === audio) {
             activeVoiceAudio = null;
             activeVoiceContainer = null;
