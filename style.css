@@ -3989,11 +3989,20 @@ body.dark-mode .listing-status-badge {
     padding: 0;
     background: transparent;
     color: var(--text-main);
+    max-width: 340px;
 }
 
 .chat-message.sent.has-media:not(.kind-audio) {
     background: transparent;
     color: var(--text-main);
+}
+
+.chat-message.sent.has-media:not(.kind-audio) {
+    align-self: flex-end;
+}
+
+.chat-message.received.has-media:not(.kind-audio) {
+    align-self: flex-start;
 }
 
 .chat-message.has-media:not(.kind-audio) .chat-media-wrap {
@@ -4029,6 +4038,7 @@ body.dark-mode .listing-status-badge {
     color: #fff;
     text-shadow: 0 1px 2px rgba(0,0,0,0.55);
     opacity: 0.95;
+    z-index: 2;
 }
 
 .chat-message.received .chat-media-meta {
@@ -4111,6 +4121,14 @@ body.dark-mode .listing-status-badge {
 
 .chat-message.kind-audio .chat-media-wrap {
     padding-bottom: 18px;
+}
+
+.chat-message.kind-audio .chat-media-meta {
+    bottom: 6px;
+}
+
+.chat-message.kind-audio .voice-message {
+    padding-right: 56px;
 }
 
 .chat-message.received {
