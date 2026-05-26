@@ -10287,6 +10287,17 @@ function updateNavbarAuthUI() {
 }
 
 function updateProfileUI() {
+    const skeleton = document.getElementById('myProfileSkeleton');
+    const content = document.getElementById('myProfileContent');
+    const ready = isLoggedIn() && hasLoadedSupabaseProfile;
+    if (!ready) {
+        if (skeleton) skeleton.style.display = '';
+        if (content) content.style.display = 'none';
+        updateNavbarAuthUI();
+        return;
+    }
+    if (skeleton) skeleton.style.display = 'none';
+    if (content) content.style.display = '';
     const nameEl = document.getElementById('profileName');
     nameEl.innerHTML = `${userProfile.name} ${getUserBadgesHTML(userProfile)}`;
     document.getElementById('profileTag').textContent = userProfile.tag;
