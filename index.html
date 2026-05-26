@@ -411,10 +411,49 @@
                                     <script>
                                         (function () {
                                             try {
+                                                const readAuthUserId = () => {
+                                                    const parseToken = (rawToken) => {
+                                                        try {
+                                                            const tok = JSON.parse(rawToken);
+                                                            const id = tok?.user?.id;
+                                                            return typeof id === 'string' && id ? id : '';
+                                                        } catch (e) {
+                                                            return '';
+                                                        }
+                                                    };
+                                                    try {
+                                                        for (let i = 0; i < localStorage.length; i++) {
+                                                            const k = localStorage.key(i) || '';
+                                                            if (!k.includes('auth-token')) continue;
+                                                            const v = localStorage.getItem(k);
+                                                            if (!v) continue;
+                                                            const id = parseToken(v);
+                                                            if (id) return id;
+                                                        }
+                                                    } catch (e) {}
+                                                    try {
+                                                        for (let i = 0; i < sessionStorage.length; i++) {
+                                                            const k = sessionStorage.key(i) || '';
+                                                            if (!k.includes('auth-token')) continue;
+                                                            const v = sessionStorage.getItem(k);
+                                                            if (!v) continue;
+                                                            const id = parseToken(v);
+                                                            if (id) return id;
+                                                        }
+                                                    } catch (e) {}
+                                                    return '';
+                                                };
+
                                                 const raw = localStorage.getItem('winjayUserProfileV1');
                                                 if (!raw) return;
                                                 const p = JSON.parse(raw);
                                                 if (!p || typeof p !== 'object') return;
+                                                const authUserId = readAuthUserId();
+                                                const cachedUserId = typeof p.userId === 'string' ? p.userId : '';
+                                                if (!authUserId || !cachedUserId || authUserId !== cachedUserId) return;
+                                                const cachedAt = Number(p.cachedAt) || 0;
+                                                if (!cachedAt) return;
+                                                if (Date.now() - cachedAt > 10 * 60 * 1000) return;
                                                 const name = typeof p.name === 'string' ? p.name.trim() : '';
                                                 const tag = typeof p.tag === 'string' ? p.tag.trim() : '';
                                                 const profilePic = typeof p.profilePic === 'string' ? p.profilePic.trim() : '';

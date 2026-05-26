@@ -22,6 +22,7 @@ window.addEventListener('orientationchange', () => setTimeout(applyTouchDeviceCl
 
 function createEmptyUserProfile() {
     return {
+        userId: null,
         name: "Guest",
         tag: "@guest",
         profilePic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay",
@@ -39,7 +40,8 @@ function createEmptyUserProfile() {
         isVip: false,
         verified: false,
         isAdmin: false,
-        reviewsData: []
+        reviewsData: [],
+        cachedAt: 0
     };
 }
 
@@ -850,6 +852,7 @@ function applyAuthSessionToLocalState(session) {
     userProfile = {
         ...createEmptyUserProfile(),
         ...userProfile,
+        userId: user.id,
         name: fullName || user.email || 'User',
         tag: tag || `@${user.id.slice(0, 8)}`,
         profilePic: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.id)}`,
@@ -1090,7 +1093,7 @@ function loadUserProfileFromStorage() {
 
 function saveUserProfileToStorage() {
     try {
-        localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(userProfile));
+        localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify({ ...userProfile, cachedAt: Date.now() }));
     } catch (e) {
         return;
     }
