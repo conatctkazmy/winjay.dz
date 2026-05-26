@@ -2048,6 +2048,7 @@ let recordedVideoUrl = null;
 let recordedVideoBlob = null;
 let activeVoiceAudio = null;
 let activeVoiceContainer = null;
+let activeVoiceRafId = null;
 let voiceShouldSend = true;
 let voiceTimerInterval = null;
 let voiceRecordingStart = 0;
@@ -4851,6 +4852,14 @@ function stopActiveVoicePlayback() {
     }
     activeVoiceAudio = null;
     activeVoiceContainer = null;
+    if (activeVoiceRafId) {
+        try {
+            cancelAnimationFrame(activeVoiceRafId);
+        } catch (e) {
+            null;
+        }
+        activeVoiceRafId = null;
+    }
     scheduleLucideCreateIcons();
 }
 
@@ -4875,6 +4884,40 @@ function syncVoiceUI(container, audio) {
     if (durationEl) durationEl.textContent = formatTime(duration);
 }
 
+function startActiveVoiceRaf() {
+    if (activeVoiceRafId) {
+        try {
+            cancelAnimationFrame(activeVoiceRafId);
+        } catch (e) {
+            null;
+        }
+        activeVoiceRafId = null;
+    }
+    const tick = () => {
+        if (!activeVoiceAudio || !activeVoiceContainer) {
+            activeVoiceRafId = null;
+            return;
+        }
+        syncVoiceUI(activeVoiceContainer, activeVoiceAudio);
+        if (!activeVoiceAudio.paused && !activeVoiceAudio.ended) {
+            activeVoiceRafId = requestAnimationFrame(tick);
+            return;
+        }
+        activeVoiceRafId = null;
+    };
+    activeVoiceRafId = requestAnimationFrame(tick);
+}
+
+function stopActiveVoiceRaf() {
+    if (!activeVoiceRafId) return;
+    try {
+        cancelAnimationFrame(activeVoiceRafId);
+    } catch (e) {
+        null;
+    }
+    activeVoiceRafId = null;
+}
+
 function initVoiceMessage(container) {
     const audio = container.querySelector('.voice-audio');
     if (!audio) return;
@@ -4883,11 +4926,15 @@ function initVoiceMessage(container) {
     audio.ontimeupdate = () => syncVoiceUI(container, audio);
     audio.onplay = () => {
         setVoicePlayIcon(container, 'pause');
+        activeVoiceAudio = audio;
+        activeVoiceContainer = container;
+        startActiveVoiceRaf();
         scheduleLucideCreateIcons();
     };
     audio.onpause = () => {
         if (activeVoiceAudio !== audio) return;
         setVoicePlayIcon(container, 'play');
+        stopActiveVoiceRaf();
         scheduleLucideCreateIcons();
     };
     audio.onended = () => {
@@ -4902,6 +4949,7 @@ function initVoiceMessage(container) {
             activeVoiceAudio = null;
             activeVoiceContainer = null;
         }
+        stopActiveVoiceRaf();
         scheduleLucideCreateIcons();
     };
 }
@@ -4923,6 +4971,7 @@ function toggleVoicePlayback(voiceId) {
             activeVoiceAudio = audio;
             activeVoiceContainer = container;
             setVoicePlayIcon(container, 'pause');
+            startActiveVoiceRaf();
             scheduleLucideCreateIcons();
         }).catch(() => {
             showToast('Impossible de lire l’audio', 'alert-circle');
@@ -4930,6 +4979,7 @@ function toggleVoicePlayback(voiceId) {
     } else {
         audio.pause();
         setVoicePlayIcon(container, 'play');
+        stopActiveVoiceRaf();
         scheduleLucideCreateIcons();
     }
 }
