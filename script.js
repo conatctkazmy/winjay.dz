@@ -2063,7 +2063,7 @@ function snapshotActiveVoicePlayback() {
     };
 }
 
-function restoreVoicePlayback(snapshot) {
+function restoreVoicePlayback(snapshot, { autoplay = false } = {}) {
     if (!snapshot?.voiceId) return;
     const container = getVoiceContainerById(snapshot.voiceId);
     if (!container) return;
@@ -2091,24 +2091,34 @@ function restoreVoicePlayback(snapshot) {
         audio.addEventListener('loadeddata', applyTime, { once: true });
     }
 
-    if (snapshot.wasPlaying && document.visibilityState === 'visible') {
-        audio.play().then(() => {
-            activeVoiceAudio = audio;
-            activeVoiceContainer = container;
-            setVoicePlayIcon(container, 'pause');
-            startActiveVoiceRaf();
-            scheduleLucideCreateIcons();
-        }).catch(() => {
-            activeVoiceAudio = null;
-            activeVoiceContainer = null;
-            stopActiveVoiceRaf();
-            setVoicePlayIcon(container, 'play');
-            scheduleLucideCreateIcons();
-        });
-    } else {
-        setVoicePlayIcon(container, 'play');
-        scheduleLucideCreateIcons();
+    if (autoplay && snapshot.wasPlaying && document.visibilityState === 'visible') {
+        audio.play()
+            .then(() => {
+                activeVoiceAudio = audio;
+                activeVoiceContainer = container;
+                setVoicePlayIcon(container, 'pause');
+                startActiveVoiceRaf();
+                scheduleLucideCreateIcons();
+            })
+            .catch(() => {
+                try {
+                    audio.pause();
+                } catch (e) {
+                    null;
+                }
+                setVoicePlayIcon(container, 'play');
+                scheduleLucideCreateIcons();
+            });
+        return;
     }
+
+    try {
+        audio.pause();
+    } catch (e) {
+        null;
+    }
+    setVoicePlayIcon(container, 'play');
+    scheduleLucideCreateIcons();
 }
 let voiceShouldSend = true;
 let voiceTimerInterval = null;
@@ -2973,18 +2983,26 @@ function setupChatFeatures() {
             () => {
                 if (document.visibilityState === 'hidden') {
                     lastVoicePlaybackSnapshot = snapshotActiveVoicePlayback();
+                    if (lastVoicePlaybackSnapshot?.wasPlaying && activeVoiceAudio) {
+                        try {
+                            activeVoiceAudio.pause();
+                        } catch (e) {
+                            null;
+                        }
+                    }
                     return;
                 }
                 if (pendingActiveChatRefresh) {
                     pendingActiveChatRefresh = false;
                     if (getActiveSectionId() === 'messages-section' && activeChatTag) {
-                        switchChat(activeChatTag);
+                        Promise.resolve(switchChat(activeChatTag)).finally(() => {
+                            if (lastVoicePlaybackSnapshot?.voiceId) restoreVoicePlayback(lastVoicePlaybackSnapshot);
+                            lastVoicePlaybackSnapshot = null;
+                        });
                         return;
                     }
                 }
-                if (lastVoicePlaybackSnapshot?.wasPlaying) {
-                    restoreVoicePlayback(lastVoicePlaybackSnapshot);
-                }
+                if (lastVoicePlaybackSnapshot?.voiceId) restoreVoicePlayback(lastVoicePlaybackSnapshot);
                 lastVoicePlaybackSnapshot = null;
             },
             { passive: true }
