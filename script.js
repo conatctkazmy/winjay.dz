@@ -2382,7 +2382,11 @@ function renderChatMessageBody(m, metaHTML = '') {
                 <div class="voice-message" data-voice-id="${id}">
                     <button class="voice-play" onclick="toggleVoicePlayback('${id}')"><i data-lucide="play"></i></button>
                     <div class="voice-wave" onclick="seekVoice(event, '${id}')"><div class="voice-wave-fill"></div></div>
+                    <div class="voice-times-inline">
+                        <span class="voice-elapsed">0:00</span>
+                        <span class="voice-sep">/</span>
                     <span class="voice-length">0:00</span>
+                    </div>
                     <audio class="voice-audio" preload="metadata" src="${m.url}"></audio>
                 </div>
                 ${overlay}
@@ -4839,28 +4843,35 @@ function stopActiveVoicePlayback() {
     activeVoiceAudio.pause();
     activeVoiceAudio.currentTime = 0;
     if (activeVoiceContainer) {
-        const icon = activeVoiceContainer.querySelector('.voice-play i');
-        icon?.setAttribute('data-lucide', 'play');
+        setVoicePlayIcon(activeVoiceContainer, 'play');
         const fill = activeVoiceContainer.querySelector('.voice-wave-fill');
         if (fill) fill.style.width = '0%';
-        const currentEl = activeVoiceContainer.querySelector('.voice-current');
-        if (currentEl) currentEl.textContent = '0:00';
+        const elapsedEl = activeVoiceContainer.querySelector('.voice-elapsed');
+        if (elapsedEl) elapsedEl.textContent = '0:00';
     }
     activeVoiceAudio = null;
     activeVoiceContainer = null;
-    lucide.createIcons();
+    scheduleLucideCreateIcons();
 }
 
 function getVoiceContainerById(voiceId) {
     return document.querySelector(`.voice-message[data-voice-id="${CSS.escape(voiceId)}"]`);
 }
 
+function setVoicePlayIcon(container, iconName) {
+    const btn = container?.querySelector?.('.voice-play');
+    if (!btn) return;
+    btn.innerHTML = `<i data-lucide="${escapeHtml(String(iconName || 'play'))}"></i>`;
+}
+
 function syncVoiceUI(container, audio) {
     const fill = container.querySelector('.voice-wave-fill');
+    const elapsedEl = container.querySelector('.voice-elapsed');
     const durationEl = container.querySelector('.voice-length');
     const duration = audio.duration || 0;
     const current = audio.currentTime || 0;
     if (fill) fill.style.width = duration > 0 ? `${(current / duration) * 100}%` : '0%';
+    if (elapsedEl) elapsedEl.textContent = formatTime(current);
     if (durationEl) durationEl.textContent = formatTime(duration);
 }
 
@@ -4870,18 +4881,28 @@ function initVoiceMessage(container) {
 
     audio.onloadedmetadata = () => syncVoiceUI(container, audio);
     audio.ontimeupdate = () => syncVoiceUI(container, audio);
+    audio.onplay = () => {
+        setVoicePlayIcon(container, 'pause');
+        scheduleLucideCreateIcons();
+    };
+    audio.onpause = () => {
+        if (activeVoiceAudio !== audio) return;
+        setVoicePlayIcon(container, 'play');
+        scheduleLucideCreateIcons();
+    };
     audio.onended = () => {
-        const icon = container.querySelector('.voice-play i');
-        icon?.setAttribute('data-lucide', 'play');
+        setVoicePlayIcon(container, 'play');
         const fill = container.querySelector('.voice-wave-fill');
         if (fill) fill.style.width = '0%';
+        const elapsedEl = container.querySelector('.voice-elapsed');
+        if (elapsedEl) elapsedEl.textContent = '0:00';
         const durationEl = container.querySelector('.voice-length');
         if (durationEl) durationEl.textContent = formatTime(audio.duration || 0);
         if (activeVoiceAudio === audio) {
             activeVoiceAudio = null;
             activeVoiceContainer = null;
         }
-        lucide.createIcons();
+        scheduleLucideCreateIcons();
     };
 }
 
@@ -4897,20 +4918,19 @@ function toggleVoicePlayback(voiceId) {
 
     if (activeVoiceAudio && activeVoiceAudio !== audio) stopActiveVoicePlayback();
 
-    const icon = container.querySelector('.voice-play i');
     if (audio.paused) {
         audio.play().then(() => {
             activeVoiceAudio = audio;
             activeVoiceContainer = container;
-            icon?.setAttribute('data-lucide', 'pause');
-            lucide.createIcons();
+            setVoicePlayIcon(container, 'pause');
+            scheduleLucideCreateIcons();
         }).catch(() => {
             showToast('Impossible de lire l’audio', 'alert-circle');
         });
     } else {
         audio.pause();
-        icon?.setAttribute('data-lucide', 'play');
-        lucide.createIcons();
+        setVoicePlayIcon(container, 'play');
+        scheduleLucideCreateIcons();
     }
 }
 
