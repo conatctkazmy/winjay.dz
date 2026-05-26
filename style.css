@@ -3966,6 +3966,29 @@ body.dark-mode .listing-status-badge {
     transition: background 0.2s;
 }
 
+.chat-input button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.chat-send-status {
+    padding: 8px 15px 14px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.chat-send-status.sending {
+    color: var(--text-muted);
+}
+
+.chat-send-status.error {
+    color: #b42318;
+}
+
+.chat-send-status.success {
+    color: #067647;
+}
+
 .chat-input .chat-plus-btn,
 .chat-input .chat-attach-btn,
 .chat-input .chat-file-btn,

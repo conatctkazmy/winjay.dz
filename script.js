@@ -15465,6 +15465,8 @@ function switchToLogin() {
 
 async function sendMessage() {
     const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('chatSendBtn');
+    const statusEl = document.getElementById('chatSendStatus');
     if (!activeChatTag) {
         showToast('Select a chat first', 'alert-circle');
         return;
@@ -15484,6 +15486,17 @@ async function sendMessage() {
     if (!client || !currentSupabaseUserId || !chat.userId) {
         showToast('Messaging is not ready', 'alert-circle');
         return;
+    }
+    try {
+        if (sendBtn) sendBtn.disabled = true;
+        if (input) input.disabled = true;
+        if (statusEl) {
+            statusEl.className = 'chat-send-status sending';
+            statusEl.textContent = 'Sending...';
+            statusEl.style.display = 'block';
+        }
+    } catch (e) {
+        null;
     }
     let error = null;
     if (messagesHasMediaColumns !== false) {
@@ -15520,6 +15533,21 @@ async function sendMessage() {
     if (error) {
         if (isMessagingBackendMissing(error)) showToast('Messaging backend is not set up yet', 'alert-circle');
         else showToast(error.message || 'Failed to send message', 'alert-circle');
+        try {
+            if (statusEl) {
+                statusEl.className = 'chat-send-status error';
+                statusEl.textContent = 'Failed to send. Check connection and retry.';
+                statusEl.style.display = 'block';
+            }
+        } catch (e) {
+            null;
+        }
+        try {
+            if (sendBtn) sendBtn.disabled = false;
+            if (input) input.disabled = false;
+        } catch (e) {
+            null;
+        }
         return;
     }
     await createNotificationFromClient({
@@ -15529,6 +15557,21 @@ async function sendMessage() {
         meta: { chat: `id:${String(chat.userId)}` }
     });
     input.value = '';
+    try {
+        if (statusEl) {
+            statusEl.className = 'chat-send-status success';
+            statusEl.textContent = 'Sent';
+            statusEl.style.display = 'block';
+        }
+    } catch (e) {
+        null;
+    }
+    try {
+        if (sendBtn) sendBtn.disabled = false;
+        if (input) input.disabled = false;
+    } catch (e) {
+        null;
+    }
     await refreshLiveChatsFromSupabase();
     renderMessagesList();
     await switchChat(activeChatTag);
