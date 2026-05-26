@@ -1382,22 +1382,12 @@ function updateFreeVerifiedCounterUI() {
     if (mobileEl) mobileEl.textContent = program.remaining;
 }
 
-function isElementVisible(el) {
-    if (!el) return false;
-    const style = window.getComputedStyle(el);
-    if (style.display === 'none') return false;
-    if (style.visibility === 'hidden') return false;
-    if (Number(style.opacity || 1) === 0) return false;
-    const rect = el.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-}
-
-function updateMobileFooterBarState() {
-    const bar = document.querySelector('.mobile-footer-bar');
-    if (!bar) return;
-    const children = Array.from(bar.children || []).filter((n) => n && n.nodeType === 1);
-    const hasVisibleContent = children.some((el) => isElementVisible(el));
-    document.body.classList.toggle('has-mobile-footer-bar', hasVisibleContent);
+function updateMobileFooterBarState(forceShow = null) {
+    const verified = !!userProfile?.verified;
+    const showFreeVerified = isLoggedIn() && hasLoadedSupabaseProfile && !verified;
+    const shouldShow = typeof forceShow === 'boolean' ? forceShow : showFreeVerified;
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    document.body.classList.toggle('has-mobile-footer-bar', !!shouldShow && isMobile);
     requestAnimationFrame(() => {
         try {
             window.dispatchEvent(new Event('resize'));
@@ -10911,7 +10901,7 @@ function updateUpgradeOfferVisibility() {
     document.querySelectorAll('.free-verified-pill').forEach((el) => {
         el.style.display = showFreeVerified ? '' : 'none';
     });
-    updateMobileFooterBarState();
+    updateMobileFooterBarState(showFreeVerified);
 
     const questCard = document.getElementById('verifiedQuestCard');
     if (questCard && verified) questCard.style.display = 'none';
