@@ -7209,10 +7209,14 @@ footer {
 
 @media (max-width: 768px) {
     .scroll-top-btn {
-        bottom: calc(30px + 76px + env(safe-area-inset-bottom));
+        bottom: calc(30px + env(safe-area-inset-bottom));
         right: 16px;
         width: 46px;
         height: 46px;
+    }
+
+    body.has-mobile-footer-bar .scroll-top-btn {
+        bottom: calc(30px + 76px + env(safe-area-inset-bottom));
     }
 }
 
@@ -7820,7 +7824,7 @@ footer {
     }
 
     footer {
-        padding: 26px 14px calc(26px + 70px) 14px;
+        padding: 26px 14px;
         margin-top: 24px;
     }
 
@@ -7848,8 +7852,17 @@ footer {
         padding: 8px 10px;
     }
 
+    body {
+        position: relative;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    body.has-mobile-footer-bar {
+        padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    }
+
     .mobile-footer-bar {
-        display: flex;
+        display: none;
         gap: 10px;
         position: fixed;
         left: 0;
@@ -7864,9 +7877,8 @@ footer {
         box-sizing: border-box;
     }
 
-    body {
-        position: relative;
-        padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    body.has-mobile-footer-bar .mobile-footer-bar {
+        display: flex;
     }
 
     body.mobile-footer-under .mobile-footer-bar {

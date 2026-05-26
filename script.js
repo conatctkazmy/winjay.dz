@@ -1382,6 +1382,31 @@ function updateFreeVerifiedCounterUI() {
     if (mobileEl) mobileEl.textContent = program.remaining;
 }
 
+function isElementVisible(el) {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none') return false;
+    if (style.visibility === 'hidden') return false;
+    if (Number(style.opacity || 1) === 0) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+}
+
+function updateMobileFooterBarState() {
+    const bar = document.querySelector('.mobile-footer-bar');
+    if (!bar) return;
+    const children = Array.from(bar.children || []).filter((n) => n && n.nodeType === 1);
+    const hasVisibleContent = children.some((el) => isElementVisible(el));
+    document.body.classList.toggle('has-mobile-footer-bar', hasVisibleContent);
+    requestAnimationFrame(() => {
+        try {
+            window.dispatchEvent(new Event('resize'));
+        } catch (e) {
+            null;
+        }
+    });
+}
+
 function toggleMobileSearchExpand(e) {
     e?.stopPropagation();
     const panel = document.getElementById('mobileSearchExpand');
@@ -6065,6 +6090,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     handleIdentityFilePreview('idFrontInput', 'idFrontPreview');
     handleIdentityFilePreview('idBackInput', 'idBackPreview');
     updateFreeVerifiedCounterUI();
+    updateMobileFooterBarState();
     setupMobileFooterDocking();
     setupPasswordNoSpaceInputs();
     loadThemeModeFromStorage();
@@ -10885,6 +10911,7 @@ function updateUpgradeOfferVisibility() {
     document.querySelectorAll('.free-verified-pill').forEach((el) => {
         el.style.display = showFreeVerified ? '' : 'none';
     });
+    updateMobileFooterBarState();
 
     const questCard = document.getElementById('verifiedQuestCard');
     if (questCard && verified) questCard.style.display = 'none';
