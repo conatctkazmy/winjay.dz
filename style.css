@@ -4518,7 +4518,8 @@ body.dark-mode .listing-status-badge {
 
 .voice-wave {
     position: relative;
-    flex: 1;
+    width: 100%;
+    flex: 0 0 10px;
     height: 10px;
     border-radius: 9999px;
     cursor: pointer;
