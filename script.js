@@ -2255,6 +2255,85 @@ function newMessageId() {
     return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+const pendingChatMessagesByTag = {};
+
+function getPendingChatMessages(tag) {
+    const key = String(tag || '');
+    const arr = pendingChatMessagesByTag[key];
+    return Array.isArray(arr) ? arr : [];
+}
+
+function upsertPendingChatMessage(tag, msg) {
+    const key = String(tag || '');
+    if (!key || !msg) return;
+    const arr = Array.isArray(pendingChatMessagesByTag[key]) ? pendingChatMessagesByTag[key] : [];
+    const id = String(msg.id || '');
+    if (!id) return;
+    const idx = arr.findIndex((x) => String(x?.id || '') === id);
+    if (idx >= 0) arr[idx] = { ...arr[idx], ...msg };
+    else arr.push(msg);
+    pendingChatMessagesByTag[key] = arr;
+}
+
+function removePendingChatMessage(tag, id) {
+    const key = String(tag || '');
+    if (!key) return;
+    const arr = Array.isArray(pendingChatMessagesByTag[key]) ? pendingChatMessagesByTag[key] : [];
+    const next = arr.filter((x) => String(x?.id || '') !== String(id || ''));
+    if (next.length) pendingChatMessagesByTag[key] = next;
+    else delete pendingChatMessagesByTag[key];
+}
+
+function findMessageInChat(tag, id) {
+    const key = String(tag || '');
+    const chat = key ? mockChats?.[key] : null;
+    const arr = Array.isArray(chat?.messages) ? chat.messages : [];
+    return arr.find((m) => String(m?.id || '') === String(id || '')) || null;
+}
+
+function findPendingMessageTagById(id) {
+    const target = String(id || '');
+    if (!target) return '';
+    const active = String(activeChatTag || '');
+    if (active && getPendingChatMessages(active).some((m) => String(m?.id || '') === target)) return active;
+    for (const key of Object.keys(pendingChatMessagesByTag)) {
+        if (getPendingChatMessages(key).some((m) => String(m?.id || '') === target)) return key;
+    }
+    return '';
+}
+
+function getChatMessageStatusLabel(m) {
+    const s = String(m?.status || '');
+    if (s === 'sending') return 'Sending...';
+    if (s === 'uploading') return 'Uploading...';
+    if (s === 'failed') return 'Failed';
+    return '';
+}
+
+async function retryChatMessage(pendingId) {
+    const tag = findPendingMessageTagById(pendingId);
+    if (!tag) return;
+    const chat = mockChats?.[tag] || null;
+    if (!chat) return;
+    const msg = getPendingChatMessages(tag).find((m) => String(m?.id || '') === String(pendingId || '')) || null;
+    if (!msg) return;
+    if (!requireAuthOrPrompt()) return;
+
+    const nextStatus = msg.kind === 'text' ? 'sending' : 'uploading';
+    const nextMsg = { ...msg, status: nextStatus };
+    upsertPendingChatMessage(tag, nextMsg);
+    const idx = Array.isArray(chat.messages) ? chat.messages.findIndex((m) => String(m?.id || '') === String(pendingId || '')) : -1;
+    if (idx >= 0) chat.messages[idx] = nextMsg;
+
+    await switchChat(tag, false, { skipFetch: true });
+
+    if (String(nextMsg.kind || '') === 'text') {
+        await sendPendingTextMessage(tag, chat, nextMsg);
+        return;
+    }
+    await sendPendingMediaMessage(tag, chat, nextMsg);
+}
+
 function formatTime(seconds) {
     if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
     const m = Math.floor(seconds / 60);
@@ -2264,29 +2343,42 @@ function formatTime(seconds) {
 
 function renderChatMessageBody(m) {
     const kind = m.kind || (m.url ? 'file' : 'text');
+    const status = String(m?.status || '');
+    const overlay =
+        status === 'sending' || status === 'uploading'
+            ? `<div class="chat-media-overlay sending">${escapeHtml(getChatMessageStatusLabel(m) || 'Sending...')}</div>`
+            : (status === 'failed'
+                ? `<div class="chat-media-overlay failed">${escapeHtml(getChatMessageStatusLabel(m) || 'Failed')}</div>`
+                : '');
     if (kind === 'image') {
-        return `<img src="${m.url}" alt="${escapeHtml(m.name || 'Image')}" class="chat-media image" onclick="openLightbox('${m.url}')">`;
+        const url = String(m.url || '');
+        return `<div class="chat-media-wrap"><img src="${url}" alt="${escapeHtml(m.name || 'Image')}" class="chat-media image" onclick="openLightbox('${url}')">${overlay}</div>`;
     }
     if (kind === 'video') {
-        return `<video src="${m.url}" controls class="chat-media"></video>`;
+        const url = String(m.url || '');
+        return `<div class="chat-media-wrap"><video src="${url}" controls class="chat-media"></video>${overlay}</div>`;
     }
     if (kind === 'audio') {
         const id = escapeHtml(m.id || '');
         return `
-            <div class="voice-message" data-voice-id="${id}">
-                <button class="voice-play" onclick="toggleVoicePlayback('${id}')"><i data-lucide="play"></i></button>
-                <div class="voice-wave" onclick="seekVoice(event, '${id}')"><div class="voice-wave-fill"></div></div>
-                <div class="voice-times">
-                    <span class="voice-current">0:00</span>
-                    <span class="voice-duration">0:00</span>
+            <div class="chat-media-wrap">
+                <div class="voice-message" data-voice-id="${id}">
+                    <button class="voice-play" onclick="toggleVoicePlayback('${id}')"><i data-lucide="play"></i></button>
+                    <div class="voice-wave" onclick="seekVoice(event, '${id}')"><div class="voice-wave-fill"></div></div>
+                    <div class="voice-times">
+                        <span class="voice-current">0:00</span>
+                        <span class="voice-duration">0:00</span>
+                    </div>
+                    <audio class="voice-audio" preload="metadata" src="${m.url}"></audio>
                 </div>
-                <audio class="voice-audio" preload="metadata" src="${m.url}"></audio>
+                ${overlay}
             </div>
         `;
     }
     if (kind === 'file') {
         const name = escapeHtml(m.name || 'Fichier');
-        return `<a class="chat-file" href="${m.url}" download="${name}"><i data-lucide="file"></i><span>${name}</span></a>`;
+        const url = String(m.url || '');
+        return `<div class="chat-media-wrap"><a class="chat-file" href="${url}" download="${name}"><i data-lucide="file"></i><span>${name}</span></a>${overlay}</div>`;
     }
     return `<p>${escapeHtml(m.text || '')}</p>`;
 }
@@ -2300,7 +2392,7 @@ function getChatPreviewText(m) {
     return m?.text || '';
 }
 
-async function sendChatMediaMessage({ kind, file, blob, name } = {}) {
+async function sendChatMediaMessage({ kind, file, blob, name, pendingId } = {}) {
     if (!activeChatTag) {
         showToast('Select a chat first', 'alert-circle');
         return;
@@ -2327,13 +2419,32 @@ async function sendChatMediaMessage({ kind, file, blob, name } = {}) {
         return;
     }
 
-    const pendingId = newMessageId();
-    const localUrl = URL.createObjectURL(source);
-    chat.messages.push({ id: pendingId, type: 'sent', kind, url: localUrl, name: fileName, time: "À l'instant" });
-    await switchChat(activeChatTag);
+    const effectivePendingId = String(pendingId || newMessageId());
+    const createdAt = new Date().toISOString();
+    const existingPending = getPendingChatMessages(activeChatTag).find((m) => String(m?.id || '') === effectivePendingId) || null;
+    const shouldCreateUrl = !existingPending?.url;
+    const localUrl = existingPending?.url || URL.createObjectURL(source);
+    const pendingMsg = {
+        id: effectivePendingId,
+        type: 'sent',
+        kind,
+        url: localUrl,
+        name: fileName,
+        time: formatChatTime(createdAt),
+        created_at: createdAt,
+        status: 'uploading',
+        __source: source,
+        __mime: mime || '',
+        __revokeUrlOnSuccess: shouldCreateUrl
+    };
+    upsertPendingChatMessage(activeChatTag, pendingMsg);
+    const idx = Array.isArray(chat.messages) ? chat.messages.findIndex((m) => String(m?.id || '') === effectivePendingId) : -1;
+    if (idx >= 0) chat.messages[idx] = pendingMsg;
+    else chat.messages.push(pendingMsg);
+    await switchChat(activeChatTag, false, { skipFetch: true });
 
     const safeName = safeStorageFilename(fileName);
-    const objectPath = `${currentSupabaseUserId}/${chat.userId}/${Date.now()}_${pendingId}_${safeName}`;
+    const objectPath = `${currentSupabaseUserId}/${chat.userId}/${Date.now()}_${effectivePendingId}_${safeName}`;
 
     const { error: uploadError } = await client.storage.from(MESSAGE_MEDIA_BUCKET).upload(objectPath, source, {
         contentType: mime || undefined,
@@ -2341,10 +2452,11 @@ async function sendChatMediaMessage({ kind, file, blob, name } = {}) {
     });
     if (uploadError) {
         showToast(uploadError.message || 'Failed to upload media', 'alert-circle');
-        try { URL.revokeObjectURL(localUrl); } catch {}
-        await refreshLiveChatsFromSupabase();
-        renderMessagesList();
-        await switchChat(activeChatTag);
+        const failed = { ...pendingMsg, status: 'failed', __error: uploadError.message || 'upload_failed' };
+        upsertPendingChatMessage(activeChatTag, failed);
+        const i2 = Array.isArray(chat.messages) ? chat.messages.findIndex((m) => String(m?.id || '') === effectivePendingId) : -1;
+        if (i2 >= 0) chat.messages[i2] = failed;
+        await switchChat(activeChatTag, false, { skipFetch: true });
         return;
     }
 
@@ -2369,17 +2481,105 @@ async function sendChatMediaMessage({ kind, file, blob, name } = {}) {
             showToast(insertError.message || 'Failed to send media', 'alert-circle');
         }
         try { await client.storage.from(MESSAGE_MEDIA_BUCKET).remove([objectPath]); } catch {}
-        try { URL.revokeObjectURL(localUrl); } catch {}
-        await refreshLiveChatsFromSupabase();
-        renderMessagesList();
-        await switchChat(activeChatTag);
+        const failed = { ...pendingMsg, status: 'failed', __error: insertError.message || 'insert_failed' };
+        upsertPendingChatMessage(activeChatTag, failed);
+        const i2 = Array.isArray(chat.messages) ? chat.messages.findIndex((m) => String(m?.id || '') === effectivePendingId) : -1;
+        if (i2 >= 0) chat.messages[i2] = failed;
+        await switchChat(activeChatTag, false, { skipFetch: true });
         return;
     }
 
-    try { URL.revokeObjectURL(localUrl); } catch {}
+    removePendingChatMessage(activeChatTag, effectivePendingId);
+    if (pendingMsg.__revokeUrlOnSuccess) {
+        try { URL.revokeObjectURL(localUrl); } catch {}
+    }
     await refreshLiveChatsFromSupabase();
     renderMessagesList();
     await switchChat(activeChatTag);
+}
+
+async function sendPendingMediaMessage(tag, chat, msg) {
+    if (!tag || !chat || !msg) return false;
+    const source = msg.__source || null;
+    if (!source) {
+        showToast('Cannot retry this media message', 'alert-circle');
+        const failed = { ...msg, status: 'failed' };
+        upsertPendingChatMessage(tag, failed);
+        return false;
+    }
+    const asFile = source && typeof source === 'object' && typeof source.name === 'string';
+    await sendChatMediaMessage({
+        kind: msg.kind || 'file',
+        file: asFile ? source : undefined,
+        blob: asFile ? undefined : source,
+        name: msg.name || (asFile ? source.name : 'media.bin'),
+        pendingId: msg.id
+    });
+    return true;
+}
+
+async function sendPendingTextMessage(tag, chat, msg) {
+    if (!tag || !chat || !msg) return false;
+    const client = initSupabase();
+    if (!client || !currentSupabaseUserId || !chat.userId) {
+        showToast('Messaging is not ready', 'alert-circle');
+        const failed = { ...msg, status: 'failed' };
+        upsertPendingChatMessage(tag, failed);
+        return false;
+    }
+    let error = null;
+    if (messagesHasMediaColumns !== false) {
+        const res = await client.from('messages').insert({
+            sender_id: currentSupabaseUserId,
+            receiver_id: chat.userId,
+            body: msg.text || '',
+            kind: 'text',
+            media_url: null,
+            media_name: null,
+            media_mime: null,
+            media_size: null
+        });
+        error = res.error;
+        if (error && (isMissingColumnError(error, 'kind') || isMissingColumnError(error, 'media_url'))) {
+            messagesHasMediaColumns = false;
+            const retry = await client.from('messages').insert({
+                sender_id: currentSupabaseUserId,
+                receiver_id: chat.userId,
+                body: msg.text || ''
+            });
+            error = retry.error;
+        } else if (!error) {
+            messagesHasMediaColumns = true;
+        }
+    } else {
+        const res = await client.from('messages').insert({
+            sender_id: currentSupabaseUserId,
+            receiver_id: chat.userId,
+            body: msg.text || ''
+        });
+        error = res.error;
+    }
+    if (error) {
+        if (isMessagingBackendMissing(error)) showToast('Messaging backend is not set up yet', 'alert-circle');
+        else showToast(error.message || 'Failed to send message', 'alert-circle');
+        const failed = { ...msg, status: 'failed', __error: error.message || 'send_failed' };
+        upsertPendingChatMessage(tag, failed);
+        const idx = Array.isArray(chat.messages) ? chat.messages.findIndex((m) => String(m?.id || '') === String(msg.id || '')) : -1;
+        if (idx >= 0) chat.messages[idx] = failed;
+        await switchChat(tag, false, { skipFetch: true });
+        return false;
+    }
+    await createNotificationFromClient({
+        recipientId: chat.userId,
+        type: 'message_received',
+        targetProfileId: chat.userId,
+        meta: { chat: `id:${String(chat.userId)}` }
+    });
+    removePendingChatMessage(tag, msg.id);
+    await refreshLiveChatsFromSupabase();
+    renderMessagesList();
+    await switchChat(tag);
+    return true;
 }
 
 function openChatFilePicker(type = 'media') {
@@ -4971,7 +5171,7 @@ async function startChatWithSeller(tag) {
     switchChat(tag);
 }
 
-async function switchChat(tag, isModal = false) {
+async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
     const chat = mockChats[tag];
     if (!chat) {
         activeChatTag = null;
@@ -4984,7 +5184,7 @@ async function switchChat(tag, isModal = false) {
     const previousActiveChatTag = activeChatTag;
     activeChatTag = tag;
 
-    if (!DEMO_MODE && currentSupabaseUserId && chat.userId) {
+    if (!skipFetch && !DEMO_MODE && currentSupabaseUserId && chat.userId) {
         const client = initSupabase();
         if (client) {
             const selectWithMedia = 'id, created_at, sender_id, receiver_id, body, read_at, kind, media_url, media_name, media_mime, media_size';
@@ -5063,6 +5263,16 @@ async function switchChat(tag, isModal = false) {
             if (!m.id) m.id = newMessageId();
         });
     }
+    const pending = getPendingChatMessages(tag);
+    if (pending.length) {
+        const existingIds = new Set((chat.messages || []).map((m) => String(m?.id || '')));
+        pending.forEach((m) => {
+            if (!m || !m.id) return;
+            if (existingIds.has(String(m.id))) return;
+            chat.messages.push(m);
+        });
+        chat.messages.sort((a, b) => String(a?.created_at || '').localeCompare(String(b?.created_at || '')));
+    }
 
     const displayTag = chat?.tag || tag;
     chatHeader.innerHTML = `
@@ -5079,12 +5289,25 @@ async function switchChat(tag, isModal = false) {
         </button>
     `;
 
-    chatMessages.innerHTML = chat.messages.map(m => `
-        <div class="chat-message ${m.type}">
-            ${renderChatMessageBody(m)}
-            <span>${escapeHtml(m.time || '')}</span>
-        </div>
-    `).join('');
+    chatMessages.innerHTML = chat.messages.map(m => {
+        const statusLabel = getChatMessageStatusLabel(m);
+        const statusHTML = statusLabel ? `<span class="chat-status ${escapeHtml(String(m.status || ''))}">${escapeHtml(statusLabel)}</span>` : '';
+        const retryHTML = String(m.status || '') === 'failed'
+            ? `<button type="button" class="chat-retry-btn" onclick="retryChatMessage('${escapeHtml(String(m.id || ''))}')">Retry</button>`
+            : '';
+        const kindClass = (m.kind && m.kind !== 'text') ? 'has-media' : '';
+        const statusClass = m.status ? `msg-${escapeHtml(String(m.status))}` : '';
+        return `
+            <div class="chat-message ${escapeHtml(m.type || '')} ${kindClass} ${statusClass}" data-message-id="${escapeHtml(String(m.id || ''))}">
+                ${renderChatMessageBody(m)}
+                <div class="chat-meta">
+                    <span class="chat-time">${escapeHtml(m.time || '')}</span>
+                    ${statusHTML}
+                </div>
+                ${retryHTML}
+            </div>
+        `;
+    }).join('');
     if (!isModal) renderMessagesList();
     initVoiceMessagesInChat(chatMessages);
 
@@ -15477,19 +15700,13 @@ async function sendMessage() {
     if (!chat) return;
     if (!requireAuthOrPrompt()) return;
     if (DEMO_MODE) {
-        chat.messages.push({ id: newMessageId(), type: 'sent', kind: 'text', text: message, time: "À l'instant" });
+        const createdAt = new Date().toISOString();
+        chat.messages.push({ id: newMessageId(), type: 'sent', kind: 'text', text: message, created_at: createdAt, time: formatChatTime(createdAt) });
         input.value = '';
-        await switchChat(activeChatTag);
-        return;
-    }
-    const client = initSupabase();
-    if (!client || !currentSupabaseUserId || !chat.userId) {
-        showToast('Messaging is not ready', 'alert-circle');
+        await switchChat(activeChatTag, false, { skipFetch: true });
         return;
     }
     try {
-        if (sendBtn) sendBtn.disabled = true;
-        if (input) input.disabled = true;
         if (statusEl) {
             statusEl.className = 'chat-send-status sending';
             statusEl.textContent = 'Sending...';
@@ -15498,69 +15715,26 @@ async function sendMessage() {
     } catch (e) {
         null;
     }
-    let error = null;
-    if (messagesHasMediaColumns !== false) {
-        const res = await client.from('messages').insert({
-            sender_id: currentSupabaseUserId,
-            receiver_id: chat.userId,
-            body: message,
-            kind: 'text',
-            media_url: null,
-            media_name: null,
-            media_mime: null,
-            media_size: null
-        });
-        error = res.error;
-        if (error && (isMissingColumnError(error, 'kind') || isMissingColumnError(error, 'media_url'))) {
-            messagesHasMediaColumns = false;
-            const retry = await client.from('messages').insert({
-                sender_id: currentSupabaseUserId,
-                receiver_id: chat.userId,
-                body: message
-            });
-            error = retry.error;
-        } else if (!error) {
-            messagesHasMediaColumns = true;
-        }
-    } else {
-        const res = await client.from('messages').insert({
-            sender_id: currentSupabaseUserId,
-            receiver_id: chat.userId,
-            body: message
-        });
-        error = res.error;
-    }
-    if (error) {
-        if (isMessagingBackendMissing(error)) showToast('Messaging backend is not set up yet', 'alert-circle');
-        else showToast(error.message || 'Failed to send message', 'alert-circle');
-        try {
-            if (statusEl) {
-                statusEl.className = 'chat-send-status error';
-                statusEl.textContent = 'Failed to send. Check connection and retry.';
-                statusEl.style.display = 'block';
-            }
-        } catch (e) {
-            null;
-        }
-        try {
-            if (sendBtn) sendBtn.disabled = false;
-            if (input) input.disabled = false;
-        } catch (e) {
-            null;
-        }
-        return;
-    }
-    await createNotificationFromClient({
-        recipientId: chat.userId,
-        type: 'message_received',
-        targetProfileId: chat.userId,
-        meta: { chat: `id:${String(chat.userId)}` }
-    });
+    const createdAt = new Date().toISOString();
+    const pendingId = newMessageId();
+    const pendingMsg = {
+        id: pendingId,
+        type: 'sent',
+        kind: 'text',
+        text: message,
+        created_at: createdAt,
+        time: formatChatTime(createdAt),
+        status: 'sending'
+    };
+    upsertPendingChatMessage(activeChatTag, pendingMsg);
+    chat.messages.push(pendingMsg);
     input.value = '';
+    await switchChat(activeChatTag, false, { skipFetch: true });
+    const ok = await sendPendingTextMessage(activeChatTag, chat, pendingMsg);
     try {
         if (statusEl) {
-            statusEl.className = 'chat-send-status success';
-            statusEl.textContent = 'Sent';
+            statusEl.className = ok ? 'chat-send-status success' : 'chat-send-status error';
+            statusEl.textContent = ok ? 'Sent' : 'Failed to send. Tap Retry on the message.';
             statusEl.style.display = 'block';
         }
     } catch (e) {
@@ -15572,9 +15746,6 @@ async function sendMessage() {
     } catch (e) {
         null;
     }
-    await refreshLiveChatsFromSupabase();
-    renderMessagesList();
-    await switchChat(activeChatTag);
 }
 
 async function sendMessageModal() {

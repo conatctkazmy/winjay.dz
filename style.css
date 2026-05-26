@@ -3906,11 +3906,81 @@ body.dark-mode .listing-status-badge {
     line-height: 1.4;
 }
 
-.chat-message span {
-    font-size: 0.7rem;
-    opacity: 0.7;
-    display: block;
-    text-align: right;
+.chat-meta {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    opacity: 0.85;
+}
+
+.chat-time {
+    opacity: 0.8;
+}
+
+.chat-status {
+    font-weight: 800;
+    opacity: 0.95;
+}
+
+.chat-status.sending,
+.chat-status.uploading {
+    opacity: 0.9;
+}
+
+.chat-status.failed {
+    opacity: 1;
+}
+
+.chat-retry-btn {
+    margin-top: 8px;
+    padding: 7px 10px;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.12);
+    color: inherit;
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 0.78rem;
+    width: fit-content;
+    max-width: 100%;
+}
+
+.chat-message.received .chat-retry-btn {
+    border-color: var(--border-color);
+    background: rgba(15, 20, 25, 0.04);
+}
+
+.chat-message.has-media {
+    padding: 10px 12px;
+}
+
+.chat-media-wrap {
+    position: relative;
+}
+
+.chat-media-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    letter-spacing: 0.2px;
+    backdrop-filter: blur(6px);
+}
+
+.chat-media-overlay.sending {
+    background: rgba(0, 0, 0, 0.28);
+    color: #fff;
+}
+
+.chat-media-overlay.failed {
+    background: rgba(180, 35, 24, 0.32);
+    color: #fff;
 }
 
 .chat-message.received {
@@ -4023,9 +4093,10 @@ body.dark-mode .listing-status-badge {
 .voice-recording-bar {
     display: none;
     align-items: center;
-    gap: 12px;
-    padding: 0 15px 15px;
+    gap: 10px;
+    padding: 10px 12px;
     border-top: 1px solid var(--border-color);
+    background-color: var(--bg-main);
 }
 
 .voice-recording-bar.active {
@@ -4044,6 +4115,27 @@ body.dark-mode .listing-status-badge {
     font-weight: 800;
     color: var(--text-main);
     min-width: 56px;
+}
+
+.voice-rec-label {
+    font-weight: 800;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.voice-rec-wave {
+    flex: 1;
+    height: 12px;
+    border-radius: 9999px;
+    background-image: repeating-linear-gradient(
+        90deg,
+        rgba(255, 107, 0, 0.45) 0px,
+        rgba(255, 107, 0, 0.45) 2px,
+        rgba(255, 107, 0, 0) 2px,
+        rgba(255, 107, 0, 0) 6px
+    );
+    opacity: 0.55;
 }
 
 .voice-rec-btn {
