@@ -556,6 +556,11 @@ function endBootUI() {
     } catch (e) {
         null;
     }
+    try {
+        delete document.documentElement.dataset.initialSection;
+    } catch (e) {
+        null;
+    }
 }
 
 function updateLoadMoreListingsUI() {

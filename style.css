@@ -153,46 +153,6 @@ html.nav-avatar-loading .navbar .profile-btn img {
     opacity: 0;
 }
 
-html.app-booting #bootScreen {
-    display: block;
-}
-
-html.app-booting .main-container,
-html.app-booting #mobileSearchExpand {
-    display: none;
-}
-
-.boot-screen {
-    display: none;
-    padding-top: 60px;
-    min-height: calc(100vh - 60px);
-    min-height: calc(100dvh - 60px);
-    background-color: var(--bg-main);
-}
-
-.boot-screen-inner {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 20px;
-}
-
-.boot-screen-top {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 8px 0 22px;
-}
-
-.boot-line-title {
-    height: 22px;
-    width: 240px;
-}
-
-.boot-line-sub {
-    height: 16px;
-    width: 340px;
-}
-
 .navbar {
     position: fixed;
     top: 0;
@@ -1718,6 +1678,22 @@ html[dir="rtl"] .is-touch-device main {
 
 .content-section.active {
     display: block;
+}
+
+html[data-initial-section] .content-section {
+    display: none !important;
+}
+
+html[data-initial-section="home-section"] #home-section,
+html[data-initial-section="profile-section"] #profile-section,
+html[data-initial-section="favorites-section"] #favorites-section,
+html[data-initial-section="messages-section"] #messages-section,
+html[data-initial-section="settings-section"] #settings-section,
+html[data-initial-section="admin-dashboard-section"] #admin-dashboard-section,
+html[data-initial-section="create-listing-section"] #create-listing-section,
+html[data-initial-section="listing-detail-section"] #listing-detail-section,
+html[data-initial-section="seller-profile-section"] #seller-profile-section {
+    display: block !important;
 }
 
 #profile-section,
