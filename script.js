@@ -2944,8 +2944,45 @@ function jumpChatToLatest() {
     const messagesEl = document.getElementById('chatMessages');
     if (!messagesEl) return;
     chatUnseenNewCount = 0;
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    stickChatToBottom(messagesEl, { force: true });
     updateChatJumpLatestButton();
+}
+
+function stickChatToBottom(messagesEl, { force = false, attempts = 3 } = {}) {
+    if (!messagesEl) return;
+    const shouldStick = force || isChatNearBottom(messagesEl);
+    if (!shouldStick) return;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    if (attempts > 1) {
+        requestAnimationFrame(() => stickChatToBottom(messagesEl, { force, attempts: attempts - 1 }));
+    }
+}
+
+function bindChatAutoStickToBottom(messagesEl, { force = false, windowMs = 1400 } = {}) {
+    if (!messagesEl) return;
+    const until = Date.now() + (Number(windowMs) || 0);
+    const shouldStickNow = () => force || Date.now() < until || isChatNearBottom(messagesEl);
+
+    const kick = () => {
+        if (!shouldStickNow()) return;
+        stickChatToBottom(messagesEl, { force: true, attempts: 2 });
+    };
+
+    messagesEl.querySelectorAll('img').forEach((img) => {
+        if (img.complete) return;
+        img.addEventListener('load', kick, { once: true });
+        img.addEventListener('error', kick, { once: true });
+    });
+
+    messagesEl.querySelectorAll('video').forEach((video) => {
+        video.addEventListener('loadedmetadata', kick, { once: true });
+        video.addEventListener('loadeddata', kick, { once: true });
+        video.addEventListener('error', kick, { once: true });
+    });
+
+    requestAnimationFrame(kick);
+    setTimeout(kick, 120);
+    setTimeout(kick, 420);
 }
 
 function setMessageBadge(count) {
@@ -5396,10 +5433,11 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
     initChatVideoThumbsInChat(chatMessages);
 
     if (wasNearBottom) {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        stickChatToBottom(chatMessages, { force: true, attempts: 3 });
     } else {
         chatMessages.scrollTop = prevScrollTop;
     }
+    bindChatAutoStickToBottom(chatMessages, { force: wasNearBottom });
     renderedChatMessageCounts.set(tag, Array.isArray(chat.messages) ? chat.messages.length : 0);
     if (isSameChat) {
         const nextCount = renderedChatMessageCounts.get(tag) || 0;
