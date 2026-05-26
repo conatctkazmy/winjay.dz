@@ -2066,6 +2066,8 @@ let activeVoiceContainer = null;
 let activeVoiceRafId = null;
 let lastVoicePlaybackSnapshot = null;
 let pendingActiveChatRefresh = false;
+let pendingMessagesInboxRefresh = false;
+let queuedIncomingActiveChatRows = [];
 
 function snapshotActiveVoicePlayback() {
     if (!activeVoiceAudio || !activeVoiceContainer) return null;
@@ -2487,6 +2489,80 @@ function renderChatMessageBody(m, metaHTML = '') {
         return `<div class="chat-media-wrap"><a class="chat-file" href="${url}" download="${name}"><i data-lucide="file"></i><span>${name}</span></a>${overlay}${metaHTML ? `<div class="chat-media-meta">${metaHTML}</div>` : ''}</div>`;
     }
     return `<p>${escapeHtml(m.text || '')}</p>`;
+}
+
+function renderChatMessageItemHTML(m) {
+    const indicatorName = getChatSentIndicatorIconName(m);
+    const indicatorHTML = indicatorName
+        ? `<span class="chat-indicator ${escapeHtml(String(m.status || 'sent'))}"><i data-lucide="${escapeHtml(indicatorName)}"></i></span>`
+        : '';
+    const metaInner = `<span class="chat-time">${escapeHtml(m.time || '')}</span>${indicatorHTML}`;
+    const isMedia = !!(m.kind && m.kind !== 'text');
+    const metaHTML = isMedia ? metaInner : `<div class="chat-meta">${metaInner}</div>`;
+    const retryHTML = String(m.status || '') === 'failed'
+        ? `<button type="button" class="chat-retry-btn" onclick="retryChatMessage('${escapeHtml(String(m.id || ''))}')">Retry</button>`
+        : '';
+    const kindClass = (m.kind && m.kind !== 'text') ? `has-media kind-${escapeHtml(String(m.kind))}` : '';
+    const statusClass = m.status ? `msg-${escapeHtml(String(m.status))}` : '';
+    return `
+        <div class="chat-message ${escapeHtml(m.type || '')} ${kindClass} ${statusClass}" data-message-id="${escapeHtml(String(m.id || ''))}">
+            ${renderChatMessageBody(m, isMedia ? metaHTML : '')}
+            ${isMedia ? '' : metaHTML}
+            ${retryHTML}
+        </div>
+    `;
+}
+
+function supabaseRowToChatMessage(row) {
+    if (!row) return null;
+    const kind = row.kind || (row.media_url ? 'file' : 'text');
+    const type = row.sender_id === currentSupabaseUserId ? 'sent' : 'received';
+    const out = {
+        id: row.id || newMessageId(),
+        type,
+        kind,
+        created_at: row.created_at,
+        read_at: row.read_at,
+        time: formatChatTime(row.created_at)
+    };
+    if (kind === 'text') return { ...out, text: row.body || '' };
+    return { ...out, url: row.media_url || '', name: row.media_name || '', mime: row.media_mime || '' };
+}
+
+function appendChatMessageToActiveThread(m) {
+    if (!m || !activeChatTag) return;
+    const chat = mockChats?.[activeChatTag] || null;
+    if (chat && Array.isArray(chat.messages)) {
+        const exists = chat.messages.some((x) => String(x?.id || '') === String(m.id || ''));
+        if (!exists) chat.messages.push(m);
+    }
+    const messagesEl = document.getElementById('chatMessages');
+    if (!messagesEl) return;
+
+    const wasNearBottom = isChatNearBottom(messagesEl);
+    messagesEl.insertAdjacentHTML('beforeend', renderChatMessageItemHTML(m));
+    const inserted = messagesEl.lastElementChild;
+    if (inserted) {
+        inserted.querySelectorAll('.voice-message').forEach((container) => initVoiceMessage(container));
+        initChatVideoThumbsInChat(inserted);
+    }
+    if (wasNearBottom) {
+        stickChatToBottom(messagesEl, { force: true, attempts: 3 });
+    } else {
+        chatUnseenNewCount += 1;
+        updateChatJumpLatestButton();
+    }
+    bindChatAutoStickToBottom(messagesEl, { force: wasNearBottom });
+    lucide.createIcons();
+}
+
+function applyIncomingRowsToActiveChat(rows) {
+    if (!Array.isArray(rows) || !rows.length) return;
+    rows.forEach((row) => {
+        const m = supabaseRowToChatMessage(row);
+        if (!m) return;
+        appendChatMessageToActiveThread(m);
+    });
 }
 
 function getChatPreviewText(m) {
@@ -3007,18 +3083,18 @@ function setupChatFeatures() {
                     }
                     return;
                 }
-                if (pendingActiveChatRefresh) {
-                    pendingActiveChatRefresh = false;
-                    if (getActiveSectionId() === 'messages-section' && activeChatTag) {
-                        Promise.resolve(switchChat(activeChatTag)).finally(() => {
-                            if (lastVoicePlaybackSnapshot?.voiceId) restoreVoicePlayback(lastVoicePlaybackSnapshot);
-                            lastVoicePlaybackSnapshot = null;
-                        });
-                        return;
-                    }
-                }
+                pendingActiveChatRefresh = false;
                 if (lastVoicePlaybackSnapshot?.voiceId) restoreVoicePlayback(lastVoicePlaybackSnapshot);
                 lastVoicePlaybackSnapshot = null;
+                if (queuedIncomingActiveChatRows.length && getActiveSectionId() === 'messages-section' && activeChatTag) {
+                    const rows = queuedIncomingActiveChatRows.slice();
+                    queuedIncomingActiveChatRows = [];
+                    try {
+                        applyIncomingRowsToActiveChat(rows);
+                    } catch (e) {
+                        null;
+                    }
+                }
             },
             { passive: true }
         );
@@ -4733,15 +4809,28 @@ function setupMessagesRealtime() {
             async (payload) => {
                 const row = payload?.new || null;
                 if (!row) return;
-                await refreshLiveChatsFromSupabase();
-                renderMessagesList();
-                if (activeChatTag && mockChats[activeChatTag]?.userId === row.sender_id) {
-                    if (document.visibilityState !== 'visible') {
+                const isVisible = document.visibilityState === 'visible';
+                const chatKey = row.sender_id ? `id:${row.sender_id}` : '';
+                const isActiveChat = !!activeChatTag && chatKey && activeChatTag === chatKey;
+                const isMessagesOpen = getActiveSectionId() === 'messages-section';
+
+                if (isActiveChat) {
+                    if (!isVisible) {
                         pendingActiveChatRefresh = true;
-                    } else {
-                        await switchChat(activeChatTag);
+                        queuedIncomingActiveChatRows.push(row);
+                    } else if (isMessagesOpen) {
+                        applyIncomingRowsToActiveChat([row]);
                     }
+                } else {
+                    pendingMessagesInboxRefresh = true;
                 }
+
+                if (isVisible && isMessagesOpen) {
+                    await refreshLiveChatsFromSupabase();
+                    renderMessagesList();
+                    pendingMessagesInboxRefresh = false;
+                }
+
                 await refreshUnreadMessageCount();
             }
         )
@@ -4761,11 +4850,18 @@ function setupMessagesPolling() {
     if (!currentSupabaseUserId) return;
     messagesPollTimer = setInterval(async () => {
         if (!currentSupabaseUserId) return;
+        if (document.visibilityState !== 'visible') return;
         const prev = lastUnreadMessageCount;
         const next = await refreshUnreadMessageCount();
         if (next !== prev) {
-            await refreshLiveChatsFromSupabase();
-            renderMessagesList();
+            const isMessagesOpen = getActiveSectionId() === 'messages-section';
+            if (isMessagesOpen) {
+                await refreshLiveChatsFromSupabase();
+                renderMessagesList();
+                pendingMessagesInboxRefresh = false;
+            } else {
+                pendingMessagesInboxRefresh = true;
+            }
         }
     }, 5000);
 }
