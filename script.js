@@ -16823,6 +16823,70 @@ let activeCourseEditId = null;
 let activeCourseEditModuleId = null;
 let activeCourseEditLessonId = null;
 
+function getCourseModulesScrollTop() {
+    const main = document.scrollingElement || document.documentElement || null;
+    return Number(main?.scrollTop) || 0;
+}
+
+function setCourseModulesScrollTop(value) {
+    const main = document.scrollingElement || document.documentElement || null;
+    if (!main) return;
+    try {
+        main.scrollTop = Math.max(0, Number(value) || 0);
+    } catch (e) {
+        null;
+    }
+}
+
+function swapCourseModuleDom(moduleId, direction) {
+    const mid = String(moduleId || '').trim();
+    if (!mid) return false;
+    const el = document.getElementById(`courseModule-${mid}`);
+    if (!el) return false;
+    const parent = el.parentElement;
+    if (!parent) return false;
+    const target = direction === 'up' ? el.previousElementSibling : el.nextElementSibling;
+    if (!target || !target.classList.contains('course-module')) return false;
+    if (direction === 'up') parent.insertBefore(el, target);
+    else parent.insertBefore(target, el);
+    return true;
+}
+
+function swapCourseLessonDom(lessonId, direction) {
+    const lid = String(lessonId || '').trim();
+    if (!lid) return false;
+    const el = document.getElementById(`courseLesson-${lid}`);
+    if (!el) return false;
+    const parent = el.parentElement;
+    if (!parent) return false;
+    const target = direction === 'up' ? el.previousElementSibling : el.nextElementSibling;
+    if (!target || !target.classList.contains('course-lesson-item')) return false;
+    if (direction === 'up') parent.insertBefore(el, target);
+    else parent.insertBefore(target, el);
+    return true;
+}
+
+function clearCourseLessonPlaybackIfDeleted(lessonId) {
+    const lid = String(lessonId || '').trim();
+    if (!lid) return;
+    if (String(activeCourseLastLessonId || '') !== lid) return;
+    activeCourseLastLessonId = null;
+    const lessonVideo = document.getElementById('courseLessonVideo');
+    const nowPlaying = document.getElementById('courseNowPlaying');
+    const lessonPlayer = document.getElementById('courseLessonPlayer');
+    try {
+        if (lessonVideo) {
+            lessonVideo.pause();
+            lessonVideo.removeAttribute('src');
+            lessonVideo.load();
+        }
+    } catch (e) {
+        null;
+    }
+    if (nowPlaying) nowPlaying.textContent = '';
+    if (lessonPlayer) lessonPlayer.style.display = 'none';
+}
+
 function setCourseRouteParam(courseId, { replace = false } = {}) {
     try {
         const url = new URL(window.location.href);
@@ -17486,6 +17550,19 @@ async function deleteCourseModule(courseId, moduleId) {
             return;
         }
         showToast('Module deleted', 'check-circle');
+        const prevScroll = getCourseModulesScrollTop();
+        const moduleEl = document.getElementById(`courseModule-${mid}`);
+        if (moduleEl) {
+            try {
+                const active = String(activeCourseLastLessonId || '').trim();
+                if (active && moduleEl.querySelector(`#courseLesson-${active}`)) clearCourseLessonPlaybackIfDeleted(active);
+            } catch (e) {
+                null;
+            }
+            moduleEl.remove();
+            setCourseModulesScrollTop(prevScroll);
+            return;
+        }
         await renderCourseSection();
     }, true, 'Delete', 'Cancel');
 }
@@ -17505,6 +17582,14 @@ async function deleteCourseLesson(courseId, moduleId, lessonId) {
             return;
         }
         showToast('Lesson deleted', 'check-circle');
+        const prevScroll = getCourseModulesScrollTop();
+        clearCourseLessonPlaybackIfDeleted(lid);
+        const el = document.getElementById(`courseLesson-${lid}`);
+        if (el) {
+            el.remove();
+            setCourseModulesScrollTop(prevScroll);
+            return;
+        }
         await renderCourseSection();
     }, true, 'Delete', 'Cancel');
 }
@@ -17533,6 +17618,12 @@ async function moveCourseModule(courseId, moduleId, direction) {
     if (!n?.id) return;
     await client.from('course_modules').update({ position: n.position }).eq('id', mid).eq('course_id', cid);
     await client.from('course_modules').update({ position: pos }).eq('id', n.id).eq('course_id', cid);
+    const prevScroll = getCourseModulesScrollTop();
+    const swapped = swapCourseModuleDom(mid, dir);
+    if (swapped) {
+        setCourseModulesScrollTop(prevScroll);
+        return;
+    }
     await renderCourseSection();
 }
 
@@ -17562,6 +17653,12 @@ async function moveCourseLesson(courseId, moduleId, lessonId, direction) {
     if (!n?.id) return;
     await client.from('course_lessons').update({ position: n.position }).eq('id', lid).eq('course_id', cid).eq('module_id', mid);
     await client.from('course_lessons').update({ position: pos }).eq('id', n.id).eq('course_id', cid).eq('module_id', mid);
+    const prevScroll = getCourseModulesScrollTop();
+    const swapped = swapCourseLessonDom(lid, dir);
+    if (swapped) {
+        setCourseModulesScrollTop(prevScroll);
+        return;
+    }
     await renderCourseSection();
 }
 
@@ -17977,7 +18074,7 @@ async function renderCourseSection() {
                                     : '';
                                 const right = `<div class="course-lesson-right">${durText ? `<span class="course-lesson-duration">${durText}</span>` : ''}${lockIcon}${ownerActions}</div>`;
                                 return `
-                                    <div class="course-lesson-item ${accessible ? 'course-lesson-accessible' : ''}" onclick="${accessible ? `playCourseLesson('${lid}')` : `requestCourseAccess('${escapeHtml(ownerTag)}', '${escapeHtml(String(course.title || 'Course'))}')`}">
+                                    <div class="course-lesson-item ${accessible ? 'course-lesson-accessible' : ''}" id="courseLesson-${escapeHtml(lid)}" data-lesson-id="${escapeHtml(lid)}" data-module-id="${escapeHtml(mid)}" onclick="${accessible ? `playCourseLesson('${lid}')` : `requestCourseAccess('${escapeHtml(ownerTag)}', '${escapeHtml(String(course.title || 'Course'))}')`}">
                                         <div class="course-lesson-left">
                                             <i data-lucide="${icon}"></i>
                                             <div style="min-width:0;">
@@ -18001,7 +18098,7 @@ async function renderCourseSection() {
                         </div>`
                       : '';
                   return `
-                    <div class="course-module ${expanded ? '' : 'collapsed'}">
+                    <div class="course-module ${expanded ? '' : 'collapsed'}" id="courseModule-${escapeHtml(mid)}" data-module-id="${escapeHtml(mid)}">
                         <div class="course-module-head" onclick="toggleCourseModule('${mid}')">
                             <div class="course-module-title">${escapeHtml(String(m.title || 'Module'))}</div>
                             <div class="course-module-right">
