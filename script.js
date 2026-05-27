@@ -488,6 +488,7 @@ let homeInitialListingsLoading = true;
 let homeInitialListingsLoaded = false;
 
 function scheduleLucideCreateIcons() {
+    if (document.visibilityState !== 'visible') return;
     if (lucideRenderTimer) {
         try {
             clearTimeout(lucideRenderTimer);
@@ -506,6 +507,7 @@ function scheduleLucideCreateIcons() {
 }
 
 function scheduleMarketplaceRenders() {
+    if (document.visibilityState !== 'visible') return;
     if (marketplaceRenderTimer) {
         try {
             clearTimeout(marketplaceRenderTimer);
@@ -964,13 +966,14 @@ async function refreshAdminFlagFromSupabase(client) {
 
 async function handleAuthSessionChange(event, session) {
     const evt = String(event || '').trim();
-    if (evt === 'TOKEN_REFRESHED' && session?.user?.id) {
-        const incomingId = String(session.user.id || '');
-        const sameUser = !!currentSupabaseUserId && String(currentSupabaseUserId) === incomingId;
+    const incomingId = session?.user?.id ? String(session.user.id || '') : '';
+    const sameUser = !!incomingId && !!currentSupabaseUserId && String(currentSupabaseUserId) === incomingId;
+    if (incomingId) {
         currentSupabaseUserId = incomingId;
-        currentSupabaseUserEmail = session.user.email || '';
-        if (sameUser && hasLoadedSupabaseProfile) return;
+        currentSupabaseUserEmail = session?.user?.email || '';
     }
+    const resumeEvents = new Set(['TOKEN_REFRESHED', 'USER_UPDATED', 'SIGNED_IN', 'INITIAL_SESSION']);
+    if (sameUser && hasLoadedSupabaseProfile && resumeEvents.has(evt)) return;
 
     applyAuthSessionToLocalState(session);
     const user = session?.user || null;
@@ -6197,6 +6200,33 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
     applyWinjayLogoTheme();
+
+    if (!window.__winjayGlobalVisibilityHooked) {
+        window.__winjayGlobalVisibilityHooked = true;
+        document.addEventListener(
+            'visibilitychange',
+            () => {
+                if (document.visibilityState !== 'hidden') return;
+                if (marketplaceRenderTimer) {
+                    try {
+                        clearTimeout(marketplaceRenderTimer);
+                    } catch (e) {
+                        null;
+                    }
+                    marketplaceRenderTimer = null;
+                }
+                if (lucideRenderTimer) {
+                    try {
+                        clearTimeout(lucideRenderTimer);
+                    } catch (e) {
+                        null;
+                    }
+                    lucideRenderTimer = null;
+                }
+            },
+            { passive: true }
+        );
+    }
 
     // Restore last viewed section
     const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
