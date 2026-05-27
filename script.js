@@ -808,8 +808,8 @@ function initSupabase() {
             storage: supabaseAuthStorage
         }
     });
-    supabaseClient.auth.onAuthStateChange((_event, session) => {
-        handleAuthSessionChange(session);
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+        handleAuthSessionChange(event, session);
     });
     return supabaseClient;
 }
@@ -962,7 +962,16 @@ async function refreshAdminFlagFromSupabase(client) {
     }
 }
 
-async function handleAuthSessionChange(session) {
+async function handleAuthSessionChange(event, session) {
+    const evt = String(event || '').trim();
+    if (evt === 'TOKEN_REFRESHED' && session?.user?.id) {
+        const incomingId = String(session.user.id || '');
+        const sameUser = !!currentSupabaseUserId && String(currentSupabaseUserId) === incomingId;
+        currentSupabaseUserId = incomingId;
+        currentSupabaseUserEmail = session.user.email || '';
+        if (sameUser && hasLoadedSupabaseProfile) return;
+    }
+
     applyAuthSessionToLocalState(session);
     const user = session?.user || null;
     lastAuthExpiredHandledAt = 0;
