@@ -2027,6 +2027,7 @@ const profileRatingSummaryCache = new Map();
 const profileFollowCountsCache = new Map();
 const profileFollowStateCache = new Map();
 const sellerProfileReviewsCache = new Map();
+const sellerProfileCoursesCache = new Map();
 let listingDetailViewRecordedListingId = null;
 let listingDetailViewRecorded = false;
 let sidebarFollowingExpanded = false;
@@ -16233,19 +16234,82 @@ async function ensureSellerProfileReviewsLoaded(ownerId) {
     return rows;
 }
 
+async function ensureSellerProfileCoursesLoaded(ownerId) {
+    const id = String(ownerId || '').trim();
+    if (!id) return [];
+    if (sellerProfileCoursesCache.has(id)) return sellerProfileCoursesCache.get(id) || [];
+    const client = initSupabase();
+    if (!client) return [];
+    const { data, error } = await client
+        .from('courses')
+        .select('id, owner_id, title, description, thumbnail_object_path, is_published, created_at')
+        .eq('owner_id', id)
+        .eq('is_published', true)
+        .order('created_at', { ascending: false })
+        .limit(50);
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [];
+    sellerProfileCoursesCache.set(id, rows);
+    const listEl = document.getElementById('sellerProfileCoursesList');
+    if (listEl) listEl.innerHTML = getSellerProfileCoursesHTML(rows);
+    lucide.createIcons();
+    return rows;
+}
+
+function getSellerProfileCoursesHTML(rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) {
+        return '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="graduation-cap" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>No courses yet.</p></div>';
+    }
+    const client = initSupabase();
+    return list
+        .map((c) => {
+            const id = String(c?.id || '');
+            const title = escapeHtml(String(c?.title || 'Course'));
+            const desc = escapeHtml(String(c?.description || ''));
+            let thumbUrl = '';
+            if (client && String(c?.thumbnail_object_path || '').trim()) {
+                thumbUrl = client.storage.from(COURSE_PUBLIC_BUCKET).getPublicUrl(String(c.thumbnail_object_path)).data?.publicUrl || '';
+            }
+            return `
+                <div class="seller-course-item">
+                    <div class="seller-course-left">
+                        <div class="seller-course-thumb">${thumbUrl ? `<img src="${escapeHtml(thumbUrl)}" alt="">` : ''}</div>
+                        <div style="min-width:0;">
+                            <div class="seller-course-title">${title}</div>
+                            ${desc ? `<div class="seller-course-desc">${desc}</div>` : ''}
+                        </div>
+                    </div>
+                    <button class="admin-action-btn" type="button" onclick="openCourse('${escapeHtml(id)}', { fromSection: 'seller-profile-section' })">Open</button>
+                </div>
+            `;
+        })
+        .join('');
+}
+
 async function switchSellerProfileSection(section = 'listings') {
     const listingsTab = document.getElementById('sellerListingsTab');
     const reviewsTab = document.getElementById('sellerReviewsTab');
+    const coursesTab = document.getElementById('sellerCoursesTab');
     const listingsPanel = document.getElementById('sellerListingsSection');
     const reviewsPanel = document.getElementById('sellerReviewsSection');
-    if (!listingsTab || !reviewsTab || !listingsPanel || !reviewsPanel) return;
+    const coursesPanel = document.getElementById('sellerCoursesSection');
+    if (!listingsTab || !reviewsTab || !coursesTab || !listingsPanel || !reviewsPanel || !coursesPanel) return;
 
-    const showListings = section !== 'reviews';
+    const next = String(section || 'listings');
+    const showListings = next === 'listings';
+    const showCourses = next === 'courses';
+    const showReviews = next === 'reviews';
+
     listingsTab.classList.toggle('active', showListings);
-    reviewsTab.classList.toggle('active', !showListings);
+    coursesTab.classList.toggle('active', showCourses);
+    reviewsTab.classList.toggle('active', showReviews);
+
     listingsPanel.classList.toggle('active', showListings);
-    reviewsPanel.classList.toggle('active', !showListings);
-    if (!showListings && currentSellerProfileOwnerId) {
+    coursesPanel.classList.toggle('active', showCourses);
+    reviewsPanel.classList.toggle('active', showReviews);
+
+    if (showReviews && currentSellerProfileOwnerId) {
         const listEl = document.getElementById('sellerProfileReviewsList');
         if (listEl && !sellerProfileReviewsCache.has(String(currentSellerProfileOwnerId))) {
             listEl.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><p style="margin-top: 10px;">Loading reviews...</p></div>`;
@@ -16255,6 +16319,19 @@ async function switchSellerProfileSection(section = 'listings') {
             await ensureSellerProfileReviewsLoaded(currentSellerProfileOwnerId);
         } catch (e) {
             showToast('Failed to load profile reviews', 'alert-circle');
+        }
+    }
+
+    if (showCourses && currentSellerProfileOwnerId) {
+        const listEl = document.getElementById('sellerProfileCoursesList');
+        if (listEl && !sellerProfileCoursesCache.has(String(currentSellerProfileOwnerId))) {
+            listEl.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><p style="margin-top: 10px;">Loading courses...</p></div>`;
+            lucide.createIcons();
+        }
+        try {
+            await ensureSellerProfileCoursesLoaded(currentSellerProfileOwnerId);
+        } catch (e) {
+            showToast('Failed to load courses', 'alert-circle');
         }
     }
 }
@@ -16378,6 +16455,10 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
                     <i data-lucide="layout-grid"></i>
                     <span>Listings</span>
                 </button>
+                <button class="profile-switch-btn" id="sellerCoursesTab" type="button" onclick="switchSellerProfileSection('courses')">
+                    <i data-lucide="graduation-cap"></i>
+                    <span>Courses</span>
+                </button>
                 <button class="profile-switch-btn" id="sellerReviewsTab" type="button" onclick="switchSellerProfileSection('reviews')">
                     <i data-lucide="star"></i>
                     <span>Reviews</span>
@@ -16385,6 +16466,10 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
             </div>
             <div id="sellerListingsSection" class="profile-section-panel active">
                 ${sellerListings.length > 0 ? `<h3>Listings from ${seller.name}</h3><div class="listings-grid">${sellerListings.map(l => createCardHTML(l)).join('')}</div>` : '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="shopping-bag" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>No listings yet.</p></div>'}
+            </div>
+            <div id="sellerCoursesSection" class="profile-section-panel">
+                <h3>Courses by ${seller.name}</h3>
+                <div id="sellerProfileCoursesList"></div>
             </div>
             <div id="sellerReviewsSection" class="profile-section-panel">
                 <div class="reviews-section">
@@ -16510,6 +16595,10 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
                     <i data-lucide="layout-grid"></i>
                     <span>Annonces</span>
                 </button>
+                <button class="profile-switch-btn" id="sellerCoursesTab" type="button" onclick="switchSellerProfileSection('courses')">
+                    <i data-lucide="graduation-cap"></i>
+                    <span>Cours</span>
+                </button>
                 <button class="profile-switch-btn" id="sellerReviewsTab" type="button" onclick="switchSellerProfileSection('reviews')">
                     <i data-lucide="star"></i>
                     <span>Avis</span>
@@ -16517,6 +16606,10 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
             </div>
             <div id="sellerListingsSection" class="profile-section-panel active">
                 ${sellerListings.length > 0 ? `<h3>Annonces de ${seller.name}</h3><div class="listings-grid">${sellerListings.map(l => createCardHTML(l)).join('')}</div>` : '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="shopping-bag" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>Cet utilisateur n\'a pas encore d\'annonces publiées.</p></div>'}
+            </div>
+            <div id="sellerCoursesSection" class="profile-section-panel">
+                <h3>Cours de ${seller.name}</h3>
+                <div id="sellerProfileCoursesList"></div>
             </div>
             <div id="sellerReviewsSection" class="profile-section-panel">
                 <div class="reviews-section">

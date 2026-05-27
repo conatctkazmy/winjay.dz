@@ -6185,6 +6185,61 @@ footer {
     display: block;
 }
 
+.seller-course-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--card-bg);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.04);
+    margin-bottom: 12px;
+}
+
+.seller-course-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.seller-course-thumb {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    overflow: hidden;
+    background: rgba(0,0,0,0.05);
+    border: 1px solid var(--border-color);
+    flex: 0 0 auto;
+}
+
+.seller-course-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.seller-course-title {
+    font-weight: 900;
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.seller-course-desc {
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    font-weight: 650;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
 .reviews-section {
     margin-top: 30px;
 }
