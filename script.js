@@ -16670,7 +16670,7 @@ async function saveCourseFromModal() {
             .from('courses')
             .update({ title, description, is_published })
             .eq('id', editingId)
-            .eq('owner_id', currentSupabaseUserId)
+            .eq('owner_id', session.user.id)
             .select('*')
             .single();
         courseRow = res.data;
@@ -16679,6 +16679,7 @@ async function saveCourseFromModal() {
         const res = await client
             .from('courses')
             .insert({
+                owner_id: session.user.id,
                 title,
                 description,
                 is_published
