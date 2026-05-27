@@ -16779,10 +16779,16 @@ async function renderCourseSection() {
     const titleEl = document.getElementById('courseTitle');
     const ownerEl = document.getElementById('courseOwner');
     const descEl = document.getElementById('courseDescription');
+    const aboutEl = document.getElementById('courseAbout');
     const thumbImg = document.getElementById('courseThumbImg');
     const accessRow = document.getElementById('courseAccessRow');
     const vslWrap = document.getElementById('courseVslWrap');
     const vslVideo = document.getElementById('courseVslVideo');
+    const lessonPlayer = document.getElementById('courseLessonPlayer');
+    const primaryBtn = document.getElementById('coursePrimaryBtn');
+    const priceEl = document.getElementById('coursePrice');
+    const metaEl = document.getElementById('courseMeta');
+    const instructorEl = document.getElementById('courseInstructorCard');
     const playerGrid = document.getElementById('coursePlayerGrid');
     const modulesList = document.getElementById('courseModulesList');
     const achievementsList = document.getElementById('courseAchievementsList');
@@ -16790,11 +16796,12 @@ async function renderCourseSection() {
     const progressValue = document.getElementById('courseProgressValue');
     const nowPlaying = document.getElementById('courseNowPlaying');
     const lessonVideo = document.getElementById('courseLessonVideo');
-    if (!titleEl || !ownerEl || !descEl || !thumbImg || !accessRow || !vslWrap || !vslVideo || !playerGrid || !modulesList || !achievementsList || !progressFill || !progressValue || !nowPlaying || !lessonVideo) return;
+    if (!titleEl || !ownerEl || !descEl || !aboutEl || !thumbImg || !accessRow || !vslWrap || !vslVideo || !lessonPlayer || !primaryBtn || !priceEl || !metaEl || !instructorEl || !playerGrid || !modulesList || !achievementsList || !progressFill || !progressValue || !nowPlaying || !lessonVideo) return;
 
     titleEl.textContent = 'Course';
     ownerEl.textContent = '—';
     descEl.textContent = '';
+    aboutEl.textContent = '';
     thumbImg.src = '';
     accessRow.innerHTML = '';
     vslWrap.style.display = 'none';
@@ -16804,6 +16811,7 @@ async function renderCourseSection() {
     } catch (e) {
         null;
     }
+    lessonPlayer.style.display = 'none';
     playerGrid.style.display = 'none';
     modulesList.innerHTML = '<div class="muted">Loading...</div>';
     achievementsList.innerHTML = '<div class="muted">Loading...</div>';
@@ -16816,6 +16824,12 @@ async function renderCourseSection() {
     } catch (e) {
         null;
     }
+    priceEl.textContent = '';
+    primaryBtn.textContent = '';
+    primaryBtn.disabled = true;
+    primaryBtn.onclick = null;
+    metaEl.innerHTML = '';
+    instructorEl.innerHTML = '<div class="muted">—</div>';
 
     const client = initSupabase();
     if (!client) return;
@@ -16844,10 +16858,15 @@ async function renderCourseSection() {
 
     titleEl.textContent = String(course.title || 'Course');
     descEl.textContent = String(course.description || '');
+    aboutEl.textContent = String(course.description || '');
 
     const ownerProfile = await client.from('profiles').select('display_name, tag').eq('id', course.owner_id).maybeSingle();
     const ownerName = ownerProfile?.data?.display_name || ownerProfile?.data?.tag || 'Owner';
     ownerEl.textContent = String(ownerName || 'Owner');
+    instructorEl.innerHTML = `
+        <div class="course-instructor-name">${escapeHtml(String(ownerName || 'Owner'))}</div>
+        <div class="course-instructor-meta">${escapeHtml(String(ownerProfile?.data?.tag || ''))}</div>
+    `;
 
     if (String(course.thumbnail_object_path || '').trim()) {
         const publicUrl = client.storage.from(COURSE_PUBLIC_BUCKET).getPublicUrl(String(course.thumbnail_object_path)).data?.publicUrl || '';
@@ -16880,31 +16899,71 @@ async function renderCourseSection() {
     }
     accessRow.innerHTML = accessBits.join(' ');
 
-    if (!isOwner && !isEnrolled) {
-        modulesList.innerHTML = '<div class="muted">You need an invite to access lessons.</div>';
-        achievementsList.innerHTML = '<div class="muted">—</div>';
-        lucide.createIcons();
-        return;
+    const canAccessLessons = isOwner || isEnrolled;
+    priceEl.textContent = canAccessLessons ? 'Accès' : 'Invite only';
+    primaryBtn.disabled = false;
+    if (isOwner) {
+        primaryBtn.textContent = course.is_published ? 'View published page' : 'Preview course page';
+        primaryBtn.onclick = () => {
+            try {
+                document.getElementById('courseModulesList')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+            } catch (e) {
+                null;
+            }
+        };
+    } else if (isEnrolled) {
+        primaryBtn.textContent = 'Continue learning';
+        primaryBtn.onclick = () => {
+            try {
+                document.getElementById('courseModulesList')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+            } catch (e) {
+                null;
+            }
+        };
+    } else {
+        primaryBtn.textContent = 'Request access';
+        primaryBtn.onclick = () => showToast(`Ask the owner to invite your email: ${String(currentSupabaseUserEmail || '').trim()}`, 'info');
     }
 
-    playerGrid.style.display = '';
+    metaEl.innerHTML = `
+        <div class="course-meta-item"><i data-lucide="signal"></i><span>Invite-based access</span></div>
+        <div class="course-meta-item"><i data-lucide="clock"></i><span>Lessons update over time</span></div>
+        <div class="course-meta-item"><i data-lucide="shield"></i><span>${course.is_published ? 'Published' : 'Draft'}</span></div>
+    `;
 
-    const [modsRes, lessonsRes, progRes, achRes] = await Promise.all([
+    if (!canAccessLessons) {
+        achievementsList.innerHTML = '<div class="muted">—</div>';
+        progressFill.style.width = '0%';
+        progressValue.textContent = '0%';
+        playerGrid.style.display = 'none';
+    }
+
+    const queries = [
         client.from('course_modules').select('*').eq('course_id', courseId).order('position', { ascending: true }).limit(500),
-        client.from('course_lessons').select('*').eq('course_id', courseId).order('position', { ascending: true }).limit(1000),
-        client
-            .from('course_lesson_progress')
-            .select('lesson_id, completed, last_position_seconds')
-            .eq('user_id', currentSupabaseUserId)
-            .limit(2000),
-        client
-            .from('course_user_achievements')
-            .select('code, earned_at, course_achievements(code, title, description, icon)')
-            .eq('course_id', courseId)
-            .eq('user_id', currentSupabaseUserId)
-            .order('earned_at', { ascending: false })
-            .limit(50)
-    ]);
+        client.from('course_lessons').select('*').eq('course_id', courseId).order('position', { ascending: true }).limit(1000)
+    ];
+    if (canAccessLessons) {
+        queries.push(
+            client
+                .from('course_lesson_progress')
+                .select('lesson_id, completed, last_position_seconds')
+                .eq('user_id', currentSupabaseUserId)
+                .limit(2000)
+        );
+        queries.push(
+            client
+                .from('course_user_achievements')
+                .select('code, earned_at, course_achievements(code, title, description, icon)')
+                .eq('course_id', courseId)
+                .eq('user_id', currentSupabaseUserId)
+                .order('earned_at', { ascending: false })
+                .limit(50)
+        );
+    } else {
+        queries.push(Promise.resolve({ data: [] }));
+        queries.push(Promise.resolve({ data: [] }));
+    }
+    const [modsRes, lessonsRes, progRes, achRes] = await Promise.all(queries);
 
     const modules = Array.isArray(modsRes?.data) ? modsRes.data : [];
     const lessons = Array.isArray(lessonsRes?.data) ? lessonsRes.data : [];
@@ -16917,11 +16976,13 @@ async function renderCourseSection() {
         progressByLesson[String(p.lesson_id)] = p;
     });
 
-    const totalLessons = lessons.length;
-    const completedLessons = lessons.filter((l) => !!progressByLesson[String(l.id)]?.completed).length;
-    const pct = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
-    progressFill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
-    progressValue.textContent = `${Math.max(0, Math.min(100, pct))}%`;
+    if (canAccessLessons) {
+        const totalLessons = lessons.length;
+        const completedLessons = lessons.filter((l) => !!progressByLesson[String(l.id)]?.completed).length;
+        const pct = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+        progressFill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+        progressValue.textContent = `${Math.max(0, Math.min(100, pct))}%`;
+    }
 
     const lessonsByModule = {};
     lessons.forEach((l) => {
@@ -16935,9 +16996,10 @@ async function renderCourseSection() {
 
     modulesList.innerHTML = modules.length
         ? modules
-              .map((m) => {
+              .map((m, idx) => {
                   const mid = String(m.id);
                   const moduleLessons = lessonsByModule[mid] || [];
+                  const expanded = idx === 0;
                   const listHtml = moduleLessons.length
                       ? `<div class="course-lessons-list">${moduleLessons
                             .map((l) => {
@@ -16945,9 +17007,14 @@ async function renderCourseSection() {
                                 const p = progressByLesson[lid] || {};
                                 const done = !!p.completed;
                                 const icon = done ? 'check-circle' : 'play-circle';
-                                const label = done ? 'Completed' : 'Start';
+                                const label = done ? 'Completed' : 'Lesson';
+                                const duration = Number(l.duration_seconds) || 0;
+                                const durText = duration > 0 ? formatTime(duration) : '';
+                                const accessible = canAccessLessons || !!l.is_preview;
+                                const lockIcon = accessible ? '' : `<span class="course-lesson-lock"><i data-lucide="lock"></i></span>`;
+                                const right = `<div class="course-lesson-right">${durText ? `<span class="course-lesson-duration">${durText}</span>` : ''}${lockIcon}</div>`;
                                 return `
-                                    <div class="course-lesson-item" onclick="playCourseLesson('${lid}')">
+                                    <div class="course-lesson-item ${accessible ? 'course-lesson-accessible' : ''}" onclick="${accessible ? `playCourseLesson('${lid}')` : `showToast('This lesson is locked. Request access to join the course.', 'lock')`}">
                                         <div class="course-lesson-left">
                                             <i data-lucide="${icon}"></i>
                                             <div style="min-width:0;">
@@ -16955,22 +17022,27 @@ async function renderCourseSection() {
                                                 <div class="course-lesson-meta">${label}</div>
                                             </div>
                                         </div>
-                                        <i data-lucide="chevron-right"></i>
+                                        ${right}
                                     </div>
                                 `;
                             })
                             .join('')}</div>`
                       : '<div class="muted" style="padding: 10px 12px;">No lessons yet.</div>';
                   const ownerBtn = isOwner
-                      ? `<button class="admin-action-btn" type="button" onclick="openCreateCourseLessonModal('${courseId}','${mid}')">Add lesson</button>`
+                      ? `<button class="admin-action-btn" type="button" onclick="event.stopPropagation(); openCreateCourseLessonModal('${courseId}','${mid}')">Add lesson</button>`
                       : '';
                   return `
-                    <div class="course-module">
-                        <div class="course-module-head">
+                    <div class="course-module ${expanded ? '' : 'collapsed'}">
+                        <div class="course-module-head" onclick="toggleCourseModule('${mid}')">
                             <div class="course-module-title">${escapeHtml(String(m.title || 'Module'))}</div>
-                            ${ownerBtn}
+                            <div class="course-module-right">
+                                ${ownerBtn}
+                                <span class="course-module-chevron" id="courseModuleChevron-${escapeHtml(mid)}"><i data-lucide="chevron-down"></i></span>
+                            </div>
                         </div>
-                        ${listHtml}
+                        <div class="course-module-body" id="courseModuleBody-${escapeHtml(mid)}" style="${expanded ? '' : 'display:none;'}">
+                            ${listHtml}
+                        </div>
                     </div>
                   `;
               })
@@ -16998,11 +17070,6 @@ async function renderCourseSection() {
         : '<div class="muted">No achievements yet.</div>';
 
     lucide.createIcons();
-
-    const nextLesson = findNextCourseLessonToContinue(lessons, progressByLesson) || null;
-    if (nextLesson) {
-        playCourseLesson(String(nextLesson.id));
-    }
 }
 
 function findNextCourseLessonToContinue(lessons, progressByLesson) {
@@ -17011,6 +17078,18 @@ function findNextCourseLessonToContinue(lessons, progressByLesson) {
     const firstIncomplete = list.find((l) => !progressByLesson[String(l.id)]?.completed);
     if (firstIncomplete) return firstIncomplete;
     return list[0] || null;
+}
+
+function toggleCourseModule(moduleId) {
+    const id = String(moduleId || '').trim();
+    if (!id) return;
+    const body = document.getElementById(`courseModuleBody-${id}`);
+    if (!body) return;
+    const next = body.style.display === 'none';
+    body.style.display = next ? '' : 'none';
+    const moduleEl = body.closest('.course-module');
+    if (moduleEl) moduleEl.classList.toggle('collapsed', !next);
+    lucide.createIcons();
 }
 
 async function toggleCoursePublish(courseId, next) {
@@ -17040,7 +17119,8 @@ async function playCourseLesson(lessonId) {
     if (!lid) return;
     const lessonVideo = document.getElementById('courseLessonVideo');
     const nowPlaying = document.getElementById('courseNowPlaying');
-    if (!lessonVideo || !nowPlaying) return;
+    const lessonPlayer = document.getElementById('courseLessonPlayer');
+    if (!lessonVideo || !nowPlaying || !lessonPlayer) return;
     activeCourseLastLessonId = lid;
     nowPlaying.textContent = 'Loading lesson...';
     try {
@@ -17054,6 +17134,7 @@ async function playCourseLesson(lessonId) {
         nowPlaying.textContent = '';
         return;
     }
+    lessonPlayer.style.display = '';
     lessonVideo.src = String(signed.signedUrl);
     lessonVideo.load();
     const { data: lessonRow } = await client.from('course_lessons').select('id, title, duration_seconds').eq('id', lid).maybeSingle();
@@ -17094,6 +17175,11 @@ async function playCourseLesson(lessonId) {
     lessonVideo.ontimeupdate = () => queueCourseProgressFlush(false);
     lessonVideo.onpause = () => queueCourseProgressFlush(false);
     lessonVideo.onended = () => queueCourseProgressFlush(true);
+    try {
+        lessonPlayer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+        null;
+    }
 }
 
 function queueCourseProgressFlush(markComplete) {

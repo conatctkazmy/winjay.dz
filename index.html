@@ -542,27 +542,54 @@
                             <div class="course-access-row" id="courseAccessRow"></div>
                         </div>
                     </div>
-                    <div class="course-vsl" id="courseVslWrap" style="display:none;">
-                        <div class="course-vsl-title">VSL</div>
-                        <video id="courseVslVideo" class="course-video" controls playsinline></video>
-                    </div>
-                    <div class="course-player-grid" id="coursePlayerGrid" style="display:none;">
-                        <div class="course-lessons-pane">
-                            <div class="course-progress-row">
-                                <div class="course-progress-label">Progress</div>
-                                <div class="course-progress-bar">
-                                    <div class="course-progress-fill" id="courseProgressFill"></div>
-                                </div>
-                                <div class="course-progress-value" id="courseProgressValue">0%</div>
+                    <div class="course-detail-grid">
+                        <div class="course-detail-main">
+                            <div class="course-vsl course-promo" id="courseVslWrap" style="display:none;">
+                                <video id="courseVslVideo" class="course-video" controls playsinline></video>
                             </div>
-                            <div id="courseModulesList"></div>
+
+                            <div class="course-lesson-player" id="courseLessonPlayer" style="display:none;">
+                                <div class="course-now-playing" id="courseNowPlaying"></div>
+                                <video id="courseLessonVideo" class="course-video" controls playsinline></video>
+                            </div>
+
+                            <div class="course-content-block">
+                                <h3>À propos du cours</h3>
+                                <div class="course-about" id="courseAbout"></div>
+                            </div>
+
+                            <div class="course-content-block">
+                                <h3>Contenu du cours</h3>
+                                <div id="courseModulesList"></div>
+                            </div>
                         </div>
-                        <div class="course-video-pane">
-                            <div class="course-now-playing" id="courseNowPlaying"></div>
-                            <video id="courseLessonVideo" class="course-video" controls playsinline></video>
-                            <div class="course-achievements">
-                                <div class="course-achievements-title"><i data-lucide="trophy"></i> Achievements</div>
-                                <div class="course-achievements-list" id="courseAchievementsList"></div>
+
+                        <div class="course-detail-sidebar">
+                            <div class="course-side-card">
+                                <div class="course-side-price" id="coursePrice"></div>
+                                <button class="submit-btn course-primary-btn" type="button" id="coursePrimaryBtn"></button>
+                                <div class="course-side-meta" id="courseMeta"></div>
+                            </div>
+
+                            <div class="course-side-card">
+                                <div class="course-side-title">Formateur</div>
+                                <div class="course-instructor" id="courseInstructorCard"></div>
+                            </div>
+
+                            <div class="course-player-grid" id="coursePlayerGrid" style="display:none;">
+                                <div class="course-lessons-pane">
+                                    <div class="course-progress-row">
+                                        <div class="course-progress-label">Progress</div>
+                                        <div class="course-progress-bar">
+                                            <div class="course-progress-fill" id="courseProgressFill"></div>
+                                        </div>
+                                        <div class="course-progress-value" id="courseProgressValue">0%</div>
+                                    </div>
+                                    <div class="course-achievements" style="margin-top: 0;">
+                                        <div class="course-achievements-title"><i data-lucide="trophy"></i> Achievements</div>
+                                        <div class="course-achievements-list" id="courseAchievementsList"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
