@@ -3086,17 +3086,9 @@ function setupChatFeatures() {
             () => {
                 if (document.visibilityState === 'hidden') {
                     lastVoicePlaybackSnapshot = snapshotActiveVoicePlayback();
-                    if (lastVoicePlaybackSnapshot?.wasPlaying && activeVoiceAudio) {
-                        try {
-                            activeVoiceAudio.pause();
-                        } catch (e) {
-                            null;
-                        }
-                    }
                     return;
                 }
                 pendingActiveChatRefresh = false;
-                if (lastVoicePlaybackSnapshot?.voiceId) restoreVoicePlayback(lastVoicePlaybackSnapshot);
                 lastVoicePlaybackSnapshot = null;
                 if (queuedIncomingActiveChatRows.length && getActiveSectionId() === 'messages-section' && activeChatTag) {
                     const rows = queuedIncomingActiveChatRows.slice();
