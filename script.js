@@ -16887,6 +16887,36 @@ function clearCourseLessonPlaybackIfDeleted(lessonId) {
     if (lessonPlayer) lessonPlayer.style.display = 'none';
 }
 
+function markCourseLessonCompletedInDom(lessonId) {
+    const lid = String(lessonId || '').trim();
+    if (!lid) return false;
+    const el = document.getElementById(`courseLesson-${lid}`);
+    if (!el) return false;
+    el.classList.add('course-lesson-completed');
+    const icon = el.querySelector('.course-lesson-left i[data-lucide]');
+    if (icon) icon.setAttribute('data-lucide', 'check-circle');
+    const meta = el.querySelector('.course-lesson-meta');
+    if (meta) meta.textContent = 'Completed';
+    try {
+        lucide.createIcons();
+    } catch (e) {
+        null;
+    }
+    return true;
+}
+
+function updateCourseProgressFromDom() {
+    const fill = document.getElementById('courseProgressFill');
+    const value = document.getElementById('courseProgressValue');
+    if (!fill || !value) return;
+    const items = Array.from(document.querySelectorAll('#courseModulesList .course-lesson-item'));
+    const total = items.length;
+    const completed = items.filter((el) => el.classList.contains('course-lesson-completed')).length;
+    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+    fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    value.textContent = `${Math.max(0, Math.min(100, pct))}%`;
+}
+
 function setCourseRouteParam(courseId, { replace = false } = {}) {
     try {
         const url = new URL(window.location.href);
@@ -18074,7 +18104,7 @@ async function renderCourseSection() {
                                     : '';
                                 const right = `<div class="course-lesson-right">${durText ? `<span class="course-lesson-duration">${durText}</span>` : ''}${lockIcon}${ownerActions}</div>`;
                                 return `
-                                    <div class="course-lesson-item ${accessible ? 'course-lesson-accessible' : ''}" id="courseLesson-${escapeHtml(lid)}" data-lesson-id="${escapeHtml(lid)}" data-module-id="${escapeHtml(mid)}" onclick="${accessible ? `playCourseLesson('${lid}')` : `requestCourseAccess('${escapeHtml(ownerTag)}', '${escapeHtml(String(course.title || 'Course'))}')`}">
+                                    <div class="course-lesson-item ${accessible ? 'course-lesson-accessible' : ''} ${done ? 'course-lesson-completed' : ''}" id="courseLesson-${escapeHtml(lid)}" data-lesson-id="${escapeHtml(lid)}" data-module-id="${escapeHtml(mid)}" onclick="${accessible ? `playCourseLesson('${lid}')` : `requestCourseAccess('${escapeHtml(ownerTag)}', '${escapeHtml(String(course.title || 'Course'))}')`}">
                                         <div class="course-lesson-left">
                                             <i data-lucide="${icon}"></i>
                                             <div style="min-width:0;">
@@ -18286,8 +18316,10 @@ async function flushCourseProgressQueued() {
             setTimeout(() => flushCourseProgressQueued(), 400);
         } else {
             try {
-                const section = getActiveSectionId();
-                if (section === 'course-section') renderCourseSection();
+                if (payload?.markComplete) {
+                    markCourseLessonCompletedInDom(payload.lessonId);
+                    updateCourseProgressFromDom();
+                }
             } catch (e) {
                 null;
             }
