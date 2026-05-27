@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>winjay.dz - Marché Moderne</title>
-    <link rel="stylesheet" href="style.css?v=20260527_2">
+    <link rel="stylesheet" href="style.css?v=20260527_3">
     <link rel="preconnect" href="https://rxlpesdvskyytbfoufvp.supabase.co" crossorigin>
     <script>
         document.documentElement.classList.add('app-loading');
@@ -2023,9 +2023,12 @@
                     <button type="button" class="submit-btn small listing-video-remove-btn" id="createCourseVslRemoveBtn" style="display:none;">Remove</button>
                 </div>
             </div>
-            <div class="form-group" style="display:flex; gap:10px; align-items:center;">
-                <input type="checkbox" id="createCoursePublished">
-                <label for="createCoursePublished" style="margin:0;">Publish course page</label>
+            <div class="form-group">
+                <label class="toggle-row" for="createCoursePublished">
+                    <input type="checkbox" id="createCoursePublished" class="toggle-input">
+                    <span class="toggle-switch" aria-hidden="true"></span>
+                    <span class="toggle-text">Publish course page</span>
+                </label>
             </div>
             <button class="submit-btn" id="createCourseSubmitBtn" type="button" onclick="saveCourseFromModal()">Create</button>
             <div class="listing-video-upload-overlay" id="courseMediaUploadOverlay" style="display:none;">
@@ -2072,9 +2075,12 @@
                     <button type="button" class="submit-btn small listing-video-remove-btn" id="createCourseLessonRemoveBtn" style="display:none;">Remove</button>
                 </div>
             </div>
-            <div class="form-group" style="display:flex; gap:10px; align-items:center;">
-                <input type="checkbox" id="createCourseLessonPreview">
-                <label for="createCourseLessonPreview" style="margin:0;">Preview lesson (public when course is published)</label>
+            <div class="form-group">
+                <label class="toggle-row" for="createCourseLessonPreview">
+                    <input type="checkbox" id="createCourseLessonPreview" class="toggle-input">
+                    <span class="toggle-switch" aria-hidden="true"></span>
+                    <span class="toggle-text">Preview lesson (public when course is published)</span>
+                </label>
             </div>
             <button class="submit-btn" id="createCourseLessonSubmitBtn" type="button" onclick="saveCourseLessonFromModal()">Add</button>
             <div class="listing-video-upload-overlay" id="courseLessonUploadOverlay" style="display:none;">
@@ -2270,6 +2276,6 @@
     </button>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script defer src="script.js?v=20260527_3"></script>
+    <script defer src="script.js?v=20260527_4"></script>
 </body>
 </html>
