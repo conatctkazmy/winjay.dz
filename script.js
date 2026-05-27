@@ -13372,7 +13372,7 @@ function showSection(sectionId) {
     if (sectionId !== 'create-listing-section' && sectionId !== 'listing-detail-section') {
         clearListingRouteParams({ replace: true });
     }
-    const protectedSections = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section', 'course-section'];
+    const protectedSections = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section'];
     if (protectedSections.includes(sectionId) && !requireAuthOrPrompt()) {
         sectionId = 'home-section';
     }
@@ -17915,7 +17915,6 @@ async function renderOwnerCourseInvitesList() {
 }
 
 async function renderCourseSection() {
-    if (!isLoggedIn()) return;
     const courseId = String(activeCourseId || '').trim();
     if (!courseId) {
         showToast('Select a course first', 'alert-circle');
@@ -17999,25 +17998,23 @@ async function renderCourseSection() {
 
     const isOwner = String(course.owner_id || '') === String(currentSupabaseUserId || '');
 
-    const { data: enrollment } = await client
-        .from('course_enrollments')
-        .select('course_id, user_id')
-        .eq('course_id', courseId)
-        .eq('user_id', currentSupabaseUserId)
-        .maybeSingle();
-
-    const isEnrolled = !!enrollment?.course_id;
+    let isEnrolled = false;
+    if (currentSupabaseUserId) {
+        const { data: enrollment } = await client
+            .from('course_enrollments')
+            .select('course_id, user_id')
+            .eq('course_id', courseId)
+            .eq('user_id', currentSupabaseUserId)
+            .maybeSingle();
+        isEnrolled = !!enrollment?.course_id;
+    }
 
     titleEl.textContent = String(course.title || 'Course');
     descEl.textContent = String(course.description || '');
     aboutEl.textContent = String(course.description || '');
 
-    const ownerProfile = await client
-        .from('profiles')
-        .select('id, display_name, tag, avatar_url, location, business_type, created_at')
-        .eq('id', course.owner_id)
-        .maybeSingle();
-    const ownerRow = ownerProfile?.data?.id ? ownerProfile.data : { id: course.owner_id };
+    const ownerProfiles = await fetchProfilesByIds([course.owner_id]);
+    const ownerRow = ownerProfiles?.[String(course.owner_id || '')] || { id: course.owner_id };
     const seller = mapProfileRowToSeller(ownerRow);
     const ownerName = seller.name || ownerRow?.display_name || ownerRow?.tag || 'Owner';
     ownerEl.textContent = `By ${String(ownerName || 'Owner')}`;
@@ -18053,7 +18050,7 @@ async function renderCourseSection() {
         }
     }
 
-    const ownerTag = String(seller.tag || ownerProfile?.data?.tag || '').trim();
+    const ownerTag = String(seller.tag || ownerRow?.tag || '').trim();
     const accessBits = [];
     if (isOwner) {
         accessBits.push(`<span class="admin-badge ok">OWNER</span>`);
@@ -18198,10 +18195,10 @@ async function renderCourseSection() {
                                 const p = progressByLesson[lid] || {};
                                 const done = !!p.completed;
                                 const icon = done ? 'check-circle' : 'play-circle';
-                                const label = done ? 'Completed' : !!l.is_preview ? 'Preview' : 'Lesson';
+                                const label = done ? 'Completed' : canAccessLessons ? (!!l.is_preview ? 'Preview' : 'Lesson') : 'Locked';
                                 const duration = Number(l.duration_seconds) || 0;
                                 const durText = duration > 0 ? formatTime(duration) : '';
-                                const accessible = canAccessLessons || !!l.is_preview;
+                                const accessible = canAccessLessons;
                                 const lockIcon = accessible ? '' : `<span class="course-lesson-lock"><i data-lucide="lock"></i></span>`;
                                 const ownerActions = isOwner
                                     ? `<div class="course-lesson-owner-actions">
