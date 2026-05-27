@@ -4810,11 +4810,13 @@ body.dark-mode .listing-status-badge {
 #createCourseModal .modal-content {
     max-height: 88vh;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 #createCourseLessonModal .modal-content {
     max-height: 88vh;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 #createCourseThumbPreview.listing-video-preview {
