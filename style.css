@@ -4784,6 +4784,17 @@ body.dark-mode .listing-status-badge {
     max-width: 500px;
 }
 
+#createCourseModal .modal-content {
+    max-height: 88vh;
+    overflow-y: auto;
+}
+
+#createCourseThumbPreview.listing-video-preview {
+    aspect-ratio: auto;
+    max-height: 240px;
+    object-fit: contain;
+}
+
 .close {
     position: absolute;
     right: 20px;
