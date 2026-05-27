@@ -5506,15 +5506,10 @@ async function startChatWithSeller(tag, { pushState = false } = {}) {
         suppressNextMessagesBootstrap = true;
         showSection('messages-section');
         if (pushState) {
-            try {
-                history.pushState(
-                    { __winjay: true, view: 'messages', from: 'course', courseId: String(activeCourseId || '') || null },
-                    '',
-                    window.location.href
-                );
-            } catch (e) {
-                null;
-            }
+            setChatRouteParam(true, {
+                replace: false,
+                state: { __winjay: true, view: 'messages', from: 'course', courseId: String(activeCourseId || '') || null }
+            });
         }
         await bootstrapMessages();
         if (!mockChats[chatKey]) {
@@ -5552,11 +5547,10 @@ async function startChatWithSeller(tag, { pushState = false } = {}) {
     activeChatTag = tag;
     showSection('messages-section');
     if (pushState) {
-        try {
-            history.pushState({ __winjay: true, view: 'messages', from: 'course', courseId: String(activeCourseId || '') || null }, '', window.location.href);
-        } catch (e) {
-            null;
-        }
+        setChatRouteParam(true, {
+            replace: false,
+            state: { __winjay: true, view: 'messages', from: 'course', courseId: String(activeCourseId || '') || null }
+        });
     }
     renderMessagesList();
     switchChat(tag);
@@ -13769,7 +13763,7 @@ function autoFillCategoryFromProfile() {
 function handleListingRoutesFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const state = history.state && typeof history.state === 'object' ? history.state : null;
-    if (state?.view === 'messages') {
+    if (params.get('chat') === '1' || state?.view === 'messages') {
         showSection('messages-section');
         return;
     }
@@ -13777,6 +13771,17 @@ function handleListingRoutesFromUrl() {
     if (courseParam) {
         const id = String(courseParam || '').trim();
         if (id) {
+            if (state?.view !== 'course' || String(state?.courseId || '') !== id) {
+                try {
+                    history.replaceState(
+                        { __winjay: true, view: 'course', courseId: id, from: String(activeCourseFromSection || '').trim() || 'profile-section' },
+                        '',
+                        window.location.pathname + window.location.search
+                    );
+                } catch (e) {
+                    null;
+                }
+            }
             activeCourseId = id;
             if (state?.view === 'course' && state?.from) {
                 activeCourseFromSection = String(state.from || '').trim() || activeCourseFromSection;
@@ -17077,6 +17082,23 @@ function setCourseRouteParam(courseId, { replace = false, state = null } = {}) {
     }
 }
 
+function setChatRouteParam(enabled, { replace = false, state = null } = {}) {
+    try {
+        const url = new URL(window.location.href);
+        const on = !!enabled;
+        if (on) url.searchParams.set('chat', '1');
+        else url.searchParams.delete('chat');
+        const nextState = state !== undefined && state !== null ? state : (history.state && typeof history.state === 'object' ? history.state : null);
+        if (replace) {
+            history.replaceState(nextState, '', url.pathname + url.search);
+        } else {
+            history.pushState(nextState, '', url.pathname + url.search);
+        }
+    } catch (e) {
+        null;
+    }
+}
+
 function navigateBackFromCourse() {
     const from = String(activeCourseFromSection || '').trim() || 'profile-section';
     activeCourseFromSection = 'profile-section';
@@ -17124,6 +17146,20 @@ async function requestCourseAccess(ownerTag, courseTitle) {
         return;
     }
     const title = String(courseTitle || 'Course').trim() || 'Course';
+    try {
+        const cid = String(activeCourseId || '').trim();
+        if (cid) {
+            const st = history.state && typeof history.state === 'object' ? history.state : null;
+            if (st?.view !== 'course' || String(st?.courseId || '') !== cid) {
+                setCourseRouteParam(cid, {
+                    replace: true,
+                    state: { __winjay: true, view: 'course', courseId: cid, from: String(activeCourseFromSection || '').trim() || 'profile-section' }
+                });
+            }
+        }
+    } catch (e) {
+        null;
+    }
     await startChatWithSeller(tag.startsWith('@') ? tag : '@' + tag, { pushState: true });
     setTimeout(() => {
         const input = document.getElementById('chatInput');
