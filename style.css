@@ -4789,6 +4789,11 @@ body.dark-mode .listing-status-badge {
     overflow-y: auto;
 }
 
+#createCourseLessonModal .modal-content {
+    max-height: 88vh;
+    overflow-y: auto;
+}
+
 #createCourseThumbPreview.listing-video-preview {
     aspect-ratio: auto;
     max-height: 240px;

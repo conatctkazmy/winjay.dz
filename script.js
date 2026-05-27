@@ -6189,6 +6189,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     setupListingVideoUploader();
     setupCreateCourseMediaUploader();
+    setupCreateCourseLessonUploader();
     updateListingVideoGroupVisibility();
     populateWilayas();
     populateCategories();
@@ -6676,6 +6677,10 @@ let courseMediaUploadActive = false;
 let courseMediaUploadXhr = null;
 let courseMediaUploadCancelHandler = null;
 
+let courseLessonUploadActive = false;
+let courseLessonUploadXhr = null;
+let courseLessonUploadCancelHandler = null;
+
 function setCourseMediaUploadOverlay({ visible = false, percent = 0, loaded = 0, total = 0, label = '' } = {}) {
     const overlay = document.getElementById('courseMediaUploadOverlay');
     const ring = document.getElementById('courseMediaUploadRing');
@@ -6690,12 +6695,35 @@ function setCourseMediaUploadOverlay({ visible = false, percent = 0, loaded = 0,
     if (labelEl) labelEl.textContent = String(label || 'Uploading…');
 }
 
+function setCourseLessonUploadOverlay({ visible = false, percent = 0, loaded = 0, total = 0, label = '' } = {}) {
+    const overlay = document.getElementById('courseLessonUploadOverlay');
+    const ring = document.getElementById('courseLessonUploadRing');
+    const percentEl = document.getElementById('courseLessonUploadPercent');
+    const bytesEl = document.getElementById('courseLessonUploadBytes');
+    const labelEl = document.getElementById('courseLessonUploadLabel');
+    if (overlay) overlay.style.display = visible ? '' : 'none';
+    const safeP = Math.max(0, Math.min(100, Number(percent) || 0));
+    if (ring) ring.style.setProperty('--p', String(safeP));
+    if (percentEl) percentEl.textContent = `${Math.round(safeP)}%`;
+    if (bytesEl) bytesEl.textContent = `${formatUploadBytes(loaded)} / ${formatUploadBytes(total)}`;
+    if (labelEl) labelEl.textContent = String(label || 'Uploading…');
+}
+
 function clearCourseMediaUploadState() {
     courseMediaUploadActive = false;
     courseMediaUploadXhr = null;
     courseMediaUploadCancelHandler = null;
     setCourseMediaUploadOverlay({ visible: false, percent: 0, loaded: 0, total: 0, label: '' });
     const cancelBtn = document.getElementById('courseMediaUploadCancelBtn');
+    if (cancelBtn) cancelBtn.disabled = false;
+}
+
+function clearCourseLessonUploadState() {
+    courseLessonUploadActive = false;
+    courseLessonUploadXhr = null;
+    courseLessonUploadCancelHandler = null;
+    setCourseLessonUploadOverlay({ visible: false, percent: 0, loaded: 0, total: 0, label: '' });
+    const cancelBtn = document.getElementById('courseLessonUploadCancelBtn');
     if (cancelBtn) cancelBtn.disabled = false;
 }
 
@@ -6776,6 +6804,72 @@ async function uploadCourseFileToSignedUrlWithProgress({ signedUrl, file, label 
     return result;
 }
 
+async function uploadCourseLessonFileToSignedUrlWithProgress({ signedUrl, file, label = 'Uploading…' } = {}) {
+    const f = file || null;
+    const url = String(signedUrl || '').trim();
+    if (!f || !url) return { error: 'Missing upload url' };
+    if (courseLessonUploadActive) return { error: 'Upload already in progress' };
+
+    courseLessonUploadActive = true;
+    setCourseLessonUploadOverlay({ visible: true, percent: 0, loaded: 0, total: Number(f.size) || 0, label });
+
+    const cancelBtn = document.getElementById('courseLessonUploadCancelBtn');
+    if (cancelBtn) cancelBtn.disabled = false;
+
+    let canceled = false;
+    courseLessonUploadCancelHandler = () => {
+        canceled = true;
+        try { courseLessonUploadXhr?.abort?.(); } catch (e) { null; }
+        clearCourseLessonUploadState();
+    };
+    if (cancelBtn && !cancelBtn.dataset.bound) {
+        cancelBtn.dataset.bound = '1';
+        cancelBtn.addEventListener('click', () => courseLessonUploadCancelHandler?.());
+    }
+
+    const result = await new Promise((resolve) => {
+        let finished = false;
+        const done = (payload) => {
+            if (finished) return;
+            finished = true;
+            clearCourseLessonUploadState();
+            resolve(payload);
+        };
+
+        const xhr = new XMLHttpRequest();
+        courseLessonUploadXhr = xhr;
+
+        xhr.upload.onprogress = (ev) => {
+            const total = Number(ev?.total) || Number(f.size) || 0;
+            const loaded = Number(ev?.loaded) || 0;
+            const pct = total > 0 ? (loaded / total) * 100 : 0;
+            setCourseLessonUploadOverlay({ visible: true, percent: pct, loaded, total, label });
+        };
+        xhr.onerror = () => done({ error: 'Upload failed (network)' });
+        xhr.onabort = () => done({ error: 'Upload canceled' });
+        xhr.onload = () => {
+            const ok = xhr.status >= 200 && xhr.status < 300;
+            if (!ok) {
+                done({ error: String(xhr.responseText || `Upload failed (${xhr.status})`) });
+                return;
+            }
+            setCourseLessonUploadOverlay({ visible: true, percent: 100, loaded: Number(f.size) || 0, total: Number(f.size) || 0, label });
+            done({ ok: true });
+        };
+
+        try {
+            xhr.open('PUT', url, true);
+            xhr.setRequestHeader('content-type', String(f.type || 'application/octet-stream'));
+            xhr.send(f);
+        } catch (e) {
+            done({ error: 'Upload failed' });
+        }
+    });
+
+    if (canceled) return { error: 'Upload canceled' };
+    return result;
+}
+
 function resetCreateCourseMediaUI() {
     const thumbInput = document.getElementById('createCourseThumbnailFile');
     const thumbName = document.getElementById('createCourseThumbFileName');
@@ -6794,6 +6888,16 @@ function resetCreateCourseMediaUI() {
     if (vslRemove) vslRemove.style.display = 'none';
 
     clearCourseMediaUploadState();
+}
+
+function resetCreateCourseLessonMediaUI() {
+    const input = document.getElementById('createCourseLessonVideoFile');
+    const nameEl = document.getElementById('createCourseLessonFileName');
+    const removeBtn = document.getElementById('createCourseLessonRemoveBtn');
+    if (input) input.value = '';
+    if (nameEl) nameEl.textContent = 'No file chosen';
+    if (removeBtn) removeBtn.style.display = 'none';
+    clearCourseLessonUploadState();
 }
 
 function setupCreateCourseMediaUploader() {
@@ -6868,6 +6972,39 @@ function setupCreateCourseMediaUploader() {
             vslInput.value = '';
             if (vslName) vslName.textContent = 'No file chosen';
             vslRemove.style.display = 'none';
+        });
+    }
+}
+
+function setupCreateCourseLessonUploader() {
+    const chooseBtn = document.getElementById('createCourseLessonChooseBtn');
+    const input = document.getElementById('createCourseLessonVideoFile');
+    const nameEl = document.getElementById('createCourseLessonFileName');
+    const removeBtn = document.getElementById('createCourseLessonRemoveBtn');
+
+    if (chooseBtn && input && !chooseBtn.dataset.bound) {
+        chooseBtn.dataset.bound = '1';
+        chooseBtn.addEventListener('click', () => input.click());
+    }
+    if (input && !input.dataset.boundLesson) {
+        input.dataset.boundLesson = '1';
+        input.addEventListener('change', () => {
+            const file = input.files?.[0] || null;
+            if (!file) {
+                if (nameEl) nameEl.textContent = 'No file chosen';
+                if (removeBtn) removeBtn.style.display = 'none';
+                return;
+            }
+            if (nameEl) nameEl.textContent = String(file.name || 'video');
+            if (removeBtn) removeBtn.style.display = '';
+        });
+    }
+    if (removeBtn && input && !removeBtn.dataset.bound) {
+        removeBtn.dataset.bound = '1';
+        removeBtn.addEventListener('click', () => {
+            input.value = '';
+            if (nameEl) nameEl.textContent = 'No file chosen';
+            removeBtn.style.display = 'none';
         });
     }
 }
@@ -16722,12 +16859,11 @@ function openCreateCourseLessonModal(courseId, moduleId) {
     activeCourseCreateLessonCourseId = String(courseId || '').trim() || null;
     activeCourseCreateLessonModuleId = String(moduleId || '').trim() || null;
     const title = document.getElementById('createCourseLessonTitle');
-    const file = document.getElementById('createCourseLessonVideoFile');
     const preview = document.getElementById('createCourseLessonPreview');
     const modalTitle = document.getElementById('createCourseLessonModalTitle');
     const submitBtn = document.getElementById('createCourseLessonSubmitBtn');
     if (title) title.value = '';
-    if (file) file.value = '';
+    resetCreateCourseLessonMediaUI();
     if (preview) preview.checked = false;
     if (modalTitle) modalTitle.textContent = 'Add lesson';
     if (submitBtn) submitBtn.textContent = 'Add';
@@ -16758,12 +16894,11 @@ async function openEditCourseLessonModal(courseId, moduleId, lessonId) {
     activeCourseCreateLessonModuleId = mid;
     activeCourseEditLessonId = String(lesson.id);
     const title = document.getElementById('createCourseLessonTitle');
-    const file = document.getElementById('createCourseLessonVideoFile');
     const preview = document.getElementById('createCourseLessonPreview');
     const modalTitle = document.getElementById('createCourseLessonModalTitle');
     const submitBtn = document.getElementById('createCourseLessonSubmitBtn');
     if (title) title.value = String(lesson.title || '');
-    if (file) file.value = '';
+    resetCreateCourseLessonMediaUI();
     if (preview) preview.checked = !!lesson.is_preview;
     if (modalTitle) modalTitle.textContent = 'Edit lesson';
     if (submitBtn) submitBtn.textContent = 'Save';
@@ -17049,6 +17184,17 @@ async function saveCourseLessonFromModal() {
         return;
     }
     const editingId = String(activeCourseEditLessonId || '').trim();
+    const submitBtn = document.getElementById('createCourseLessonSubmitBtn');
+    if (submitBtn && !submitBtn.dataset.defaultText) submitBtn.dataset.defaultText = submitBtn.textContent || '';
+    const restoreSubmit = () => {
+        if (!submitBtn) return;
+        submitBtn.disabled = false;
+        submitBtn.textContent = submitBtn.dataset.defaultText || submitBtn.textContent || '';
+    };
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = editingId ? 'Saving...' : 'Adding...';
+    }
     let lessonId = '';
     if (editingId) {
         const { error } = await client
@@ -17059,12 +17205,14 @@ async function saveCourseLessonFromModal() {
             .eq('module_id', moduleId);
         if (error) {
             showToast(error.message || 'Failed to update lesson', 'alert-circle');
+            restoreSubmit();
             return;
         }
         lessonId = editingId;
     } else {
         if (!file) {
             showToast('Video file is required', 'alert-circle');
+            restoreSubmit();
             return;
         }
         const { data: existing } = await client.from('course_lessons').select('position').eq('module_id', moduleId).order('position', { ascending: false }).limit(1);
@@ -17083,6 +17231,7 @@ async function saveCourseLessonFromModal() {
             .single();
         if (error || !lessonRow?.id) {
             showToast(error?.message || 'Failed to create lesson', 'alert-circle');
+            restoreSubmit();
             return;
         }
         lessonId = String(lessonRow.id);
@@ -17098,12 +17247,17 @@ async function saveCourseLessonFromModal() {
         });
         if (signed?.error || !signed?.signedUrl || !signed?.path) {
             showToast(signed?.error || 'Failed to prepare video upload', 'alert-circle');
+            restoreSubmit();
             return;
         }
-        showToast('Uploading video...', 'loader');
-        const up = await uploadFileToSignedUrl(signed.signedUrl, file);
+        const up = await uploadCourseLessonFileToSignedUrlWithProgress({
+            signedUrl: signed.signedUrl,
+            file,
+            label: 'Uploading video…'
+        });
         if (up?.error) {
             showToast(up.error || 'Upload failed', 'alert-circle');
+            restoreSubmit();
             return;
         }
         const { error: mediaErr } = await client
@@ -17115,11 +17269,14 @@ async function saveCourseLessonFromModal() {
             });
         if (mediaErr) {
             showToast(mediaErr.message || 'Failed to save lesson video', 'alert-circle');
+            restoreSubmit();
             return;
         }
     }
 
     closeModal('createCourseLessonModal');
+    resetCreateCourseLessonMediaUI();
+    restoreSubmit();
     showToast(editingId ? 'Lesson updated' : 'Lesson added', 'check-circle');
     activeCourseEditLessonId = null;
     await renderCourseSection();
