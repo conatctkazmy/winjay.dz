@@ -591,14 +591,24 @@ async function requireValidSessionOrPrompt(client) {
     if (!c) return null;
     try {
         const { data, error } = await c.auth.getSession();
-        const session = data?.session || null;
-        if (error || !session?.user?.id || !session?.access_token) {
+        let session = data?.session || null;
+        if (!error && session?.expires_at) {
+            const expiresAtMs = Number(session.expires_at) * 1000;
+            const shouldRefresh = Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now() + 30_000;
+            if (shouldRefresh) {
+                const refreshed = await c.auth.refreshSession();
+                session = refreshed?.data?.session || session;
+            }
+        }
+        const { data: userData, error: userErr } = await c.auth.getUser();
+        const user = userData?.user || null;
+        if (error || userErr || !session?.access_token || !user?.id) {
             applyAuthSessionToLocalState(null);
             showToast('Session expired, log in again', 'alert-circle');
             openModal('loginModal');
             return null;
         }
-        const incomingId = String(session.user.id || '');
+        const incomingId = String(user.id || '');
         if (!incomingId || String(currentSupabaseUserId || '') !== incomingId) applyAuthSessionToLocalState(session);
         return session;
     } catch (e) {
@@ -16691,7 +16701,9 @@ async function saveCourseFromModal() {
     }
 
     if (error || !courseRow?.id) {
-        showToast(error?.message || (isEdit ? 'Failed to update course' : 'Failed to create course'), 'alert-circle');
+        const details = error ? [error.code, error.details, error.hint].filter(Boolean).join(' | ') : '';
+        const message = error?.message || (isEdit ? 'Failed to update course' : 'Failed to create course');
+        showToast(details ? `${message} (${details})` : message, 'alert-circle');
         return;
     }
 
