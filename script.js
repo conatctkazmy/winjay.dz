@@ -586,6 +586,29 @@ function requireAuthOrPrompt() {
     return false;
 }
 
+async function requireValidSessionOrPrompt(client) {
+    const c = client || initSupabase();
+    if (!c) return null;
+    try {
+        const { data, error } = await c.auth.getSession();
+        const session = data?.session || null;
+        if (error || !session?.user?.id || !session?.access_token) {
+            applyAuthSessionToLocalState(null);
+            showToast('Session expired, log in again', 'alert-circle');
+            openModal('loginModal');
+            return null;
+        }
+        const incomingId = String(session.user.id || '');
+        if (!incomingId || String(currentSupabaseUserId || '') !== incomingId) applyAuthSessionToLocalState(session);
+        return session;
+    } catch (e) {
+        applyAuthSessionToLocalState(null);
+        showToast('Session expired, log in again', 'alert-circle');
+        openModal('loginModal');
+        return null;
+    }
+}
+
 function formatRelativeDate(value) {
     try {
         const d = new Date(value);
@@ -16618,9 +16641,10 @@ async function uploadFileToSignedUrl(signedUrl, file) {
 }
 
 async function saveCourseFromModal() {
-    if (!requireAuthOrPrompt()) return;
     const client = initSupabase();
     if (!client) return;
+    const session = await requireValidSessionOrPrompt(client);
+    if (!session) return;
     const titleEl = document.getElementById('createCourseTitle');
     const descEl = document.getElementById('createCourseDescription');
     const thumbEl = document.getElementById('createCourseThumbnailFile');
@@ -16655,7 +16679,6 @@ async function saveCourseFromModal() {
         const res = await client
             .from('courses')
             .insert({
-                owner_id: currentSupabaseUserId,
                 title,
                 description,
                 is_published
