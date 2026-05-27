@@ -54,6 +54,7 @@ const THEME_STORAGE_KEY = 'winjayThemeV1';
 const LOGIN_FAIL_COUNT_STORAGE_KEY = 'winjayLoginFailCountV1';
 const LOGIN_COOLDOWN_UNTIL_STORAGE_KEY = 'winjayLoginCooldownUntilV1';
 const LANGUAGE_STORAGE_KEY = 'winjayLangV1';
+const MY_PROFILE_LAST_TAB_STORAGE_KEY = 'winjayMyProfileLastTabV1';
 const FREE_VERIFIED_TOTAL = 1000;
 const REFERRALS_REQUIRED = 10;
 const MARKETPLACE_LISTINGS_STORAGE_KEY = 'marketplaceListingsV1';
@@ -12149,6 +12150,12 @@ async function switchMyProfileSection(section) {
     const showReviews = key === 'reviews';
     const showCourses = key === 'courses';
 
+    try {
+        localStorage.setItem(MY_PROFILE_LAST_TAB_STORAGE_KEY, showCourses ? 'courses' : showReviews ? 'reviews' : 'listings');
+    } catch (e) {
+        null;
+    }
+
     listingsTab.classList.toggle('active', showListings);
     reviewsTab.classList.toggle('active', showReviews);
     coursesTab.classList.toggle('active', showCourses);
@@ -13412,6 +13419,12 @@ function showSection(sectionId) {
         clearSellerProfileRouteTag();
         renderMyListings();
         renderMyProfileReviews();
+        try {
+            const savedTab = (localStorage.getItem(MY_PROFILE_LAST_TAB_STORAGE_KEY) || '').trim().toLowerCase();
+            if (savedTab) void switchMyProfileSection(savedTab);
+        } catch (e) {
+            null;
+        }
     } else if (sectionId === 'messages-section') {
         clearSellerProfileRouteTag();
         if (suppressNextMessagesBootstrap) {
@@ -17035,6 +17048,11 @@ function navigateBackFromCourse() {
     setCourseRouteParam('', { replace: true });
     showSection(from === 'course-section' ? 'profile-section' : from);
     if (from === 'profile-section') {
+        try {
+            localStorage.setItem(MY_PROFILE_LAST_TAB_STORAGE_KEY, 'courses');
+        } catch (e) {
+            null;
+        }
         try {
             switchMyProfileSection('courses');
         } catch (e) {
