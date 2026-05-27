@@ -6206,8 +6206,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const listingParam = params.get('listing');
     const editParam = params.get('edit');
     const newListingParam = params.get('new');
+    const courseParam = params.get('course');
     const listingIdFromUrl = Number(listingParam) || 0;
     const editIdFromUrl = Number(editParam) || 0;
+    const courseIdFromUrl = String(courseParam || '').trim();
 
     if (listingsGrid && (!Array.isArray(listings) || listings.length === 0)) {
         homeInitialListingsLoading = true;
@@ -6220,6 +6222,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (pagination) pagination.innerHTML = '';
         updateLoadMoreListingsUI();
         renderVipVideoSection();
+    }
+
+    if (courseIdFromUrl) {
+        activeCourseId = courseIdFromUrl;
+        activeCourseFromSection = 'profile-section';
+        showSection('course-section');
     }
     if (!listingsLoadMoreBound) {
         listingsLoadMoreBound = true;
@@ -16291,11 +16299,41 @@ let activeCourseLastLessonId = null;
 let activeCourseProgressFlushTimer = null;
 let activeCourseProgressInFlight = false;
 let activeCourseProgressQueued = null;
+let activeCourseEditId = null;
+let activeCourseEditModuleId = null;
+let activeCourseEditLessonId = null;
+
+function setCourseRouteParam(courseId, { replace = false } = {}) {
+    try {
+        const url = new URL(window.location.href);
+        if (courseId) {
+            url.searchParams.set('course', String(courseId));
+        } else {
+            url.searchParams.delete('course');
+        }
+        if (replace) {
+            history.replaceState(history.state || null, '', url.pathname + url.search);
+        } else {
+            history.pushState(history.state || null, '', url.pathname + url.search);
+        }
+    } catch (e) {
+        null;
+    }
+}
 
 function navigateBackFromCourse() {
     const from = String(activeCourseFromSection || '').trim() || 'profile-section';
     activeCourseFromSection = 'profile-section';
+    activeCourseId = null;
+    setCourseRouteParam('', { replace: true });
     showSection(from === 'course-section' ? 'profile-section' : from);
+    if (from === 'profile-section') {
+        try {
+            switchMyProfileSection('courses');
+        } catch (e) {
+            null;
+        }
+    }
 }
 
 function openCourse(courseId, { fromSection = null } = {}) {
@@ -16303,44 +16341,172 @@ function openCourse(courseId, { fromSection = null } = {}) {
     if (!id) return;
     activeCourseId = id;
     activeCourseFromSection = fromSection || getActiveSectionId() || 'profile-section';
+    setCourseRouteParam(id, { replace: false });
     showSection('course-section');
+}
+
+async function requestCourseAccess(ownerTag, courseTitle) {
+    if (!requireAuthOrPrompt()) return;
+    const tag = String(ownerTag || '').trim();
+    if (!tag) {
+        showToast('Course owner not found', 'alert-circle');
+        return;
+    }
+    const title = String(courseTitle || 'Course').trim() || 'Course';
+    await startChatWithSeller(tag.startsWith('@') ? tag : '@' + tag);
+    setTimeout(() => {
+        const input = document.getElementById('chatInput');
+        if (!input) return;
+        const email = String(currentSupabaseUserEmail || '').trim();
+        input.value = `Hi! I’d like access to your course "${title}". My email: ${email}`;
+        try {
+            input.focus();
+        } catch (e) {
+            null;
+        }
+    }, 200);
 }
 
 function openCreateCourseModal() {
     if (!requireAuthOrPrompt()) return;
+    activeCourseEditId = null;
     const title = document.getElementById('createCourseTitle');
     const desc = document.getElementById('createCourseDescription');
     const thumb = document.getElementById('createCourseThumbnailFile');
     const vsl = document.getElementById('createCourseVslFile');
     const pub = document.getElementById('createCoursePublished');
+    const modalTitle = document.getElementById('createCourseModalTitle');
+    const submitBtn = document.getElementById('createCourseSubmitBtn');
     if (title) title.value = '';
     if (desc) desc.value = '';
     if (thumb) thumb.value = '';
     if (vsl) vsl.value = '';
     if (pub) pub.checked = false;
+    if (modalTitle) modalTitle.textContent = 'Create course';
+    if (submitBtn) submitBtn.textContent = 'Create';
+    openModal('createCourseModal');
+    lucide.createIcons();
+}
+
+async function openEditCourseModal(courseId) {
+    if (!requireAuthOrPrompt()) return;
+    const id = String(courseId || '').trim();
+    if (!id) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { data: course, error } = await client.from('courses').select('*').eq('id', id).eq('owner_id', currentSupabaseUserId).maybeSingle();
+    if (error || !course?.id) {
+        showToast(error?.message || 'Course not found', 'alert-circle');
+        return;
+    }
+    activeCourseEditId = String(course.id);
+    const title = document.getElementById('createCourseTitle');
+    const desc = document.getElementById('createCourseDescription');
+    const thumb = document.getElementById('createCourseThumbnailFile');
+    const vsl = document.getElementById('createCourseVslFile');
+    const pub = document.getElementById('createCoursePublished');
+    const modalTitle = document.getElementById('createCourseModalTitle');
+    const submitBtn = document.getElementById('createCourseSubmitBtn');
+    if (title) title.value = String(course.title || '');
+    if (desc) desc.value = String(course.description || '');
+    if (thumb) thumb.value = '';
+    if (vsl) vsl.value = '';
+    if (pub) pub.checked = !!course.is_published;
+    if (modalTitle) modalTitle.textContent = 'Edit course';
+    if (submitBtn) submitBtn.textContent = 'Save';
     openModal('createCourseModal');
     lucide.createIcons();
 }
 
 function openCreateCourseModuleModal(courseId) {
     if (!requireAuthOrPrompt()) return;
+    activeCourseEditModuleId = null;
     activeCourseCreateModuleCourseId = String(courseId || '').trim() || null;
     const input = document.getElementById('createCourseModuleTitle');
+    const modalTitle = document.getElementById('createCourseModuleModalTitle');
+    const submitBtn = document.getElementById('createCourseModuleSubmitBtn');
     if (input) input.value = '';
+    if (modalTitle) modalTitle.textContent = 'Add module';
+    if (submitBtn) submitBtn.textContent = 'Add';
+    openModal('createCourseModuleModal');
+    lucide.createIcons();
+}
+
+async function openEditCourseModuleModal(courseId, moduleId) {
+    if (!requireAuthOrPrompt()) return;
+    const cid = String(courseId || '').trim();
+    const mid = String(moduleId || '').trim();
+    if (!cid || !mid) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { data: mod, error } = await client.from('course_modules').select('*').eq('id', mid).eq('course_id', cid).maybeSingle();
+    if (error || !mod?.id) {
+        showToast(error?.message || 'Module not found', 'alert-circle');
+        return;
+    }
+    activeCourseCreateModuleCourseId = cid;
+    activeCourseEditModuleId = String(mod.id);
+    const input = document.getElementById('createCourseModuleTitle');
+    const modalTitle = document.getElementById('createCourseModuleModalTitle');
+    const submitBtn = document.getElementById('createCourseModuleSubmitBtn');
+    if (input) input.value = String(mod.title || '');
+    if (modalTitle) modalTitle.textContent = 'Edit module';
+    if (submitBtn) submitBtn.textContent = 'Save';
     openModal('createCourseModuleModal');
     lucide.createIcons();
 }
 
 function openCreateCourseLessonModal(courseId, moduleId) {
     if (!requireAuthOrPrompt()) return;
+    activeCourseEditLessonId = null;
     activeCourseCreateLessonCourseId = String(courseId || '').trim() || null;
     activeCourseCreateLessonModuleId = String(moduleId || '').trim() || null;
     const title = document.getElementById('createCourseLessonTitle');
     const file = document.getElementById('createCourseLessonVideoFile');
     const preview = document.getElementById('createCourseLessonPreview');
+    const modalTitle = document.getElementById('createCourseLessonModalTitle');
+    const submitBtn = document.getElementById('createCourseLessonSubmitBtn');
     if (title) title.value = '';
     if (file) file.value = '';
     if (preview) preview.checked = false;
+    if (modalTitle) modalTitle.textContent = 'Add lesson';
+    if (submitBtn) submitBtn.textContent = 'Add';
+    openModal('createCourseLessonModal');
+    lucide.createIcons();
+}
+
+async function openEditCourseLessonModal(courseId, moduleId, lessonId) {
+    if (!requireAuthOrPrompt()) return;
+    const cid = String(courseId || '').trim();
+    const mid = String(moduleId || '').trim();
+    const lid = String(lessonId || '').trim();
+    if (!cid || !mid || !lid) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { data: lesson, error } = await client
+        .from('course_lessons')
+        .select('*')
+        .eq('id', lid)
+        .eq('course_id', cid)
+        .eq('module_id', mid)
+        .maybeSingle();
+    if (error || !lesson?.id) {
+        showToast(error?.message || 'Lesson not found', 'alert-circle');
+        return;
+    }
+    activeCourseCreateLessonCourseId = cid;
+    activeCourseCreateLessonModuleId = mid;
+    activeCourseEditLessonId = String(lesson.id);
+    const title = document.getElementById('createCourseLessonTitle');
+    const file = document.getElementById('createCourseLessonVideoFile');
+    const preview = document.getElementById('createCourseLessonPreview');
+    const modalTitle = document.getElementById('createCourseLessonModalTitle');
+    const submitBtn = document.getElementById('createCourseLessonSubmitBtn');
+    if (title) title.value = String(lesson.title || '');
+    if (file) file.value = '';
+    if (preview) preview.checked = !!lesson.is_preview;
+    if (modalTitle) modalTitle.textContent = 'Edit lesson';
+    if (submitBtn) submitBtn.textContent = 'Save';
     openModal('createCourseLessonModal');
     lucide.createIcons();
 }
@@ -16420,7 +16586,7 @@ async function uploadFileToSignedUrl(signedUrl, file) {
     });
 }
 
-async function createCourseFromModal() {
+async function saveCourseFromModal() {
     if (!requireAuthOrPrompt()) return;
     const client = initSupabase();
     if (!client) return;
@@ -16439,19 +16605,38 @@ async function createCourseFromModal() {
         return;
     }
 
-    const { data: courseRow, error } = await client
-        .from('courses')
-        .insert({
-            owner_id: currentSupabaseUserId,
-            title,
-            description,
-            is_published
-        })
-        .select('*')
-        .single();
+    const editingId = String(activeCourseEditId || '').trim();
+    const isEdit = !!editingId;
+    let courseRow = null;
+    let error = null;
+
+    if (isEdit) {
+        const res = await client
+            .from('courses')
+            .update({ title, description, is_published })
+            .eq('id', editingId)
+            .eq('owner_id', currentSupabaseUserId)
+            .select('*')
+            .single();
+        courseRow = res.data;
+        error = res.error;
+    } else {
+        const res = await client
+            .from('courses')
+            .insert({
+                owner_id: currentSupabaseUserId,
+                title,
+                description,
+                is_published
+            })
+            .select('*')
+            .single();
+        courseRow = res.data;
+        error = res.error;
+    }
 
     if (error || !courseRow?.id) {
-        showToast(error?.message || 'Failed to create course', 'alert-circle');
+        showToast(error?.message || (isEdit ? 'Failed to update course' : 'Failed to create course'), 'alert-circle');
         return;
     }
 
@@ -16500,12 +16685,13 @@ async function createCourseFromModal() {
     }
 
     closeModal('createCourseModal');
-    showToast('Course created', 'check-circle');
+    showToast(isEdit ? 'Course updated' : 'Course created', 'check-circle');
+    activeCourseEditId = null;
     await renderMyProfileCoursesPanel();
     openCourse(courseId, { fromSection: 'profile-section' });
 }
 
-async function createCourseModuleFromModal() {
+async function saveCourseModuleFromModal() {
     if (!requireAuthOrPrompt()) return;
     const client = initSupabase();
     if (!client) return;
@@ -16517,20 +16703,30 @@ async function createCourseModuleFromModal() {
         showToast('Module title is required', 'alert-circle');
         return;
     }
-    const { data: existing } = await client.from('course_modules').select('position').eq('course_id', courseId).order('position', { ascending: false }).limit(1);
-    const nextPos = (existing?.[0]?.position ?? -1) + 1;
-    const { error } = await client.from('course_modules').insert({ course_id: courseId, title, position: nextPos });
-    if (error) {
-        showToast(error.message || 'Failed to add module', 'alert-circle');
-        return;
+    const editingId = String(activeCourseEditModuleId || '').trim();
+    if (editingId) {
+        const { error } = await client.from('course_modules').update({ title }).eq('id', editingId).eq('course_id', courseId);
+        if (error) {
+            showToast(error.message || 'Failed to update module', 'alert-circle');
+            return;
+        }
+    } else {
+        const { data: existing } = await client.from('course_modules').select('position').eq('course_id', courseId).order('position', { ascending: false }).limit(1);
+        const nextPos = (existing?.[0]?.position ?? -1) + 1;
+        const { error } = await client.from('course_modules').insert({ course_id: courseId, title, position: nextPos });
+        if (error) {
+            showToast(error.message || 'Failed to add module', 'alert-circle');
+            return;
+        }
     }
     closeModal('createCourseModuleModal');
-    showToast('Module added', 'check-circle');
+    showToast(editingId ? 'Module updated' : 'Module added', 'check-circle');
+    activeCourseEditModuleId = null;
     await renderCourseSection();
     await renderMyProfileCoursesPanel();
 }
 
-async function createCourseLessonFromModal() {
+async function saveCourseLessonFromModal() {
     if (!requireAuthOrPrompt()) return;
     const client = initSupabase();
     if (!client) return;
@@ -16547,60 +16743,93 @@ async function createCourseLessonFromModal() {
         showToast('Lesson title is required', 'alert-circle');
         return;
     }
-    if (!file) {
-        showToast('Video file is required', 'alert-circle');
-        return;
+    const editingId = String(activeCourseEditLessonId || '').trim();
+    let lessonId = '';
+    if (editingId) {
+        const { error } = await client
+            .from('course_lessons')
+            .update({ title, is_preview })
+            .eq('id', editingId)
+            .eq('course_id', courseId)
+            .eq('module_id', moduleId);
+        if (error) {
+            showToast(error.message || 'Failed to update lesson', 'alert-circle');
+            return;
+        }
+        lessonId = editingId;
+    } else {
+        if (!file) {
+            showToast('Video file is required', 'alert-circle');
+            return;
+        }
+        const { data: existing } = await client.from('course_lessons').select('position').eq('module_id', moduleId).order('position', { ascending: false }).limit(1);
+        const nextPos = (existing?.[0]?.position ?? -1) + 1;
+        const { data: lessonRow, error } = await client
+            .from('course_lessons')
+            .insert({
+                course_id: courseId,
+                module_id: moduleId,
+                title,
+                position: nextPos,
+                duration_seconds: 0,
+                is_preview
+            })
+            .select('*')
+            .single();
+        if (error || !lessonRow?.id) {
+            showToast(error?.message || 'Failed to create lesson', 'alert-circle');
+            return;
+        }
+        lessonId = String(lessonRow.id);
     }
-    const { data: existing } = await client.from('course_lessons').select('position').eq('module_id', moduleId).order('position', { ascending: false }).limit(1);
-    const nextPos = (existing?.[0]?.position ?? -1) + 1;
-    const { data: lessonRow, error } = await client
-        .from('course_lessons')
-        .insert({
-            course_id: courseId,
-            module_id: moduleId,
-            title,
-            position: nextPos,
-            duration_seconds: 0,
-            is_preview
-        })
-        .select('*')
-        .single();
-    if (error || !lessonRow?.id) {
-        showToast(error?.message || 'Failed to create lesson', 'alert-circle');
-        return;
-    }
-    const lessonId = String(lessonRow.id);
-    const signed = await courseAuthedFetch('course-owner-upload-url', {
-        courseId,
-        kind: 'lesson',
-        lessonId,
-        filename: safeStorageFilename(file.name || 'lesson.mp4'),
-        contentType: file.type || 'video/mp4'
-    });
-    if (signed?.error || !signed?.signedUrl || !signed?.path) {
-        showToast(signed?.error || 'Failed to prepare video upload', 'alert-circle');
-        return;
-    }
-    showToast('Uploading video...', 'loader');
-    const up = await uploadFileToSignedUrl(signed.signedUrl, file);
-    if (up?.error) {
-        showToast(up.error || 'Upload failed', 'alert-circle');
-        return;
-    }
-    const { error: mediaErr } = await client
-        .from('course_lesson_media')
-        .upsert({
-            lesson_id: lessonId,
-            video_bucket: COURSE_VIDEOS_BUCKET,
-            video_object_path: String(signed.path || '').trim()
+
+    if (file) {
+        const signed = await courseAuthedFetch('course-owner-upload-url', {
+            courseId,
+            kind: 'lesson',
+            lessonId,
+            filename: safeStorageFilename(file.name || 'lesson.mp4'),
+            contentType: file.type || 'video/mp4'
         });
-    if (mediaErr) {
-        showToast(mediaErr.message || 'Failed to save lesson video', 'alert-circle');
-        return;
+        if (signed?.error || !signed?.signedUrl || !signed?.path) {
+            showToast(signed?.error || 'Failed to prepare video upload', 'alert-circle');
+            return;
+        }
+        showToast('Uploading video...', 'loader');
+        const up = await uploadFileToSignedUrl(signed.signedUrl, file);
+        if (up?.error) {
+            showToast(up.error || 'Upload failed', 'alert-circle');
+            return;
+        }
+        const { error: mediaErr } = await client
+            .from('course_lesson_media')
+            .upsert({
+                lesson_id: lessonId,
+                video_bucket: COURSE_VIDEOS_BUCKET,
+                video_object_path: String(signed.path || '').trim()
+            });
+        if (mediaErr) {
+            showToast(mediaErr.message || 'Failed to save lesson video', 'alert-circle');
+            return;
+        }
     }
+
     closeModal('createCourseLessonModal');
-    showToast('Lesson added', 'check-circle');
+    showToast(editingId ? 'Lesson updated' : 'Lesson added', 'check-circle');
+    activeCourseEditLessonId = null;
     await renderCourseSection();
+}
+
+async function createCourseFromModal() {
+    return saveCourseFromModal();
+}
+
+async function createCourseModuleFromModal() {
+    return saveCourseModuleFromModal();
+}
+
+async function createCourseLessonFromModal() {
+    return saveCourseLessonFromModal();
 }
 
 async function inviteCourseStudentFromModal() {
@@ -16644,6 +16873,117 @@ async function acceptCourseInvite(inviteId) {
     }
     showToast('Access granted', 'check-circle');
     await renderMyProfileCoursesPanel();
+}
+
+async function deleteCourse(courseId) {
+    if (!requireAuthOrPrompt()) return;
+    const id = String(courseId || '').trim();
+    if (!id) return;
+    showConfirmModal('Delete course', 'This will remove the course and its modules/lessons from your dashboard.', async () => {
+        const client = initSupabase();
+        if (!client) return;
+        const { error } = await client.from('courses').delete().eq('id', id).eq('owner_id', currentSupabaseUserId);
+        if (error) {
+            showToast(error.message || 'Failed to delete course', 'alert-circle');
+            return;
+        }
+        showToast('Course deleted', 'check-circle');
+        if (String(activeCourseId || '') === id) navigateBackFromCourse();
+        await renderMyProfileCoursesPanel();
+    }, true, 'Delete', 'Cancel');
+}
+
+async function deleteCourseModule(courseId, moduleId) {
+    if (!requireAuthOrPrompt()) return;
+    const cid = String(courseId || '').trim();
+    const mid = String(moduleId || '').trim();
+    if (!cid || !mid) return;
+    showConfirmModal('Delete module', 'Lessons in this module will also be removed from the course page.', async () => {
+        const client = initSupabase();
+        if (!client) return;
+        const { error } = await client.from('course_modules').delete().eq('id', mid).eq('course_id', cid);
+        if (error) {
+            showToast(error.message || 'Failed to delete module', 'alert-circle');
+            return;
+        }
+        showToast('Module deleted', 'check-circle');
+        await renderCourseSection();
+    }, true, 'Delete', 'Cancel');
+}
+
+async function deleteCourseLesson(courseId, moduleId, lessonId) {
+    if (!requireAuthOrPrompt()) return;
+    const cid = String(courseId || '').trim();
+    const mid = String(moduleId || '').trim();
+    const lid = String(lessonId || '').trim();
+    if (!cid || !mid || !lid) return;
+    showConfirmModal('Delete lesson', 'This lesson will be removed from the course.', async () => {
+        const client = initSupabase();
+        if (!client) return;
+        const { error } = await client.from('course_lessons').delete().eq('id', lid).eq('course_id', cid).eq('module_id', mid);
+        if (error) {
+            showToast(error.message || 'Failed to delete lesson', 'alert-circle');
+            return;
+        }
+        showToast('Lesson deleted', 'check-circle');
+        await renderCourseSection();
+    }, true, 'Delete', 'Cancel');
+}
+
+async function moveCourseModule(courseId, moduleId, direction) {
+    if (!requireAuthOrPrompt()) return;
+    const cid = String(courseId || '').trim();
+    const mid = String(moduleId || '').trim();
+    const dir = direction === 'up' ? 'up' : 'down';
+    if (!cid || !mid) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { data: mod } = await client.from('course_modules').select('id, position').eq('id', mid).eq('course_id', cid).maybeSingle();
+    if (!mod?.id) return;
+    const pos = Number(mod.position ?? 0);
+    const neighborQuery = client
+        .from('course_modules')
+        .select('id, position')
+        .eq('course_id', cid)
+        .neq('id', mid)
+        .order('position', { ascending: dir === 'up' ? false : true })
+        .limit(1);
+    const { data: neighbor } =
+        dir === 'up' ? await neighborQuery.lt('position', pos) : await neighborQuery.gt('position', pos);
+    const n = Array.isArray(neighbor) ? neighbor[0] : null;
+    if (!n?.id) return;
+    await client.from('course_modules').update({ position: n.position }).eq('id', mid).eq('course_id', cid);
+    await client.from('course_modules').update({ position: pos }).eq('id', n.id).eq('course_id', cid);
+    await renderCourseSection();
+}
+
+async function moveCourseLesson(courseId, moduleId, lessonId, direction) {
+    if (!requireAuthOrPrompt()) return;
+    const cid = String(courseId || '').trim();
+    const mid = String(moduleId || '').trim();
+    const lid = String(lessonId || '').trim();
+    const dir = direction === 'up' ? 'up' : 'down';
+    if (!cid || !mid || !lid) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { data: lesson } = await client.from('course_lessons').select('id, position').eq('id', lid).eq('course_id', cid).eq('module_id', mid).maybeSingle();
+    if (!lesson?.id) return;
+    const pos = Number(lesson.position ?? 0);
+    const neighborQuery = client
+        .from('course_lessons')
+        .select('id, position')
+        .eq('course_id', cid)
+        .eq('module_id', mid)
+        .neq('id', lid)
+        .order('position', { ascending: dir === 'up' ? false : true })
+        .limit(1);
+    const { data: neighbor } =
+        dir === 'up' ? await neighborQuery.lt('position', pos) : await neighborQuery.gt('position', pos);
+    const n = Array.isArray(neighbor) ? neighbor[0] : null;
+    if (!n?.id) return;
+    await client.from('course_lessons').update({ position: n.position }).eq('id', lid).eq('course_id', cid).eq('module_id', mid);
+    await client.from('course_lessons').update({ position: pos }).eq('id', n.id).eq('course_id', cid).eq('module_id', mid);
+    await renderCourseSection();
 }
 
 async function renderMyProfileCoursesPanel() {
@@ -16733,7 +17073,9 @@ async function renderMyProfileCoursesPanel() {
                         </div>
                         <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
                             <button class="admin-action-btn" type="button" onclick="openCourse('${String(c?.id)}', { fromSection: 'profile-section' })">Open</button>
+                            <button class="admin-action-btn" type="button" onclick="openEditCourseModal('${String(c?.id)}')">Edit</button>
                             <button class="admin-action-btn" type="button" onclick="openInviteCourseStudentModal('${String(c?.id)}')">Invite</button>
+                            <button class="admin-action-btn danger" type="button" onclick="deleteCourse('${String(c?.id)}')">Delete</button>
                         </div>
                     </div>
                 `;
@@ -16776,6 +17118,16 @@ async function renderOwnerCourseInvitesList() {
 async function renderCourseSection() {
     if (!isLoggedIn()) return;
     const courseId = String(activeCourseId || '').trim();
+    if (!courseId) {
+        showToast('Select a course first', 'alert-circle');
+        showSection('profile-section');
+        try {
+            switchMyProfileSection('courses');
+        } catch (e) {
+            null;
+        }
+        return;
+    }
     const titleEl = document.getElementById('courseTitle');
     const ownerEl = document.getElementById('courseOwner');
     const descEl = document.getElementById('courseDescription');
@@ -16836,12 +17188,13 @@ async function renderCourseSection() {
 
     const { data: course, error: courseErr } = await client
         .from('courses')
-        .select('id, title, description, thumbnail_object_path, vsl_object_path, is_published, owner_id')
+        .select('*')
         .eq('id', courseId)
         .maybeSingle();
 
     if (courseErr || !course?.id) {
-        modulesList.innerHTML = '<div class="muted">Course not found.</div>';
+        showToast(courseErr?.message || 'Course not found', 'alert-circle');
+        navigateBackFromCourse();
         return;
     }
 
@@ -16885,6 +17238,7 @@ async function renderCourseSection() {
         }
     }
 
+    const ownerTag = String(ownerProfile?.data?.tag || '').trim();
     const accessBits = [];
     if (isOwner) {
         accessBits.push(`<span class="admin-badge ok">OWNER</span>`);
@@ -16895,7 +17249,9 @@ async function renderCourseSection() {
         accessBits.push(`<span class="admin-badge ok">STUDENT ACCESS</span>`);
     } else {
         accessBits.push(`<span class="admin-badge pending">NO ACCESS</span>`);
-        accessBits.push(`<button class="admin-action-btn" type="button" onclick="showToast('Ask the owner to invite your email: ${escapeHtml(String(currentSupabaseUserEmail || ''))}', 'info')">How to get access</button>`);
+        accessBits.push(
+            `<button class="admin-action-btn" type="button" onclick="requestCourseAccess('${escapeHtml(ownerTag)}', '${escapeHtml(String(course.title || 'Course'))}')">How to get access</button>`
+        );
     }
     accessRow.innerHTML = accessBits.join(' ');
 
@@ -16922,13 +17278,23 @@ async function renderCourseSection() {
         };
     } else {
         primaryBtn.textContent = 'Request access';
-        primaryBtn.onclick = () => showToast(`Ask the owner to invite your email: ${String(currentSupabaseUserEmail || '').trim()}`, 'info');
+        primaryBtn.onclick = () => requestCourseAccess(ownerTag, String(course.title || 'Course'));
     }
 
+    const createdAt = course.created_at ? new Date(String(course.created_at)) : null;
+    const updatedAt = course.updated_at ? new Date(String(course.updated_at)) : null;
+    const lastDate = updatedAt && !Number.isNaN(updatedAt.getTime()) ? updatedAt : createdAt;
+    const lastStr = lastDate && !Number.isNaN(lastDate.getTime()) ? lastDate.toLocaleDateString() : '';
+    const levelStr = String(course.level || '').trim();
+    const langStr = String(course.language || '').trim();
+    const pubStr = course.is_published ? 'Published' : 'Draft';
+
     metaEl.innerHTML = `
-        <div class="course-meta-item"><i data-lucide="signal"></i><span>Invite-based access</span></div>
-        <div class="course-meta-item"><i data-lucide="clock"></i><span>Lessons update over time</span></div>
-        <div class="course-meta-item"><i data-lucide="shield"></i><span>${course.is_published ? 'Published' : 'Draft'}</span></div>
+        ${levelStr ? `<div class="course-meta-item"><i data-lucide="bar-chart-3"></i><span>${escapeHtml(levelStr)}</span></div>` : ''}
+        ${langStr ? `<div class="course-meta-item"><i data-lucide="languages"></i><span>${escapeHtml(langStr)}</span></div>` : ''}
+        ${lastStr ? `<div class="course-meta-item"><i data-lucide="calendar"></i><span>Updated ${escapeHtml(lastStr)}</span></div>` : ''}
+        <div class="course-meta-item"><i data-lucide="shield"></i><span>${escapeHtml(pubStr)}</span></div>
+        <div class="course-meta-item"><i data-lucide="lock"></i><span>${canAccessLessons ? 'Access granted' : 'Invite-only access'}</span></div>
     `;
 
     if (!canAccessLessons) {
@@ -16994,6 +17360,16 @@ async function renderCourseSection() {
         lessonsByModule[mid].sort((a, b) => Number(a.position) - Number(b.position));
     });
 
+    const totalDurationSeconds = lessons.reduce((sum, l) => sum + (Number(l.duration_seconds) || 0), 0);
+    const totalLessons = lessons.length;
+    const totalModules = modules.length;
+    const durationStr = totalDurationSeconds > 0 ? formatTime(totalDurationSeconds) : '';
+    const metaBits = [];
+    if (totalModules) metaBits.push(`<div class="course-meta-item"><i data-lucide="layers"></i><span>${totalModules} modules</span></div>`);
+    if (totalLessons) metaBits.push(`<div class="course-meta-item"><i data-lucide="list-video"></i><span>${totalLessons} lessons</span></div>`);
+    if (durationStr) metaBits.push(`<div class="course-meta-item"><i data-lucide="clock"></i><span>${escapeHtml(durationStr)} total</span></div>`);
+    if (metaBits.length) metaEl.innerHTML = metaBits.join('') + metaEl.innerHTML;
+
     modulesList.innerHTML = modules.length
         ? modules
               .map((m, idx) => {
@@ -17007,14 +17383,22 @@ async function renderCourseSection() {
                                 const p = progressByLesson[lid] || {};
                                 const done = !!p.completed;
                                 const icon = done ? 'check-circle' : 'play-circle';
-                                const label = done ? 'Completed' : 'Lesson';
+                                const label = done ? 'Completed' : !!l.is_preview ? 'Preview' : 'Lesson';
                                 const duration = Number(l.duration_seconds) || 0;
                                 const durText = duration > 0 ? formatTime(duration) : '';
                                 const accessible = canAccessLessons || !!l.is_preview;
                                 const lockIcon = accessible ? '' : `<span class="course-lesson-lock"><i data-lucide="lock"></i></span>`;
-                                const right = `<div class="course-lesson-right">${durText ? `<span class="course-lesson-duration">${durText}</span>` : ''}${lockIcon}</div>`;
+                                const ownerActions = isOwner
+                                    ? `<div class="course-lesson-owner-actions">
+                                            <button class="icon-btn" type="button" onclick="event.stopPropagation(); moveCourseLesson('${courseId}','${mid}','${lid}','up')" title="Move up"><i data-lucide="chevron-up"></i></button>
+                                            <button class="icon-btn" type="button" onclick="event.stopPropagation(); moveCourseLesson('${courseId}','${mid}','${lid}','down')" title="Move down"><i data-lucide="chevron-down"></i></button>
+                                            <button class="icon-btn" type="button" onclick="event.stopPropagation(); openEditCourseLessonModal('${courseId}','${mid}','${lid}')" title="Edit"><i data-lucide="pencil"></i></button>
+                                            <button class="icon-btn danger" type="button" onclick="event.stopPropagation(); deleteCourseLesson('${courseId}','${mid}','${lid}')" title="Delete"><i data-lucide="trash-2"></i></button>
+                                        </div>`
+                                    : '';
+                                const right = `<div class="course-lesson-right">${durText ? `<span class="course-lesson-duration">${durText}</span>` : ''}${lockIcon}${ownerActions}</div>`;
                                 return `
-                                    <div class="course-lesson-item ${accessible ? 'course-lesson-accessible' : ''}" onclick="${accessible ? `playCourseLesson('${lid}')` : `showToast('This lesson is locked. Request access to join the course.', 'lock')`}">
+                                    <div class="course-lesson-item ${accessible ? 'course-lesson-accessible' : ''}" onclick="${accessible ? `playCourseLesson('${lid}')` : `requestCourseAccess('${escapeHtml(ownerTag)}', '${escapeHtml(String(course.title || 'Course'))}')`}">
                                         <div class="course-lesson-left">
                                             <i data-lucide="${icon}"></i>
                                             <div style="min-width:0;">
@@ -17029,7 +17413,13 @@ async function renderCourseSection() {
                             .join('')}</div>`
                       : '<div class="muted" style="padding: 10px 12px;">No lessons yet.</div>';
                   const ownerBtn = isOwner
-                      ? `<button class="admin-action-btn" type="button" onclick="event.stopPropagation(); openCreateCourseLessonModal('${courseId}','${mid}')">Add lesson</button>`
+                      ? `<div class="course-module-owner-actions">
+                            <button class="icon-btn" type="button" onclick="event.stopPropagation(); moveCourseModule('${courseId}','${mid}','up')" title="Move up"><i data-lucide="chevron-up"></i></button>
+                            <button class="icon-btn" type="button" onclick="event.stopPropagation(); moveCourseModule('${courseId}','${mid}','down')" title="Move down"><i data-lucide="chevron-down"></i></button>
+                            <button class="icon-btn" type="button" onclick="event.stopPropagation(); openEditCourseModuleModal('${courseId}','${mid}')" title="Edit"><i data-lucide="pencil"></i></button>
+                            <button class="icon-btn danger" type="button" onclick="event.stopPropagation(); deleteCourseModule('${courseId}','${mid}')" title="Delete"><i data-lucide="trash-2"></i></button>
+                            <button class="admin-action-btn" type="button" onclick="event.stopPropagation(); openCreateCourseLessonModal('${courseId}','${mid}')">Add lesson</button>
+                        </div>`
                       : '';
                   return `
                     <div class="course-module ${expanded ? '' : 'collapsed'}">

@@ -8494,6 +8494,30 @@ footer {
     gap: 10px;
 }
 
+.course-module-owner-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.course-module-owner-actions .admin-action-btn {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+}
+
+.course-module-owner-actions .icon-btn {
+    padding: 6px;
+}
+
+.icon-btn.danger {
+    color: #d64545;
+}
+
+.icon-btn.danger:hover {
+    background: rgba(214, 69, 69, 0.12);
+}
+
 .course-module-chevron {
     display: inline-flex;
     align-items: center;
@@ -8520,6 +8544,18 @@ footer {
     color: var(--text-muted);
     font-weight: 800;
     font-size: 0.9rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.course-lesson-owner-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.course-lesson-owner-actions .icon-btn {
+    padding: 6px;
 }
 
 .course-lesson-duration {

@@ -1973,7 +1973,7 @@
     <div id="createCourseModal" class="modal">
         <div class="modal-content" style="max-width: 520px;">
             <span class="close" onclick="closeModal('createCourseModal')">&times;</span>
-            <h2 style="margin-bottom: 14px;">Create course</h2>
+            <h2 id="createCourseModalTitle" style="margin-bottom: 14px;">Create course</h2>
             <div class="form-group">
                 <label>Title</label>
                 <input type="text" id="createCourseTitle" placeholder="Course title" autocomplete="off">
@@ -1994,26 +1994,26 @@
                 <input type="checkbox" id="createCoursePublished">
                 <label for="createCoursePublished" style="margin:0;">Publish course page</label>
             </div>
-            <button class="submit-btn" type="button" onclick="createCourseFromModal()">Create</button>
+            <button class="submit-btn" id="createCourseSubmitBtn" type="button" onclick="saveCourseFromModal()">Create</button>
         </div>
     </div>
 
     <div id="createCourseModuleModal" class="modal">
         <div class="modal-content" style="max-width: 460px;">
             <span class="close" onclick="closeModal('createCourseModuleModal')">&times;</span>
-            <h2 style="margin-bottom: 14px;">Add module</h2>
+            <h2 id="createCourseModuleModalTitle" style="margin-bottom: 14px;">Add module</h2>
             <div class="form-group">
                 <label>Module title</label>
                 <input type="text" id="createCourseModuleTitle" placeholder="Module title" autocomplete="off">
             </div>
-            <button class="submit-btn" type="button" onclick="createCourseModuleFromModal()">Add</button>
+            <button class="submit-btn" id="createCourseModuleSubmitBtn" type="button" onclick="saveCourseModuleFromModal()">Add</button>
         </div>
     </div>
 
     <div id="createCourseLessonModal" class="modal">
         <div class="modal-content" style="max-width: 520px;">
             <span class="close" onclick="closeModal('createCourseLessonModal')">&times;</span>
-            <h2 style="margin-bottom: 14px;">Add lesson</h2>
+            <h2 id="createCourseLessonModalTitle" style="margin-bottom: 14px;">Add lesson</h2>
             <div class="form-group">
                 <label>Lesson title</label>
                 <input type="text" id="createCourseLessonTitle" placeholder="Lesson title" autocomplete="off">
@@ -2026,7 +2026,7 @@
                 <input type="checkbox" id="createCourseLessonPreview">
                 <label for="createCourseLessonPreview" style="margin:0;">Preview lesson (public when course is published)</label>
             </div>
-            <button class="submit-btn" type="button" onclick="createCourseLessonFromModal()">Add</button>
+            <button class="submit-btn" id="createCourseLessonSubmitBtn" type="button" onclick="saveCourseLessonFromModal()">Add</button>
         </div>
     </div>
 
