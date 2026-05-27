@@ -6188,6 +6188,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadUserProfileFromStorage();
     }
     setupListingVideoUploader();
+    setupCreateCourseMediaUploader();
     updateListingVideoGroupVisibility();
     populateWilayas();
     populateCategories();
@@ -6668,6 +6669,207 @@ function formatUploadBytes(bytes) {
     if (mb < 1024) return `${mb.toFixed(1)} MB`;
     const gb = mb / 1024;
     return `${gb.toFixed(2)} GB`;
+}
+
+let courseMediaThumbObjectUrl = '';
+let courseMediaUploadActive = false;
+let courseMediaUploadXhr = null;
+let courseMediaUploadCancelHandler = null;
+
+function setCourseMediaUploadOverlay({ visible = false, percent = 0, loaded = 0, total = 0, label = '' } = {}) {
+    const overlay = document.getElementById('courseMediaUploadOverlay');
+    const ring = document.getElementById('courseMediaUploadRing');
+    const percentEl = document.getElementById('courseMediaUploadPercent');
+    const bytesEl = document.getElementById('courseMediaUploadBytes');
+    const labelEl = document.getElementById('courseMediaUploadLabel');
+    if (overlay) overlay.style.display = visible ? '' : 'none';
+    const safeP = Math.max(0, Math.min(100, Number(percent) || 0));
+    if (ring) ring.style.setProperty('--p', String(safeP));
+    if (percentEl) percentEl.textContent = `${Math.round(safeP)}%`;
+    if (bytesEl) bytesEl.textContent = `${formatUploadBytes(loaded)} / ${formatUploadBytes(total)}`;
+    if (labelEl) labelEl.textContent = String(label || 'Uploading…');
+}
+
+function clearCourseMediaUploadState() {
+    courseMediaUploadActive = false;
+    courseMediaUploadXhr = null;
+    courseMediaUploadCancelHandler = null;
+    setCourseMediaUploadOverlay({ visible: false, percent: 0, loaded: 0, total: 0, label: '' });
+    const cancelBtn = document.getElementById('courseMediaUploadCancelBtn');
+    if (cancelBtn) cancelBtn.disabled = false;
+}
+
+function clearCourseMediaThumbPreview() {
+    if (courseMediaThumbObjectUrl) {
+        try { URL.revokeObjectURL(courseMediaThumbObjectUrl); } catch (e) { null; }
+    }
+    courseMediaThumbObjectUrl = '';
+    const wrap = document.getElementById('createCourseThumbPreviewWrap');
+    if (wrap) wrap.style.display = 'none';
+    const img = document.getElementById('createCourseThumbPreview');
+    if (img) img.removeAttribute('src');
+}
+
+async function uploadCourseFileToSignedUrlWithProgress({ signedUrl, file, label = 'Uploading…' } = {}) {
+    const f = file || null;
+    const url = String(signedUrl || '').trim();
+    if (!f || !url) return { error: 'Missing upload url' };
+    if (courseMediaUploadActive) return { error: 'Upload already in progress' };
+
+    courseMediaUploadActive = true;
+    setCourseMediaUploadOverlay({ visible: true, percent: 0, loaded: 0, total: Number(f.size) || 0, label });
+
+    const cancelBtn = document.getElementById('courseMediaUploadCancelBtn');
+    if (cancelBtn) cancelBtn.disabled = false;
+
+    let canceled = false;
+    courseMediaUploadCancelHandler = () => {
+        canceled = true;
+        try { courseMediaUploadXhr?.abort?.(); } catch (e) { null; }
+        clearCourseMediaUploadState();
+    };
+    if (cancelBtn && !cancelBtn.dataset.bound) {
+        cancelBtn.dataset.bound = '1';
+        cancelBtn.addEventListener('click', () => courseMediaUploadCancelHandler?.());
+    }
+
+    const result = await new Promise((resolve) => {
+        let finished = false;
+        const done = (payload) => {
+            if (finished) return;
+            finished = true;
+            clearCourseMediaUploadState();
+            resolve(payload);
+        };
+
+        const xhr = new XMLHttpRequest();
+        courseMediaUploadXhr = xhr;
+
+        xhr.upload.onprogress = (ev) => {
+            const total = Number(ev?.total) || Number(f.size) || 0;
+            const loaded = Number(ev?.loaded) || 0;
+            const pct = total > 0 ? (loaded / total) * 100 : 0;
+            setCourseMediaUploadOverlay({ visible: true, percent: pct, loaded, total, label });
+        };
+        xhr.onerror = () => done({ error: 'Upload failed (network)' });
+        xhr.onabort = () => done({ error: 'Upload canceled' });
+        xhr.onload = () => {
+            const ok = xhr.status >= 200 && xhr.status < 300;
+            if (!ok) {
+                done({ error: String(xhr.responseText || `Upload failed (${xhr.status})`) });
+                return;
+            }
+            setCourseMediaUploadOverlay({ visible: true, percent: 100, loaded: Number(f.size) || 0, total: Number(f.size) || 0, label });
+            done({ ok: true });
+        };
+
+        try {
+            xhr.open('PUT', url, true);
+            xhr.setRequestHeader('content-type', String(f.type || 'application/octet-stream'));
+            xhr.send(f);
+        } catch (e) {
+            done({ error: 'Upload failed' });
+        }
+    });
+
+    if (canceled) return { error: 'Upload canceled' };
+    return result;
+}
+
+function resetCreateCourseMediaUI() {
+    const thumbInput = document.getElementById('createCourseThumbnailFile');
+    const thumbName = document.getElementById('createCourseThumbFileName');
+    const thumbRemove = document.getElementById('createCourseThumbRemoveBtn');
+    const vslInput = document.getElementById('createCourseVslFile');
+    const vslName = document.getElementById('createCourseVslFileName');
+    const vslRemove = document.getElementById('createCourseVslRemoveBtn');
+
+    if (thumbInput) thumbInput.value = '';
+    if (thumbName) thumbName.textContent = 'No file chosen';
+    if (thumbRemove) thumbRemove.style.display = 'none';
+    clearCourseMediaThumbPreview();
+
+    if (vslInput) vslInput.value = '';
+    if (vslName) vslName.textContent = 'No file chosen';
+    if (vslRemove) vslRemove.style.display = 'none';
+
+    clearCourseMediaUploadState();
+}
+
+function setupCreateCourseMediaUploader() {
+    const thumbChoose = document.getElementById('createCourseThumbChooseBtn');
+    const thumbInput = document.getElementById('createCourseThumbnailFile');
+    const thumbName = document.getElementById('createCourseThumbFileName');
+    const thumbRemove = document.getElementById('createCourseThumbRemoveBtn');
+    const thumbWrap = document.getElementById('createCourseThumbPreviewWrap');
+    const thumbPreview = document.getElementById('createCourseThumbPreview');
+
+    if (thumbChoose && thumbInput && !thumbChoose.dataset.bound) {
+        thumbChoose.dataset.bound = '1';
+        thumbChoose.addEventListener('click', () => thumbInput.click());
+    }
+    if (thumbInput && !thumbInput.dataset.bound) {
+        thumbInput.dataset.bound = '1';
+        thumbInput.addEventListener('change', () => {
+            const file = thumbInput.files?.[0] || null;
+            if (!file) {
+                if (thumbName) thumbName.textContent = 'No file chosen';
+                if (thumbRemove) thumbRemove.style.display = 'none';
+                clearCourseMediaThumbPreview();
+                return;
+            }
+            if (thumbName) thumbName.textContent = String(file.name || 'thumbnail');
+            if (thumbRemove) thumbRemove.style.display = '';
+            clearCourseMediaThumbPreview();
+            try {
+                courseMediaThumbObjectUrl = URL.createObjectURL(file);
+                if (thumbPreview) thumbPreview.src = courseMediaThumbObjectUrl;
+                if (thumbWrap) thumbWrap.style.display = '';
+            } catch (e) {
+                clearCourseMediaThumbPreview();
+            }
+        });
+    }
+    if (thumbRemove && thumbInput && !thumbRemove.dataset.bound) {
+        thumbRemove.dataset.bound = '1';
+        thumbRemove.addEventListener('click', () => {
+            thumbInput.value = '';
+            if (thumbName) thumbName.textContent = 'No file chosen';
+            thumbRemove.style.display = 'none';
+            clearCourseMediaThumbPreview();
+        });
+    }
+
+    const vslChoose = document.getElementById('createCourseVslChooseBtn');
+    const vslInput = document.getElementById('createCourseVslFile');
+    const vslName = document.getElementById('createCourseVslFileName');
+    const vslRemove = document.getElementById('createCourseVslRemoveBtn');
+
+    if (vslChoose && vslInput && !vslChoose.dataset.bound) {
+        vslChoose.dataset.bound = '1';
+        vslChoose.addEventListener('click', () => vslInput.click());
+    }
+    if (vslInput && !vslInput.dataset.bound) {
+        vslInput.dataset.bound = '1';
+        vslInput.addEventListener('change', () => {
+            const file = vslInput.files?.[0] || null;
+            if (!file) {
+                if (vslName) vslName.textContent = 'No file chosen';
+                if (vslRemove) vslRemove.style.display = 'none';
+                return;
+            }
+            if (vslName) vslName.textContent = String(file.name || 'video');
+            if (vslRemove) vslRemove.style.display = '';
+        });
+    }
+    if (vslRemove && vslInput && !vslRemove.dataset.bound) {
+        vslRemove.dataset.bound = '1';
+        vslRemove.addEventListener('click', () => {
+            vslInput.value = '';
+            if (vslName) vslName.textContent = 'No file chosen';
+            vslRemove.style.display = 'none';
+        });
+    }
 }
 
 function setListingVideoUploadOverlay({ visible = false, percent = 0, loaded = 0, total = 0 } = {}) {
@@ -16436,15 +16638,12 @@ function openCreateCourseModal() {
     activeCourseEditId = null;
     const title = document.getElementById('createCourseTitle');
     const desc = document.getElementById('createCourseDescription');
-    const thumb = document.getElementById('createCourseThumbnailFile');
-    const vsl = document.getElementById('createCourseVslFile');
     const pub = document.getElementById('createCoursePublished');
     const modalTitle = document.getElementById('createCourseModalTitle');
     const submitBtn = document.getElementById('createCourseSubmitBtn');
     if (title) title.value = '';
     if (desc) desc.value = '';
-    if (thumb) thumb.value = '';
-    if (vsl) vsl.value = '';
+    resetCreateCourseMediaUI();
     if (pub) pub.checked = false;
     if (modalTitle) modalTitle.textContent = 'Create course';
     if (submitBtn) submitBtn.textContent = 'Create';
@@ -16466,15 +16665,12 @@ async function openEditCourseModal(courseId) {
     activeCourseEditId = String(course.id);
     const title = document.getElementById('createCourseTitle');
     const desc = document.getElementById('createCourseDescription');
-    const thumb = document.getElementById('createCourseThumbnailFile');
-    const vsl = document.getElementById('createCourseVslFile');
     const pub = document.getElementById('createCoursePublished');
     const modalTitle = document.getElementById('createCourseModalTitle');
     const submitBtn = document.getElementById('createCourseSubmitBtn');
     if (title) title.value = String(course.title || '');
     if (desc) desc.value = String(course.description || '');
-    if (thumb) thumb.value = '';
-    if (vsl) vsl.value = '';
+    resetCreateCourseMediaUI();
     if (pub) pub.checked = !!course.is_published;
     if (modalTitle) modalTitle.textContent = 'Edit course';
     if (submitBtn) submitBtn.textContent = 'Save';
@@ -16672,6 +16868,17 @@ async function saveCourseFromModal() {
 
     const editingId = String(activeCourseEditId || '').trim();
     const isEdit = !!editingId;
+    const submitBtn = document.getElementById('createCourseSubmitBtn');
+    if (submitBtn && !submitBtn.dataset.defaultText) submitBtn.dataset.defaultText = submitBtn.textContent || '';
+    const restoreSubmit = () => {
+        if (!submitBtn) return;
+        submitBtn.disabled = false;
+        submitBtn.textContent = submitBtn.dataset.defaultText || submitBtn.textContent || '';
+    };
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = isEdit ? 'Saving...' : 'Creating...';
+    }
     let courseRow = null;
     let error = null;
 
@@ -16704,6 +16911,7 @@ async function saveCourseFromModal() {
         const details = error ? [error.code, error.details, error.hint].filter(Boolean).join(' | ') : '';
         const message = error?.message || (isEdit ? 'Failed to update course' : 'Failed to create course');
         showToast(details ? `${message} (${details})` : message, 'alert-circle');
+        restoreSubmit();
         return;
     }
 
@@ -16721,9 +16929,23 @@ async function saveCourseFromModal() {
             filename: safeStorageFilename(thumbFile.name || 'thumb.png'),
             contentType: thumbFile.type || 'image/png'
         });
+        if (signed?.error) {
+            showToast(String(signed.error || 'Failed to get upload url'), 'alert-circle');
+            restoreSubmit();
+            return;
+        }
         if (!signed?.error && signed?.signedUrl && signed?.path) {
-            const up = await uploadFileToSignedUrl(signed.signedUrl, thumbFile);
-            if (!up?.error) thumbPath = String(signed.path || '').trim();
+            const up = await uploadCourseFileToSignedUrlWithProgress({
+                signedUrl: signed.signedUrl,
+                file: thumbFile,
+                label: 'Uploading image…'
+            });
+            if (up?.error) {
+                showToast(String(up.error || 'Upload failed'), 'alert-circle');
+                restoreSubmit();
+                return;
+            }
+            thumbPath = String(signed.path || '').trim();
         }
     }
 
@@ -16734,9 +16956,23 @@ async function saveCourseFromModal() {
             filename: safeStorageFilename(vslFile.name || 'vsl.mp4'),
             contentType: vslFile.type || 'video/mp4'
         });
+        if (signed?.error) {
+            showToast(String(signed.error || 'Failed to get upload url'), 'alert-circle');
+            restoreSubmit();
+            return;
+        }
         if (!signed?.error && signed?.signedUrl && signed?.path) {
-            const up = await uploadFileToSignedUrl(signed.signedUrl, vslFile);
-            if (!up?.error) vslPath = String(signed.path || '').trim();
+            const up = await uploadCourseFileToSignedUrlWithProgress({
+                signedUrl: signed.signedUrl,
+                file: vslFile,
+                label: 'Uploading video…'
+            });
+            if (up?.error) {
+                showToast(String(up.error || 'Upload failed'), 'alert-circle');
+                restoreSubmit();
+                return;
+            }
+            vslPath = String(signed.path || '').trim();
         }
     }
 
@@ -16748,10 +16984,12 @@ async function saveCourseFromModal() {
                 vsl_object_path: vslPath || courseRow.vsl_object_path || ''
             })
             .eq('id', courseId)
-            .eq('owner_id', currentSupabaseUserId);
+            .eq('owner_id', session.user.id);
     }
 
     closeModal('createCourseModal');
+    resetCreateCourseMediaUI();
+    restoreSubmit();
     showToast(isEdit ? 'Course updated' : 'Course created', 'check-circle');
     activeCourseEditId = null;
     await renderMyProfileCoursesPanel();

@@ -1971,7 +1971,7 @@
     </div>
 
     <div id="createCourseModal" class="modal">
-        <div class="modal-content" style="max-width: 520px;">
+        <div class="modal-content" style="max-width: 520px; position: relative;">
             <span class="close" onclick="closeModal('createCourseModal')">&times;</span>
             <h2 id="createCourseModalTitle" style="margin-bottom: 14px;">Create course</h2>
             <div class="form-group">
@@ -1984,17 +1984,42 @@
             </div>
             <div class="form-group">
                 <label>Thumbnail (optional)</label>
-                <input type="file" id="createCourseThumbnailFile" accept="image/*">
+                <div class="listing-video-uploader">
+                    <input type="file" id="createCourseThumbnailFile" hidden accept="image/*">
+                    <button type="button" class="submit-btn small listing-video-choose-btn" id="createCourseThumbChooseBtn">Choose image</button>
+                    <span class="listing-video-filename" id="createCourseThumbFileName">No file chosen</span>
+                    <button type="button" class="submit-btn small listing-video-remove-btn" id="createCourseThumbRemoveBtn" style="display:none;">Remove</button>
+                </div>
+                <div class="listing-video-preview-wrap" id="createCourseThumbPreviewWrap" style="display:none;">
+                    <img id="createCourseThumbPreview" class="listing-video-preview" alt="Thumbnail preview">
+                </div>
             </div>
             <div class="form-group">
                 <label>VSL video (optional)</label>
-                <input type="file" id="createCourseVslFile" accept="video/*">
+                <div class="listing-video-uploader">
+                    <input type="file" id="createCourseVslFile" hidden accept="video/*">
+                    <button type="button" class="submit-btn small listing-video-choose-btn" id="createCourseVslChooseBtn">Choose video</button>
+                    <span class="listing-video-filename" id="createCourseVslFileName">No file chosen</span>
+                    <button type="button" class="submit-btn small listing-video-remove-btn" id="createCourseVslRemoveBtn" style="display:none;">Remove</button>
+                </div>
             </div>
             <div class="form-group" style="display:flex; gap:10px; align-items:center;">
                 <input type="checkbox" id="createCoursePublished">
                 <label for="createCoursePublished" style="margin:0;">Publish course page</label>
             </div>
             <button class="submit-btn" id="createCourseSubmitBtn" type="button" onclick="saveCourseFromModal()">Create</button>
+            <div class="listing-video-upload-overlay" id="courseMediaUploadOverlay" style="display:none;">
+                <div class="listing-video-upload-card">
+                    <div class="upload-ring" id="courseMediaUploadRing" style="--p: 0;">
+                        <div class="upload-ring-center">
+                            <div class="upload-percent" id="courseMediaUploadPercent">0%</div>
+                            <div class="upload-bytes" id="courseMediaUploadBytes">0 MB / 0 MB</div>
+                            <div class="upload-bytes" id="courseMediaUploadLabel">Uploading…</div>
+                        </div>
+                    </div>
+                    <button type="button" class="submit-btn small listing-video-cancel-btn" id="courseMediaUploadCancelBtn">Cancel</button>
+                </div>
+            </div>
         </div>
     </div>
 
