@@ -1646,6 +1646,7 @@ main {
     margin-left: 250px;
     padding: 30px;
     transition: margin-left 0.3s ease;
+    position: relative;
 }
 
 html[dir="rtl"] main {
@@ -1685,15 +1686,37 @@ html[data-initial-section] .content-section {
 }
 
 html[data-initial-section="home-section"] #home-section,
+html[data-initial-section="ambassadors-section"] #ambassadors-section,
 html[data-initial-section="profile-section"] #profile-section,
 html[data-initial-section="favorites-section"] #favorites-section,
+html[data-initial-section="course-section"] #course-section,
 html[data-initial-section="messages-section"] #messages-section,
 html[data-initial-section="settings-section"] #settings-section,
+html[data-initial-section="about-section"] #about-section,
+html[data-initial-section="terms-section"] #terms-section,
+html[data-initial-section="privacy-section"] #privacy-section,
 html[data-initial-section="admin-dashboard-section"] #admin-dashboard-section,
 html[data-initial-section="create-listing-section"] #create-listing-section,
 html[data-initial-section="listing-detail-section"] #listing-detail-section,
 html[data-initial-section="seller-profile-section"] #seller-profile-section {
     display: block !important;
+}
+
+.app-boot-skeleton {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    background: var(--bg-main);
+    padding-top: 10px;
+}
+
+html.app-booting .app-boot-skeleton {
+    display: block;
+}
+
+html.app-booting .content-section {
+    display: none !important;
 }
 
 #profile-section,

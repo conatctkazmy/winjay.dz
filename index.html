@@ -9,24 +9,31 @@
     <script>
         document.documentElement.classList.add('app-loading');
         document.documentElement.classList.add('nav-avatar-loading');
+        document.documentElement.classList.add('app-booting');
         try {
             const params = new URLSearchParams(window.location.search);
             const hasProfile = !!params.get('profile');
             const hasListing = !!params.get('listing');
             const hasEdit = !!params.get('edit');
             const hasNew = params.has('new');
+            const hasCourse = !!params.get('course');
             const sections = new Set([
                 'home-section',
+                'ambassadors-section',
                 'profile-section',
                 'favorites-section',
+                'course-section',
                 'messages-section',
                 'settings-section',
+                'about-section',
+                'terms-section',
+                'privacy-section',
                 'admin-dashboard-section',
                 'create-listing-section',
                 'listing-detail-section',
                 'seller-profile-section'
             ]);
-            const blocked = new Set(['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section']);
+            const blocked = new Set(['profile-section', 'course-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section']);
             const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
             const safeLastSection = sections.has(lastSectionRaw) ? lastSectionRaw : 'home-section';
             const hasAuthToken = (() => {
@@ -49,6 +56,7 @@
             if (hasProfile) initialSection = 'seller-profile-section';
             else if (hasNew || hasEdit) initialSection = 'create-listing-section';
             else if (hasListing) initialSection = 'listing-detail-section';
+            else if (hasCourse) initialSection = 'course-section';
             else if (!hasAuthToken && blocked.has(initialSection)) initialSection = 'home-section';
 
             document.documentElement.dataset.initialSection = initialSection;
@@ -237,6 +245,18 @@
         <div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebarOverlay()"></div>
 
         <main id="content-area">
+            <div class="app-boot-skeleton loading-skeleton" id="appBootSkeleton" aria-hidden="true">
+                <div class="skeleton-block" style="height: 36px; width: 280px; margin-bottom: 18px;"></div>
+                <div class="skeleton-block" style="height: 18px; width: 420px; margin-bottom: 26px;"></div>
+                <div class="skeleton-grid">
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                </div>
+            </div>
             <section id="home-section" class="content-section active">
                 <div class="hero">
                     <h1 data-i18n="home_hero_title">Trouvez ce dont vous avez besoin, localement.</h1>
