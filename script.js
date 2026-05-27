@@ -17919,12 +17919,28 @@ async function renderCourseSection() {
     descEl.textContent = String(course.description || '');
     aboutEl.textContent = String(course.description || '');
 
-    const ownerProfile = await client.from('profiles').select('display_name, tag').eq('id', course.owner_id).maybeSingle();
-    const ownerName = ownerProfile?.data?.display_name || ownerProfile?.data?.tag || 'Owner';
-    ownerEl.textContent = String(ownerName || 'Owner');
+    const ownerProfile = await client
+        .from('profiles')
+        .select('id, display_name, tag, avatar_url, location, business_type, created_at')
+        .eq('id', course.owner_id)
+        .maybeSingle();
+    const ownerRow = ownerProfile?.data?.id ? ownerProfile.data : { id: course.owner_id };
+    const seller = mapProfileRowToSeller(ownerRow);
+    const ownerName = seller.name || ownerRow?.display_name || ownerRow?.tag || 'Owner';
+    ownerEl.textContent = `By ${String(ownerName || 'Owner')}`;
+    const aboutBits = [];
+    if (seller.businessType) aboutBits.push(String(seller.businessType));
+    if (seller.location) aboutBits.push(String(seller.location));
+    if (seller.joinedDate) aboutBits.push(`Joined ${String(seller.joinedDate)}`);
     instructorEl.innerHTML = `
-        <div class="course-instructor-name">${escapeHtml(String(ownerName || 'Owner'))}</div>
-        <div class="course-instructor-meta">${escapeHtml(String(ownerProfile?.data?.tag || ''))}</div>
+        <div class="course-instructor-head">
+            <div class="course-instructor-avatar"><img src="${escapeHtml(String(seller.pic || seller.profilePic || ''))}" alt=""></div>
+            <div style="min-width:0;">
+                <div class="course-instructor-name">${escapeHtml(String(ownerName || 'Owner'))}</div>
+                <div class="course-instructor-meta">${escapeHtml(String(seller.tag || ''))}</div>
+            </div>
+        </div>
+        <div class="course-instructor-bio">${escapeHtml(aboutBits.join(' • ') || 'Course creator')}</div>
     `;
 
     if (String(course.thumbnail_object_path || '').trim()) {
@@ -17944,7 +17960,7 @@ async function renderCourseSection() {
         }
     }
 
-    const ownerTag = String(ownerProfile?.data?.tag || '').trim();
+    const ownerTag = String(seller.tag || ownerProfile?.data?.tag || '').trim();
     const accessBits = [];
     if (isOwner) {
         accessBits.push(`<span class="admin-badge ok">OWNER</span>`);

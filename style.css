@@ -8345,6 +8345,9 @@ footer {
 
 .course-shell {
     padding: 6px 2px 20px;
+    width: 100%;
+    max-width: 1140px;
+    margin: 0 auto;
 }
 
 .course-header {
@@ -8511,6 +8514,36 @@ footer {
 .course-instructor {
     display: grid;
     gap: 6px;
+}
+
+.course-instructor-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.course-instructor-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: rgba(0,0,0,0.05);
+    flex: 0 0 auto;
+}
+
+.course-instructor-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.course-instructor-bio {
+    color: var(--text-muted);
+    line-height: 1.4;
+    font-size: 0.92rem;
+    font-weight: 650;
 }
 
 .course-instructor .course-instructor-name {
