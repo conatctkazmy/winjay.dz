@@ -6681,6 +6681,73 @@ let courseLessonUploadActive = false;
 let courseLessonUploadXhr = null;
 let courseLessonUploadCancelHandler = null;
 
+const MAX_COURSE_VIDEO_DIMENSION = 1920;
+const MAX_COURSE_VSL_SECONDS = 5 * 60;
+const MAX_COURSE_VSL_BYTES = 400 * 1024 * 1024;
+const MAX_COURSE_LESSON_SECONDS = 59 * 60;
+
+async function readVideoMetaFromFile(file, { timeoutMs = 12000 } = {}) {
+    const f = file || null;
+    if (!f) return { error: 'Missing file' };
+    let objectUrl = '';
+    let timer = null;
+    let video = null;
+    return await new Promise((resolve) => {
+        const done = (payload) => {
+            try {
+                if (timer) clearTimeout(timer);
+            } catch (e) {
+                null;
+            }
+            timer = null;
+            try {
+                if (video) {
+                    video.onloadedmetadata = null;
+                    video.onerror = null;
+                    video.removeAttribute('src');
+                    video.load?.();
+                }
+            } catch (e) {
+                null;
+            }
+            try {
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
+            } catch (e) {
+                null;
+            }
+            objectUrl = '';
+            resolve(payload);
+        };
+
+        video = document.createElement('video');
+        video.preload = 'metadata';
+        video.muted = true;
+        video.playsInline = true;
+
+        video.onloadedmetadata = () => {
+            const duration = Number(video.duration) || 0;
+            const width = Number(video.videoWidth) || 0;
+            const height = Number(video.videoHeight) || 0;
+            if (!duration || !width || !height) {
+                done({ error: 'Invalid video metadata' });
+                return;
+            }
+            done({ duration, width, height });
+        };
+        video.onerror = () => done({ error: 'Failed to read video metadata' });
+
+        try {
+            objectUrl = URL.createObjectURL(f);
+            video.src = objectUrl;
+        } catch (e) {
+            done({ error: 'Failed to read file' });
+            return;
+        }
+
+        timer = setTimeout(() => done({ error: 'Video metadata timed out' }), Math.max(1000, Number(timeoutMs) || 12000));
+    });
+}
+
 function setCourseMediaUploadOverlay({ visible = false, percent = 0, loaded = 0, total = 0, label = '' } = {}) {
     const overlay = document.getElementById('courseMediaUploadOverlay');
     const ring = document.getElementById('courseMediaUploadRing');
@@ -6955,11 +7022,39 @@ function setupCreateCourseMediaUploader() {
     }
     if (vslInput && !vslInput.dataset.bound) {
         vslInput.dataset.bound = '1';
-        vslInput.addEventListener('change', () => {
+        vslInput.addEventListener('change', async () => {
             const file = vslInput.files?.[0] || null;
             if (!file) {
                 if (vslName) vslName.textContent = 'No file chosen';
                 if (vslRemove) vslRemove.style.display = 'none';
+                return;
+            }
+            const clearVsl = () => {
+                vslInput.value = '';
+                if (vslName) vslName.textContent = 'No file chosen';
+                if (vslRemove) vslRemove.style.display = 'none';
+            };
+            const bytes = Number(file.size) || 0;
+            if (bytes > MAX_COURSE_VSL_BYTES) {
+                showToast('VSL video is too large (max 400MB)', 'alert-circle');
+                clearVsl();
+                return;
+            }
+            const meta = await readVideoMetaFromFile(file);
+            if (meta?.error) {
+                showToast(String(meta.error || 'Failed to read video'), 'alert-circle');
+                clearVsl();
+                return;
+            }
+            if (Number(meta.duration) > MAX_COURSE_VSL_SECONDS) {
+                showToast('VSL video is too long (max 5 minutes)', 'alert-circle');
+                clearVsl();
+                return;
+            }
+            const maxDim = Math.max(Number(meta.width) || 0, Number(meta.height) || 0);
+            if (maxDim > MAX_COURSE_VIDEO_DIMENSION) {
+                showToast('VSL video exceeds 1080p (max 1920px)', 'alert-circle');
+                clearVsl();
                 return;
             }
             if (vslName) vslName.textContent = String(file.name || 'video');
@@ -6988,11 +7083,33 @@ function setupCreateCourseLessonUploader() {
     }
     if (input && !input.dataset.boundLesson) {
         input.dataset.boundLesson = '1';
-        input.addEventListener('change', () => {
+        input.addEventListener('change', async () => {
             const file = input.files?.[0] || null;
             if (!file) {
                 if (nameEl) nameEl.textContent = 'No file chosen';
                 if (removeBtn) removeBtn.style.display = 'none';
+                return;
+            }
+            const clearLesson = () => {
+                input.value = '';
+                if (nameEl) nameEl.textContent = 'No file chosen';
+                if (removeBtn) removeBtn.style.display = 'none';
+            };
+            const meta = await readVideoMetaFromFile(file);
+            if (meta?.error) {
+                showToast(String(meta.error || 'Failed to read video'), 'alert-circle');
+                clearLesson();
+                return;
+            }
+            if (Number(meta.duration) > MAX_COURSE_LESSON_SECONDS) {
+                showToast('Lesson video is too long (max 59 minutes)', 'alert-circle');
+                clearLesson();
+                return;
+            }
+            const maxDim = Math.max(Number(meta.width) || 0, Number(meta.height) || 0);
+            if (maxDim > MAX_COURSE_VIDEO_DIMENSION) {
+                showToast('Lesson video exceeds 1080p (max 1920px)', 'alert-circle');
+                clearLesson();
                 return;
             }
             if (nameEl) nameEl.textContent = String(file.name || 'video');
