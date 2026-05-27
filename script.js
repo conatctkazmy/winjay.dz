@@ -5489,7 +5489,7 @@ function renderEmptyChat() {
     if (micBtn) micBtn.disabled = true;
 }
 
-async function startChatWithSeller(tag) {
+async function startChatWithSeller(tag, { pushState = false } = {}) {
     if (!tag) return;
 
     if (!requireAuthOrPrompt()) return;
@@ -5505,6 +5505,17 @@ async function startChatWithSeller(tag) {
         const chatKey = `id:${profileRow.id}`;
         suppressNextMessagesBootstrap = true;
         showSection('messages-section');
+        if (pushState) {
+            try {
+                history.pushState(
+                    { __winjay: true, view: 'messages', from: 'course', courseId: String(activeCourseId || '') || null },
+                    '',
+                    window.location.href
+                );
+            } catch (e) {
+                null;
+            }
+        }
         await bootstrapMessages();
         if (!mockChats[chatKey]) {
             mockChats[chatKey] = {
@@ -5540,6 +5551,13 @@ async function startChatWithSeller(tag) {
 
     activeChatTag = tag;
     showSection('messages-section');
+    if (pushState) {
+        try {
+            history.pushState({ __winjay: true, view: 'messages', from: 'course', courseId: String(activeCourseId || '') || null }, '', window.location.href);
+        } catch (e) {
+            null;
+        }
+    }
     renderMessagesList();
     switchChat(tag);
 }
@@ -13750,6 +13768,23 @@ function autoFillCategoryFromProfile() {
 
 function handleListingRoutesFromUrl() {
     const params = new URLSearchParams(window.location.search);
+    const state = history.state && typeof history.state === 'object' ? history.state : null;
+    if (state?.view === 'messages') {
+        showSection('messages-section');
+        return;
+    }
+    const courseParam = params.get('course');
+    if (courseParam) {
+        const id = String(courseParam || '').trim();
+        if (id) {
+            activeCourseId = id;
+            if (state?.view === 'course' && state?.from) {
+                activeCourseFromSection = String(state.from || '').trim() || activeCourseFromSection;
+            }
+            showSection('course-section');
+            return;
+        }
+    }
     const profileParam = params.get('profile');
     if (profileParam) {
         const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
@@ -17023,7 +17058,7 @@ function updateCourseProgressFromDom() {
     value.textContent = `${Math.max(0, Math.min(100, pct))}%`;
 }
 
-function setCourseRouteParam(courseId, { replace = false } = {}) {
+function setCourseRouteParam(courseId, { replace = false, state = null } = {}) {
     try {
         const url = new URL(window.location.href);
         if (courseId) {
@@ -17031,10 +17066,11 @@ function setCourseRouteParam(courseId, { replace = false } = {}) {
         } else {
             url.searchParams.delete('course');
         }
+        const nextState = state !== undefined && state !== null ? state : (history.state && typeof history.state === 'object' ? history.state : null);
         if (replace) {
-            history.replaceState(history.state || null, '', url.pathname + url.search);
+            history.replaceState(nextState, '', url.pathname + url.search);
         } else {
-            history.pushState(history.state || null, '', url.pathname + url.search);
+            history.pushState(nextState, '', url.pathname + url.search);
         }
     } catch (e) {
         null;
@@ -17066,7 +17102,17 @@ function openCourse(courseId, { fromSection = null } = {}) {
     if (!id) return;
     activeCourseId = id;
     activeCourseFromSection = fromSection || getActiveSectionId() || 'profile-section';
-    setCourseRouteParam(id, { replace: false });
+    const prevState = history.state && typeof history.state === 'object' ? history.state : null;
+    setCourseRouteParam(id, {
+        replace: false,
+        state: {
+            __winjay: true,
+            view: 'course',
+            courseId: id,
+            from: activeCourseFromSection,
+            fromListingId: prevState?.fromListingId ? Number(prevState.fromListingId) : null
+        }
+    });
     showSection('course-section');
 }
 
@@ -17078,7 +17124,7 @@ async function requestCourseAccess(ownerTag, courseTitle) {
         return;
     }
     const title = String(courseTitle || 'Course').trim() || 'Course';
-    await startChatWithSeller(tag.startsWith('@') ? tag : '@' + tag);
+    await startChatWithSeller(tag.startsWith('@') ? tag : '@' + tag, { pushState: true });
     setTimeout(() => {
         const input = document.getElementById('chatInput');
         if (!input) return;
