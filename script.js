@@ -847,6 +847,13 @@ function initSupabase() {
     supabaseClient.auth.onAuthStateChange((event, session) => {
         handleAuthSessionChange(event, session);
     });
+    supabaseClient.auth
+        .getSession()
+        .then(({ data }) => {
+            const s = data?.session || null;
+            if (s?.user?.id) applyAuthSessionToLocalState(s);
+        })
+        .catch(() => null);
     return supabaseClient;
 }
 
@@ -854,6 +861,12 @@ function applyAuthSessionToLocalState(session) {
     const user = session?.user || null;
     currentSupabaseUserId = user?.id || null;
     currentSupabaseUserEmail = user?.email || '';
+    try {
+        window.currentSupabaseUserId = currentSupabaseUserId;
+        window.currentSupabaseUserEmail = currentSupabaseUserEmail;
+    } catch (e) {
+        null;
+    }
 
     if (!user) {
         myReferralCount = 0;
@@ -900,6 +913,35 @@ function applyAuthSessionToLocalState(session) {
     saveUserProfileToStorage();
     syncMyListingsFromListings();
     updateProfileUI();
+}
+
+async function ensureCurrentSupabaseUserId(client) {
+    const c = client || initSupabase();
+    if (!c) return null;
+    if (currentSupabaseUserId) return currentSupabaseUserId;
+    try {
+        const { data: sessionData } = await c.auth.getSession();
+        const session = sessionData?.session || null;
+        const sid = String(session?.user?.id || '').trim();
+        if (sid) {
+            applyAuthSessionToLocalState(session);
+            return sid;
+        }
+        const { data: userData } = await c.auth.getUser();
+        const uid = String(userData?.user?.id || '').trim();
+        if (uid) {
+            currentSupabaseUserId = uid;
+            try {
+                window.currentSupabaseUserId = uid;
+            } catch (e) {
+                null;
+            }
+            return uid;
+        }
+        return null;
+    } catch (e) {
+        return null;
+    }
 }
 
 async function ensureSupabaseProfileRow(client, user) {
@@ -17235,7 +17277,13 @@ async function openEditCourseModal(courseId) {
     if (!id) return;
     const client = initSupabase();
     if (!client) return;
-    const { data: course, error } = await client.from('courses').select('*').eq('id', id).eq('owner_id', currentSupabaseUserId).maybeSingle();
+    const uid = await ensureCurrentSupabaseUserId(client);
+    if (!uid) {
+        showToast('Session expired, log in again', 'alert-circle');
+        openModal('loginModal');
+        return;
+    }
+    const { data: course, error } = await client.from('courses').select('*').eq('id', id).eq('owner_id', uid).maybeSingle();
     if (error || !course?.id) {
         showToast(error?.message || 'Course not found', 'alert-circle');
         return;
@@ -17828,7 +17876,13 @@ async function deleteCourse(courseId) {
     showConfirmModal('Delete course', 'This will remove the course and its modules/lessons from your dashboard.', async () => {
         const client = initSupabase();
         if (!client) return;
-        const { error } = await client.from('courses').delete().eq('id', id).eq('owner_id', currentSupabaseUserId);
+        const uid = await ensureCurrentSupabaseUserId(client);
+        if (!uid) {
+            showToast('Session expired, log in again', 'alert-circle');
+            openModal('loginModal');
+            return;
+        }
+        const { error } = await client.from('courses').delete().eq('id', id).eq('owner_id', uid);
         if (error) {
             showToast(error.message || 'Failed to delete course', 'alert-circle');
             return;
@@ -17966,7 +18020,6 @@ async function moveCourseLesson(courseId, moduleId, lessonId, direction) {
 }
 
 async function renderMyProfileCoursesPanel() {
-    if (!isLoggedIn()) return;
     const invitesEl = document.getElementById('myCourseInvitesList');
     const enrolledEl = document.getElementById('myEnrolledCoursesList');
     const ownedEl = document.getElementById('myOwnedCoursesList');
@@ -17977,6 +18030,13 @@ async function renderMyProfileCoursesPanel() {
 
     const client = initSupabase();
     if (!client) return;
+    const uid = await ensureCurrentSupabaseUserId(client);
+    if (!uid) {
+        invitesEl.innerHTML = '<div class="muted">Please log in to continue.</div>';
+        enrolledEl.innerHTML = '<div class="muted">Please log in to continue.</div>';
+        ownedEl.innerHTML = '<div class="muted">Please log in to continue.</div>';
+        return;
+    }
 
     const [invitesRes, enrollRes, ownedRes] = await Promise.all([
         client
@@ -17988,13 +18048,13 @@ async function renderMyProfileCoursesPanel() {
         client
             .from('course_enrollments')
             .select('course_id, created_at, courses(id, title, thumbnail_object_path, owner_id)')
-            .eq('user_id', currentSupabaseUserId)
+            .eq('user_id', uid)
             .order('created_at', { ascending: false })
             .limit(50),
         client
             .from('courses')
             .select('id, title, thumbnail_object_path, is_published, created_at')
-            .eq('owner_id', currentSupabaseUserId)
+            .eq('owner_id', uid)
             .order('created_at', { ascending: false })
             .limit(50)
     ]);
