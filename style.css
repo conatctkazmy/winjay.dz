@@ -1706,12 +1706,13 @@ html[data-initial-section="seller-profile-section"] #seller-profile-section {
     display: none;
     position: absolute;
     inset: 0;
-    z-index: 5;
+    z-index: 900;
     background: var(--bg-main);
     padding-top: 10px;
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
+    pointer-events: none;
 }
 
 html.app-booting .app-boot-skeleton {

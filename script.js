@@ -572,6 +572,13 @@ function endBootUI() {
     }
 }
 
+function setInnerHTMLIfEmpty(el, html) {
+    if (!el) return;
+    const current = String(el.innerHTML || '').trim();
+    if (current) return;
+    el.innerHTML = html;
+}
+
 function updateLoadMoreListingsUI() {
     const wrap = document.getElementById('loadMoreListingsWrap');
     const btn = document.getElementById('loadMoreListingsBtn');
@@ -4378,7 +4385,7 @@ async function refreshAmbassadorsSection(force = false) {
     }
     const featuredEl = document.getElementById('ambassadorsFeatured');
     const listEl = document.getElementById('ambassadorsList');
-    if (listEl) listEl.innerHTML = getHomeListingsSkeletonHTML(6);
+    setInnerHTMLIfEmpty(listEl, getHomeListingsSkeletonHTML(6));
     if (featuredEl) featuredEl.innerHTML = '';
 
     const client = initSupabase();
@@ -6344,6 +6351,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     setPendingReferralFromUrl();
     initLanguage();
     try {
+        if (!window.__winjayBootTimer) {
+            window.__winjayBootTimer = setTimeout(() => {
+                try {
+                    document.documentElement.classList.remove('app-booting');
+                } catch (e) {
+                    null;
+                }
+            }, 1200);
+        }
+    } catch (e) {
+        null;
+    }
+    try {
         document.documentElement.classList.remove('app-loading');
     } catch (e) {
         null;
@@ -6517,9 +6537,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
         showSection('seller-profile-section');
         const content = document.getElementById('externalProfileContent');
-        if (content) {
-            content.innerHTML = getSellerProfileSkeletonHTML();
-        }
+        setInnerHTMLIfEmpty(content, getSellerProfileSkeletonHTML());
         endBootUI();
         await openSellerProfile(tag.toLowerCase(), 'listings', { pushState: false });
     } else if (newListingParam) {
@@ -6539,9 +6557,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (storedTag) {
                 showSection('seller-profile-section');
                 const content = document.getElementById('externalProfileContent');
-                if (content) {
-                    content.innerHTML = getSellerProfileSkeletonHTML();
-                }
+                setInnerHTMLIfEmpty(content, getSellerProfileSkeletonHTML());
                 endBootUI();
                 await openSellerProfile(storedTag.toLowerCase());
             } else {
@@ -13659,6 +13675,7 @@ function showSection(sectionId) {
     closeMobileSearchExpand();
     document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
     document.getElementById(sectionId).classList.add('active');
+    endBootUI();
     if (window.innerWidth <= 768) {
         setSidebarMobileOpen(false);
     }
@@ -14049,9 +14066,7 @@ function handleListingRoutesFromUrl() {
         const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
         showSection('seller-profile-section');
         const content = document.getElementById('externalProfileContent');
-        if (content) {
-            content.innerHTML = getSellerProfileSkeletonHTML();
-        }
+        setInnerHTMLIfEmpty(content, getSellerProfileSkeletonHTML());
         openSellerProfile(tag.toLowerCase(), 'listings', { pushState: false });
         return;
     }
@@ -16696,7 +16711,7 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
         fromListingId = from === 'listing-detail-section' && prevListingId > 0 ? prevListingId : null;
     }
     const content = document.getElementById('externalProfileContent');
-    if (content) content.innerHTML = getSellerProfileSkeletonHTML();
+    setInnerHTMLIfEmpty(content, getSellerProfileSkeletonHTML());
     const profilesById = await fetchProfilesByIds([ownerId]);
     const profileRow = profilesById[ownerId] || null;
     if (!profileRow?.id) {
@@ -16826,7 +16841,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         return;
     }
     const content = document.getElementById('externalProfileContent');
-    if (content) content.innerHTML = getSellerProfileSkeletonHTML();
+    setInnerHTMLIfEmpty(content, getSellerProfileSkeletonHTML());
     const profileRow = await fetchProfileByTag(tag);
     if (!profileRow?.id) {
         showToast('Seller profile not found', 'alert-circle');
