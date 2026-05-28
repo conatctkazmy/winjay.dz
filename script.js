@@ -6959,12 +6959,22 @@ function resetCreateCourseMediaUI() {
     const vslName = document.getElementById('createCourseVslFileName');
     const vslRemove = document.getElementById('createCourseVslRemoveBtn');
 
-    if (thumbInput) thumbInput.value = '';
+    if (thumbInput) {
+        thumbInput.value = '';
+        delete thumbInput.dataset.fileToken;
+        delete thumbInput.dataset.uploadedPath;
+        delete thumbInput.dataset.uploadedToken;
+    }
     if (thumbName) thumbName.textContent = 'No file chosen';
     if (thumbRemove) thumbRemove.style.display = 'none';
     clearCourseMediaThumbPreview();
 
-    if (vslInput) vslInput.value = '';
+    if (vslInput) {
+        vslInput.value = '';
+        delete vslInput.dataset.fileToken;
+        delete vslInput.dataset.uploadedPath;
+        delete vslInput.dataset.uploadedToken;
+    }
     if (vslName) vslName.textContent = 'No file chosen';
     if (vslRemove) vslRemove.style.display = 'none';
 
@@ -6998,10 +7008,19 @@ function setupCreateCourseMediaUploader() {
         thumbInput.addEventListener('change', () => {
             const file = thumbInput.files?.[0] || null;
             if (!file) {
+                delete thumbInput.dataset.fileToken;
+                delete thumbInput.dataset.uploadedPath;
+                delete thumbInput.dataset.uploadedToken;
                 if (thumbName) thumbName.textContent = 'No file chosen';
                 if (thumbRemove) thumbRemove.style.display = 'none';
                 clearCourseMediaThumbPreview();
                 return;
+            }
+            const token = `${String(file.name || '')}|${String(file.size || '')}|${String(file.lastModified || '')}`;
+            if (thumbInput.dataset.fileToken !== token) {
+                thumbInput.dataset.fileToken = token;
+                delete thumbInput.dataset.uploadedPath;
+                delete thumbInput.dataset.uploadedToken;
             }
             if (thumbName) thumbName.textContent = String(file.name || 'thumbnail');
             if (thumbRemove) thumbRemove.style.display = '';
@@ -7019,6 +7038,9 @@ function setupCreateCourseMediaUploader() {
         thumbRemove.dataset.bound = '1';
         thumbRemove.addEventListener('click', () => {
             thumbInput.value = '';
+            delete thumbInput.dataset.fileToken;
+            delete thumbInput.dataset.uploadedPath;
+            delete thumbInput.dataset.uploadedToken;
             if (thumbName) thumbName.textContent = 'No file chosen';
             thumbRemove.style.display = 'none';
             clearCourseMediaThumbPreview();
@@ -7039,12 +7061,18 @@ function setupCreateCourseMediaUploader() {
         vslInput.addEventListener('change', async () => {
             const file = vslInput.files?.[0] || null;
             if (!file) {
+                delete vslInput.dataset.fileToken;
+                delete vslInput.dataset.uploadedPath;
+                delete vslInput.dataset.uploadedToken;
                 if (vslName) vslName.textContent = 'No file chosen';
                 if (vslRemove) vslRemove.style.display = 'none';
                 return;
             }
             const clearVsl = () => {
                 vslInput.value = '';
+                delete vslInput.dataset.fileToken;
+                delete vslInput.dataset.uploadedPath;
+                delete vslInput.dataset.uploadedToken;
                 if (vslName) vslName.textContent = 'No file chosen';
                 if (vslRemove) vslRemove.style.display = 'none';
             };
@@ -7071,6 +7099,12 @@ function setupCreateCourseMediaUploader() {
                 clearVsl();
                 return;
             }
+            const token = `${String(file.name || '')}|${String(file.size || '')}|${String(file.lastModified || '')}`;
+            if (vslInput.dataset.fileToken !== token) {
+                vslInput.dataset.fileToken = token;
+                delete vslInput.dataset.uploadedPath;
+                delete vslInput.dataset.uploadedToken;
+            }
             if (vslName) vslName.textContent = String(file.name || 'video');
             if (vslRemove) vslRemove.style.display = '';
         });
@@ -7079,6 +7113,9 @@ function setupCreateCourseMediaUploader() {
         vslRemove.dataset.bound = '1';
         vslRemove.addEventListener('click', () => {
             vslInput.value = '';
+            delete vslInput.dataset.fileToken;
+            delete vslInput.dataset.uploadedPath;
+            delete vslInput.dataset.uploadedToken;
             if (vslName) vslName.textContent = 'No file chosen';
             vslRemove.style.display = 'none';
         });
@@ -17455,75 +17492,118 @@ async function saveCourseFromModal() {
     }
 
     const courseId = String(courseRow.id);
+    if (!isEdit) activeCourseEditId = courseId;
     const thumbFile = thumbEl?.files?.[0] || null;
     const vslFile = vslEl?.files?.[0] || null;
 
-    let thumbPath = '';
-    let vslPath = '';
+    const tokenForFile = (f) => `${String(f?.name || '')}|${String(f?.size || '')}|${String(f?.lastModified || '')}`;
+
+    let thumbPath = String(thumbEl?.dataset?.uploadedPath || '').trim();
+    let vslPath = String(vslEl?.dataset?.uploadedPath || '').trim();
 
     if (thumbFile) {
-        const signed = await courseAuthedFetch('course-owner-upload-url', {
-            courseId,
-            kind: 'thumbnail',
-            filename: safeStorageFilename(thumbFile.name || 'thumb.png'),
-            contentType: thumbFile.type || 'image/png'
-        });
-        if (signed?.error) {
-            showToast(String(signed.error || 'Failed to get upload url'), 'alert-circle');
-            restoreSubmit();
-            return;
+        const token = tokenForFile(thumbFile);
+        if (thumbEl && thumbEl.dataset.fileToken !== token) {
+            thumbEl.dataset.fileToken = token;
+            delete thumbEl.dataset.uploadedPath;
+            delete thumbEl.dataset.uploadedToken;
+            thumbPath = '';
         }
-        if (!signed?.error && signed?.signedUrl && signed?.path) {
-            const up = await uploadCourseFileToSignedUrlWithProgress({
-                signedUrl: signed.signedUrl,
-                file: thumbFile,
-                label: 'Uploading image…'
+        if (thumbEl && thumbEl.dataset.uploadedToken === token && String(thumbEl.dataset.uploadedPath || '').trim()) {
+            thumbPath = String(thumbEl.dataset.uploadedPath || '').trim();
+        }
+        if (!thumbPath) {
+            const signed = await courseAuthedFetch('course-owner-upload-url', {
+                courseId,
+                kind: 'thumbnail',
+                filename: safeStorageFilename(thumbFile.name || 'thumb.png'),
+                contentType: thumbFile.type || 'image/png'
             });
-            if (up?.error) {
-                showToast(String(up.error || 'Upload failed'), 'alert-circle');
+            if (signed?.error) {
+                showToast(String(signed.error || 'Failed to get upload url'), 'alert-circle');
                 restoreSubmit();
                 return;
             }
-            thumbPath = String(signed.path || '').trim();
+            if (!signed?.error && signed?.signedUrl && signed?.path) {
+                const up = await uploadCourseFileToSignedUrlWithProgress({
+                    signedUrl: signed.signedUrl,
+                    file: thumbFile,
+                    label: 'Uploading image…'
+                });
+                if (up?.error) {
+                    showToast(String(up.error || 'Upload failed'), 'alert-circle');
+                    restoreSubmit();
+                    return;
+                }
+                thumbPath = String(signed.path || '').trim();
+                if (thumbEl) {
+                    thumbEl.dataset.uploadedPath = thumbPath;
+                    thumbEl.dataset.uploadedToken = tokenForFile(thumbFile);
+                }
+            }
         }
     }
 
     if (vslFile) {
-        const signed = await courseAuthedFetch('course-owner-upload-url', {
-            courseId,
-            kind: 'vsl',
-            filename: safeStorageFilename(vslFile.name || 'vsl.mp4'),
-            contentType: vslFile.type || 'video/mp4'
-        });
-        if (signed?.error) {
-            showToast(String(signed.error || 'Failed to get upload url'), 'alert-circle');
-            restoreSubmit();
-            return;
+        const token = tokenForFile(vslFile);
+        if (vslEl && vslEl.dataset.fileToken !== token) {
+            vslEl.dataset.fileToken = token;
+            delete vslEl.dataset.uploadedPath;
+            delete vslEl.dataset.uploadedToken;
+            vslPath = '';
         }
-        if (!signed?.error && signed?.signedUrl && signed?.path) {
-            const up = await uploadCourseFileToSignedUrlWithProgress({
-                signedUrl: signed.signedUrl,
-                file: vslFile,
-                label: 'Uploading video…'
+        if (vslEl && vslEl.dataset.uploadedToken === token && String(vslEl.dataset.uploadedPath || '').trim()) {
+            vslPath = String(vslEl.dataset.uploadedPath || '').trim();
+        }
+        if (!vslPath) {
+            const signed = await courseAuthedFetch('course-owner-upload-url', {
+                courseId,
+                kind: 'vsl',
+                filename: safeStorageFilename(vslFile.name || 'vsl.mp4'),
+                contentType: vslFile.type || 'video/mp4'
             });
-            if (up?.error) {
-                showToast(String(up.error || 'Upload failed'), 'alert-circle');
+            if (signed?.error) {
+                showToast(String(signed.error || 'Failed to get upload url'), 'alert-circle');
                 restoreSubmit();
                 return;
             }
-            vslPath = String(signed.path || '').trim();
+            if (!signed?.error && signed?.signedUrl && signed?.path) {
+                const up = await uploadCourseFileToSignedUrlWithProgress({
+                    signedUrl: signed.signedUrl,
+                    file: vslFile,
+                    label: 'Uploading video…'
+                });
+                if (up?.error) {
+                    showToast(String(up.error || 'Upload failed'), 'alert-circle');
+                    restoreSubmit();
+                    return;
+                }
+                vslPath = String(signed.path || '').trim();
+                if (vslEl) {
+                    vslEl.dataset.uploadedPath = vslPath;
+                    vslEl.dataset.uploadedToken = tokenForFile(vslFile);
+                }
+            }
         }
     }
 
     if (thumbPath || vslPath) {
-        await client
+        const payload = {};
+        if (thumbPath) payload.thumbnail_object_path = thumbPath;
+        if (vslPath) payload.vsl_object_path = vslPath;
+        const { data: updated, error: mediaErr } = await client
             .from('courses')
-            .update({
-                thumbnail_object_path: thumbPath || courseRow.thumbnail_object_path || '',
-                vsl_object_path: vslPath || courseRow.vsl_object_path || ''
-            })
+            .update(payload)
             .eq('id', courseId)
-            .eq('owner_id', session.user.id);
+            .eq('owner_id', session.user.id)
+            .select('*')
+            .single();
+        if (mediaErr) {
+            showToast(mediaErr.message || 'Failed to save course media', 'alert-circle');
+            restoreSubmit();
+            return;
+        }
+        courseRow = updated || courseRow;
     }
 
     closeModal('createCourseModal');
