@@ -6803,8 +6803,9 @@ let courseLessonUploadCancelHandler = null;
 
 const MAX_COURSE_VIDEO_DIMENSION = 1920;
 const MAX_COURSE_VSL_SECONDS = 5 * 60;
-const MAX_COURSE_VSL_BYTES = 400 * 1024 * 1024;
+const MAX_COURSE_VSL_BYTES = 50 * 1024 * 1024;
 const MAX_COURSE_LESSON_SECONDS = 59 * 60;
+const MAX_COURSE_LESSON_BYTES = 50 * 1024 * 1024;
 
 async function readVideoMetaFromFile(file, { timeoutMs = 12000 } = {}) {
     const f = file || null;
@@ -7184,7 +7185,7 @@ function setupCreateCourseMediaUploader() {
             };
             const bytes = Number(file.size) || 0;
             if (bytes > MAX_COURSE_VSL_BYTES) {
-                showToast('VSL video is too large (max 400MB)', 'alert-circle');
+                showToast('VSL video is too large (max 50MB)', 'alert-circle');
                 clearVsl();
                 return;
             }
@@ -7252,6 +7253,12 @@ function setupCreateCourseLessonUploader() {
                 if (nameEl) nameEl.textContent = 'No file chosen';
                 if (removeBtn) removeBtn.style.display = 'none';
             };
+            const bytes = Number(file.size) || 0;
+            if (bytes > MAX_COURSE_LESSON_BYTES) {
+                showToast('Lesson video is too large (max 50MB)', 'alert-circle');
+                clearLesson();
+                return;
+            }
             const meta = await readVideoMetaFromFile(file);
             if (meta?.error) {
                 showToast(String(meta.error || 'Failed to read video'), 'alert-circle');
