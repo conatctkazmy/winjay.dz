@@ -13547,6 +13547,216 @@ async function renderAdminGrowthChart() {
     setupAdminGrowthChartHover(chartEl, series);
 }
 
+async function adminFetchListingsGrowth(days = 30) {
+    if (DEMO_MODE) {
+        const today = new Date();
+        const series = [];
+        let running = 2200;
+        for (let i = Math.max(1, Number(days) || 30) - 1; i >= 0; i--) {
+            const d = new Date(today);
+            d.setDate(today.getDate() - i);
+            const v = Math.max(0, Math.round(18 + 10 * Math.sin(i / 3) + (Math.random() * 10 - 5)));
+            running += v;
+            series.push({ date: d.toISOString().slice(0, 10), count: v, total: running });
+        }
+        return { series, total: running };
+    }
+    const dayCount = Math.max(1, Math.min(180, Number(days) || 30));
+    const client = initSupabase();
+    if (!client) return null;
+    try {
+        const { data, error } = await client.rpc('admin_listings_growth', { days: dayCount });
+        if (error) return null;
+        const rows = Array.isArray(data) ? data : [];
+        const series = rows.map((r) => ({
+            date: String(r?.day || '').slice(0, 10),
+            count: Number(r?.new_listings) || 0,
+            total: Number(r?.total_listings) || 0
+        })).filter((x) => x.date);
+        const lastTotal = series.length ? Number(series[series.length - 1].total) || 0 : 0;
+        return { series, total: lastTotal };
+    } catch (e) {
+        return null;
+    }
+}
+
+function renderAdminMetricChartSvg(series, { prefix = 'adminMetric', ariaLabel = '' } = {}) {
+    const width = 900;
+    const height = 260;
+    const padX = 34;
+    const padY = 26;
+    const w = width - padX * 2;
+    const h = height - padY * 2;
+    const points = Array.isArray(series) ? series.slice() : [];
+    if (!points.length) return '';
+    const maxVal = Math.max(1, ...points.map((x) => Number(x.count) || 0));
+    const step = points.length <= 1 ? 0 : w / (points.length - 1);
+    const coords = points.map((p, idx) => {
+        const x = padX + idx * step;
+        const y = padY + (1 - (Number(p.count) || 0) / maxVal) * h;
+        return { x, y };
+    });
+    const path = coords
+        .map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(2)} ${c.y.toFixed(2)}`)
+        .join(' ');
+    const area = `${path} L${(padX + w).toFixed(2)} ${(padY + h).toFixed(2)} L${padX.toFixed(2)} ${(padY + h).toFixed(2)} Z`;
+    const last = points[points.length - 1];
+    const lastLabel = last?.date ? String(last.date).slice(5) : '';
+    const first = points[0];
+    const firstLabel = first?.date ? String(first.date).slice(5) : '';
+    const safePrefix = String(prefix || 'adminMetric').replace(/[^a-zA-Z0-9_-]/g, '');
+    const fillId = `${safePrefix}Fill`;
+    const lineId = `${safePrefix}HoverLine`;
+    const dotId = `${safePrefix}HoverDot`;
+    return `
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(ariaLabel)}">
+            <defs>
+                <linearGradient id="${escapeHtml(fillId)}" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="var(--primary-color)" stop-opacity="0.22"></stop>
+                    <stop offset="100%" stop-color="var(--primary-color)" stop-opacity="0"></stop>
+                </linearGradient>
+            </defs>
+            <path d="${area}" fill="url(#${escapeHtml(fillId)})"></path>
+            <path d="${path}" fill="none" stroke="var(--primary-color)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+            <line id="${escapeHtml(lineId)}" x1="0" y1="${padY}" x2="0" y2="${padY + h}" stroke="var(--border-color)" stroke-width="2" stroke-dasharray="5 5" opacity="0"></line>
+            <circle id="${escapeHtml(dotId)}" cx="0" cy="0" r="7" fill="var(--primary-color)" stroke="var(--bg-main)" stroke-width="3" opacity="0"></circle>
+            <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" style="pointer-events:all;"></rect>
+            <text x="${padX}" y="${height - 10}" fill="var(--text-muted)" font-size="12" font-weight="700">${escapeHtml(firstLabel)}</text>
+            <text x="${padX + w}" y="${height - 10}" fill="var(--text-muted)" font-size="12" font-weight="700" text-anchor="end">${escapeHtml(lastLabel)}</text>
+        </svg>
+    `.trim();
+}
+
+function setupAdminMetricChartHover(containerEl, series, { prefix = 'adminMetric', rows = [], title = '' } = {}) {
+    const svg = containerEl?.querySelector?.('svg');
+    if (!svg) return;
+    const width = 900;
+    const height = 260;
+    const padX = 34;
+    const padY = 26;
+    const w = width - padX * 2;
+    const h = height - padY * 2;
+    const points = Array.isArray(series) ? series.slice() : [];
+    if (!points.length) return;
+    const maxVal = Math.max(1, ...points.map((x) => Number(x.count) || 0));
+    const step = points.length <= 1 ? 0 : w / (points.length - 1);
+    const safePrefix = String(prefix || 'adminMetric').replace(/[^a-zA-Z0-9_-]/g, '');
+    const lineEl = svg.querySelector(`#${safePrefix}HoverLine`);
+    const dotEl = svg.querySelector(`#${safePrefix}HoverDot`);
+    let tooltip = containerEl.querySelector('.admin-chart-tooltip');
+    if (!tooltip) {
+        tooltip = document.createElement('div');
+        tooltip.className = 'admin-chart-tooltip';
+        containerEl.appendChild(tooltip);
+    }
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const hide = () => {
+        if (lineEl) lineEl.setAttribute('opacity', '0');
+        if (dotEl) dotEl.setAttribute('opacity', '0');
+        tooltip.style.display = 'none';
+    };
+    const showAt = (evt) => {
+        const rect = svg.getBoundingClientRect();
+        const cx = evt.clientX;
+        const cy = evt.clientY;
+        const x = ((cx - rect.left) / rect.width) * width;
+        const raw = step > 0 ? Math.round((x - padX) / step) : 0;
+        const idx = clamp(raw, 0, points.length - 1);
+        const p = points[idx] || {};
+        const px = padX + idx * step;
+        const py = padY + (1 - (Number(p.count) || 0) / maxVal) * h;
+        if (lineEl) {
+            lineEl.setAttribute('x1', px.toFixed(2));
+            lineEl.setAttribute('x2', px.toFixed(2));
+            lineEl.setAttribute('opacity', '1');
+        }
+        if (dotEl) {
+            dotEl.setAttribute('cx', px.toFixed(2));
+            dotEl.setAttribute('cy', py.toFixed(2));
+            dotEl.setAttribute('opacity', '1');
+        }
+        const date = escapeHtml(String(p.date || ''));
+        const titleLine = title ? `<div class="admin-chart-tooltip-title">${escapeHtml(String(title))} · ${date}</div>` : `<div class="admin-chart-tooltip-title">${date}</div>`;
+        const rowsHtml = (Array.isArray(rows) ? rows : []).map((r) => {
+            const label = escapeHtml(String(r?.label || ''));
+            const value = typeof r?.value === 'function' ? r.value(p) : '';
+            return `<div class="admin-chart-tooltip-row"><span>${label}</span><strong>${escapeHtml(String(value))}</strong></div>`;
+        }).join('');
+        tooltip.innerHTML = `${titleLine}${rowsHtml}`.trim();
+        tooltip.style.display = 'block';
+        const containerRect = containerEl.getBoundingClientRect();
+        const mx = cx - containerRect.left;
+        const my = cy - containerRect.top;
+        const tw = tooltip.offsetWidth || 220;
+        const th = tooltip.offsetHeight || 72;
+        let left = mx + 14;
+        let top = my - th - 14;
+        left = clamp(left, 8, containerRect.width - tw - 8);
+        top = clamp(top, 8, containerRect.height - th - 8);
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+    };
+    hide();
+    svg.addEventListener('mousemove', showAt);
+    svg.addEventListener('mouseenter', showAt);
+    svg.addEventListener('mouseleave', hide);
+    svg.addEventListener('touchstart', (e) => {
+        if (!e.touches?.length) return;
+        showAt(e.touches[0]);
+    }, { passive: true });
+    svg.addEventListener('touchmove', (e) => {
+        if (!e.touches?.length) return;
+        showAt(e.touches[0]);
+    }, { passive: true });
+    svg.addEventListener('touchend', hide, { passive: true });
+}
+
+async function renderAdminListingsCharts() {
+    if (!isAdminAuthorized()) return;
+    const totalChartEl = document.getElementById('adminListingsTotalChart');
+    const dailyChartEl = document.getElementById('adminListingsDailyChart');
+    const totalSummaryEl = document.getElementById('adminListingsTotalSummary');
+    const dailySummaryEl = document.getElementById('adminListingsDailySummary');
+    if (!totalChartEl || !dailyChartEl || !totalSummaryEl || !dailySummaryEl) return;
+    totalChartEl.innerHTML = '<div class="muted">Loading...</div>';
+    dailyChartEl.innerHTML = '<div class="muted">Loading...</div>';
+    totalSummaryEl.textContent = '';
+    dailySummaryEl.textContent = '';
+    const days = 30;
+    const data = await adminFetchListingsGrowth(days);
+    if (!data) {
+        totalChartEl.innerHTML = '<div class="muted">Unable to load listings data.</div>';
+        dailyChartEl.innerHTML = '<div class="muted">Unable to load listings data.</div>';
+        return;
+    }
+    const raw = Array.isArray(data.series) ? data.series.slice() : [];
+    const byDate = new Map(raw.map((x) => [String(x?.date || ''), { count: Number(x?.count) || 0, total: Number(x?.total) || 0 }]));
+    const posted = raw.reduce((sum, x) => sum + (Number(x.count) || 0), 0);
+    const total = Number(data.total) || 0;
+    totalSummaryEl.textContent = `Total: ${total}`;
+    dailySummaryEl.textContent = `Last ${days} days: +${posted}`;
+    const dailySeries = raw.map((p) => ({ ...p, count: Number(p.count) || 0 }));
+    const totalSeries = raw.map((p) => ({ ...p, count: Number(p.total) || 0 }));
+    totalChartEl.innerHTML = renderAdminMetricChartSvg(totalSeries, { prefix: 'adminListingsTotal', ariaLabel: 'Total listings' }) || '<div class="muted">No data.</div>';
+    dailyChartEl.innerHTML = renderAdminMetricChartSvg(dailySeries, { prefix: 'adminListingsDaily', ariaLabel: 'Listings posted' }) || '<div class="muted">No data.</div>';
+    setupAdminMetricChartHover(totalChartEl, totalSeries, {
+        prefix: 'adminListingsTotal',
+        title: 'Total',
+        rows: [
+            { label: 'Total listings', value: (p) => String(Number(p.count) || 0) },
+            { label: 'New listings', value: (p) => `+${String(Number(byDate.get(String(p.date || ''))?.count) || 0)}` }
+        ]
+    });
+    setupAdminMetricChartHover(dailyChartEl, dailySeries, {
+        prefix: 'adminListingsDaily',
+        title: 'Posted',
+        rows: [
+            { label: 'New listings', value: (p) => `+${String(Number(p.count) || 0)}` },
+            { label: 'Total listings', value: (p) => String(Number(byDate.get(String(p.date || ''))?.total) || 0) }
+        ]
+    });
+}
+
 async function renderAdminOverviewLists() {
     if (!isAdminAuthorized()) return;
     const pendingEl = document.getElementById('adminPendingList');
@@ -13631,6 +13841,7 @@ async function renderAdminDashboard(force = false) {
         await renderAdminFeatureFlags();
         await renderAdminOverviewLists();
         await renderAdminGrowthChart();
+        await renderAdminListingsCharts();
     }
     if (adminActiveTab === 'users') await renderAdminUsers();
     if (adminActiveTab === 'vip') await renderVipApplications();
