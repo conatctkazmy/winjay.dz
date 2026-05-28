@@ -13686,6 +13686,53 @@ async function renderAdminModeration() {
     scheduleLucideCreateIcons();
 }
 
+let adminModerationTopUpRunning = false;
+
+function removeAdminModerationCard(listingId) {
+    const id = String(listingId || '').trim();
+    if (!id) return;
+    const el = document.querySelector(`[data-moderation-id="${id}"]`);
+    if (el) el.remove();
+}
+
+async function topUpAdminModerationGrid() {
+    if (adminModerationTopUpRunning) return;
+    const el = document.getElementById('adminModerationList');
+    if (!el) return;
+    if (!isAdminAuthorized()) return;
+    const existingIds = Array.from(el.querySelectorAll('[data-moderation-id]'))
+        .map((node) => Number(node.getAttribute('data-moderation-id')))
+        .filter((n) => Number.isFinite(n) && n > 0);
+    const currentCount = existingIds.length;
+    const missing = Math.max(0, 30 - currentCount);
+    if (!missing) return;
+    const client = initSupabase();
+    if (!client) return;
+    adminModerationTopUpRunning = true;
+    try {
+        let q = client
+            .from('listings')
+            .select('id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, is_approved, deleted_at, listing_images(url, thumbnail_url, sort_order)')
+            .is('deleted_at', null)
+            .eq('is_approved', false)
+            .order('created_at', { ascending: false })
+            .limit(missing);
+        if (existingIds.length) q = q.not('id', 'in', `(${existingIds.join(',')})`);
+        const { data, error } = await q;
+        if (error) return;
+        const rows = Array.isArray(data) ? data : [];
+        if (!rows.length) return;
+        const ownerIds = Array.from(new Set(rows.map((r) => r?.owner_id).filter(Boolean)));
+        const profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
+        const mapped = rows.map((row) => mapSupabaseListingRow(row, profilesById));
+        el.insertAdjacentHTML('beforeend', mapped.map((item) => createModerationCardHTML(item)).join(''));
+        initCarouselsInContainer(el);
+        scheduleLucideCreateIcons();
+    } finally {
+        adminModerationTopUpRunning = false;
+    }
+}
+
 function createModerationCardHTML(item) {
     const carouselImages = getListingImagesForCard(item).slice(0, 8);
     const videoBadge = hasListingVideo(item) ? `<span class="video-play-badge"><i data-lucide="play"></i></span>` : '';
@@ -13706,7 +13753,7 @@ function createModerationCardHTML(item) {
     const ownerTag = String(item?.seller?.tag || '').trim();
     const sellerLabel = [ownerName, ownerTag].filter(Boolean).join(' ') || '';
     return `
-        <div class="card">
+        <div class="card" data-moderation-id="${escapeHtml(String(item.id))}">
             ${mediaHTML}
             <div class="card-content">
                 <div class="card-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
@@ -13754,8 +13801,13 @@ async function adminApproveListing(listingId) {
         return;
     }
     showToast('Listing approved', 'check-circle');
-    await fetchListingsFromSupabase({ silent: true });
-    await renderAdminModeration();
+    removeAdminModerationCard(id);
+    try {
+        fetchListingsFromSupabase({ silent: true });
+    } catch (e) {
+        null;
+    }
+    await topUpAdminModerationGrid();
 }
 
 function adminDeleteListing(listingId) {
@@ -13783,8 +13835,13 @@ function adminDeleteListing(listingId) {
                 return;
             }
             showToast('Listing deleted', 'trash-2');
-            await fetchListingsFromSupabase({ silent: true });
-            await renderAdminModeration();
+            removeAdminModerationCard(id);
+            try {
+                fetchListingsFromSupabase({ silent: true });
+            } catch (e) {
+                null;
+            }
+            await topUpAdminModerationGrid();
         },
         true
     );
