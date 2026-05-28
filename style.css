@@ -7444,6 +7444,54 @@ footer {
     font-size: 0.85rem;
 }
 
+.admin-moderation-grid {
+    margin-top: 12px;
+}
+
+.moderation-actions-row {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    padding: 10px 12px 12px;
+}
+
+.moderation-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 9999px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    color: var(--text-main);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 10px 22px rgba(15, 20, 25, 0.08);
+    transition: transform 0.15s ease, filter 0.15s ease, border-color 0.15s ease;
+}
+
+.moderation-btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(0.99);
+}
+
+.moderation-btn.approve {
+    border-color: rgba(40, 167, 69, 0.35);
+    background: rgba(40, 167, 69, 0.12);
+    color: #28a745;
+}
+
+.moderation-btn.reject {
+    border-color: rgba(220, 53, 69, 0.35);
+    background: rgba(220, 53, 69, 0.12);
+    color: #dc3545;
+}
+
+.moderation-btn i {
+    width: 20px;
+    height: 20px;
+}
+
 @media (max-width: 900px) {
     .admin-kpis {
         grid-template-columns: repeat(3, minmax(0, 1fr));

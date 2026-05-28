@@ -13651,7 +13651,7 @@ async function renderAdminModeration() {
         el.innerHTML = '';
         return;
     }
-    el.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><div style="margin-top: 8px;">Loading…</div></div>`;
+    el.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-muted); grid-column: 1 / -1;"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><div style="margin-top: 8px;">Loading…</div></div>`;
     try {
         lucide.createIcons();
     } catch (e) {
@@ -13659,48 +13659,74 @@ async function renderAdminModeration() {
     }
     const client = initSupabase();
     if (!client) {
-        el.innerHTML = `<div class="muted" style="padding: 12px 4px;">Supabase is not configured.</div>`;
+        el.innerHTML = `<div class="muted" style="padding: 12px 4px; grid-column: 1 / -1;">Supabase is not configured.</div>`;
         return;
     }
     const { data, error } = await client
         .from('listings')
-        .select('id, owner_id, title, created_at, is_approved, deleted_at')
+        .select('id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, is_approved, deleted_at, listing_images(url, thumbnail_url, sort_order)')
         .is('deleted_at', null)
         .eq('is_approved', false)
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(30);
     if (error) {
-        el.innerHTML = `<div class="muted" style="padding: 12px 4px;">${escapeHtml(error.message || 'Failed to load pending listings')}</div>`;
+        el.innerHTML = `<div class="muted" style="padding: 12px 4px; grid-column: 1 / -1;">${escapeHtml(error.message || 'Failed to load pending listings')}</div>`;
         return;
     }
     const rows = Array.isArray(data) ? data : [];
     if (!rows.length) {
-        el.innerHTML = `<div class="muted" style="padding: 12px 4px;">No pending listings.</div>`;
+        el.innerHTML = `<div class="muted" style="padding: 12px 4px; grid-column: 1 / -1;">No pending listings.</div>`;
         return;
     }
     const ownerIds = Array.from(new Set(rows.map((r) => r?.owner_id).filter(Boolean)));
     const profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
-    el.innerHTML = rows
-        .map((r) => {
-            const id = String(r.id || '').trim();
-            const title = String(r.title || '').trim() || 'Untitled listing';
-            const ownerId = String(r.owner_id || '').trim();
-            const p = profilesById[ownerId] || null;
-            const label = [String(p?.display_name || '').trim(), String(p?.tag || '').trim()].filter(Boolean).join(' ') || ownerId;
-            return `
-                <div class="admin-list-item">
-                    <div>
-                        <div style="font-weight: 900;">${escapeHtml(title)}</div>
-                        <div class="meta">${escapeHtml(label)} · ${escapeHtml(formatRelativeDate(r.created_at))}</div>
-                    </div>
-                    <div class="admin-actions">
-                        <button class="admin-action-btn primary" type="button" onclick="adminApproveListing('${escapeHtml(id)}')">Approve</button>
-                        <button class="admin-action-btn danger" type="button" onclick="adminDeleteListing('${escapeHtml(id)}')">Delete</button>
+    const mapped = rows.map((row) => mapSupabaseListingRow(row, profilesById));
+    el.innerHTML = mapped.map((item) => createModerationCardHTML(item)).join('');
+    initCarouselsInContainer(el);
+    scheduleLucideCreateIcons();
+}
+
+function createModerationCardHTML(item) {
+    const carouselImages = getListingImagesForCard(item).slice(0, 8);
+    const videoBadge = hasListingVideo(item) ? `<span class="video-play-badge"><i data-lucide="play"></i></span>` : '';
+    const mediaHTML = carouselImages.length > 1
+        ? `<div class="card-media-wrap"><div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
+                <div class="carousel-viewport">
+                    <div class="carousel-track">
+                        ${carouselImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low" draggable="false"></div>`).join('')}
                     </div>
                 </div>
-            `;
-        })
-        .join('');
+                ${videoBadge}
+                <div class="carousel-dots">
+                    ${carouselImages.map((_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
+                </div>
+            </div></div>`
+        : `<div class="card-media-wrap">${videoBadge}<img src="${item.cardImage || item.image}" data-src="${item.cardImage || item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
+    const ownerName = String(item?.seller?.name || '').trim();
+    const ownerTag = String(item?.seller?.tag || '').trim();
+    const sellerLabel = [ownerName, ownerTag].filter(Boolean).join(' ') || '';
+    return `
+        <div class="card">
+            ${mediaHTML}
+            <div class="card-content">
+                <div class="card-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
+                <div class="card-title">${escapeHtml(item.title || '')}</div>
+                <div class="card-footer">
+                    <span><i data-lucide="map-pin" style="width:12px"></i> ${escapeHtml(item.location || '')}</span>
+                    <span>${escapeHtml(item.date || '')}</span>
+                </div>
+                ${sellerLabel ? `<div class="meta" style="margin-top: 8px;">${escapeHtml(sellerLabel)}</div>` : ''}
+            </div>
+            <div class="moderation-actions-row">
+                <button class="moderation-btn reject" type="button" onclick="adminDeleteListing('${escapeHtml(String(item.id))}'); event.stopPropagation();">
+                    <i data-lucide="x"></i>
+                </button>
+                <button class="moderation-btn approve" type="button" onclick="adminApproveListing('${escapeHtml(String(item.id))}'); event.stopPropagation();">
+                    <i data-lucide="check"></i>
+                </button>
+            </div>
+        </div>
+    `;
 }
 
 async function adminApproveListing(listingId) {
