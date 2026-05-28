@@ -481,6 +481,7 @@ let myIdentityStatus = null;
 
 let coursesFeatureEnabledFlag = true;
 let coursesFeatureFlagsLoaded = false;
+let deletedAccountLogoutActive = false;
 
 let listingsLoadedCount = 0;
 let listingsHasMore = true;
@@ -639,6 +640,49 @@ function requireAuthOrPrompt() {
     showToast('Please log in to continue', 'log-in');
     openModal('loginModal');
     return false;
+}
+
+async function forceVisitorLogout({ message = 'Account disabled', silent = false } = {}) {
+    if (deletedAccountLogoutActive) return;
+    deletedAccountLogoutActive = true;
+    try {
+        setChatRouteParam(false, { replace: true });
+    } catch (e) {
+        null;
+    }
+    try {
+        setCourseRouteParam('', { replace: true });
+    } catch (e) {
+        null;
+    }
+    try {
+        clearSellerProfileRouteTag();
+    } catch (e) {
+        null;
+    }
+    try {
+        clearListingRouteParams({ replace: true });
+    } catch (e) {
+        null;
+    }
+    try {
+        showSection('home-section');
+    } catch (e) {
+        null;
+    }
+    if (!silent) showToast(message, 'alert-circle');
+    try {
+        const client = initSupabase();
+        await client?.auth?.signOut?.();
+    } catch (e) {
+        null;
+    }
+    try {
+        applyAuthSessionToLocalState(null);
+    } catch (e) {
+        null;
+    }
+    deletedAccountLogoutActive = false;
 }
 
 async function requireValidSessionOrPrompt(client) {
@@ -1153,6 +1197,10 @@ async function handleAuthSessionChange(event, session) {
     const client = initSupabase();
     if (!client) return;
     const row = await ensureSupabaseProfileRow(client, user);
+    if (row && row.deleted_at) {
+        await forceVisitorLogout({ message: 'Account disabled', silent: false });
+        return;
+    }
     if (row) applySupabaseProfileRowToLocalState(row, user);
     await refreshAdminFlagFromSupabase(client);
     await maybeApplyPendingReferralToSupabase({ silent: true });
@@ -1191,8 +1239,18 @@ async function bootstrapSupabaseAuth() {
     if (error) return;
     applyAuthSessionToLocalState(data?.session || null);
     if (data?.session?.user) {
-        const row = await ensureSupabaseProfileRow(supabaseClient, data.session.user);
-        if (row) applySupabaseProfileRowToLocalState(row, data.session.user);
+        const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
+        const authUser = userData?.user || null;
+        if (userErr || !authUser?.id) {
+            await forceVisitorLogout({ message: 'Session expired', silent: true });
+            return;
+        }
+        const row = await ensureSupabaseProfileRow(supabaseClient, authUser);
+        if (row && row.deleted_at) {
+            await forceVisitorLogout({ message: 'Account disabled', silent: false });
+            return;
+        }
+        if (row) applySupabaseProfileRowToLocalState(row, authUser);
         await refreshAdminFlagFromSupabase(supabaseClient);
         await maybeApplyPendingReferralToSupabase({ silent: true });
         await refreshMyReferralCountFromSupabase({ silent: true });
