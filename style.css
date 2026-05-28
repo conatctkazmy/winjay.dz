@@ -4878,6 +4878,36 @@ body.dark-mode .listing-status-badge {
     background: var(--light-gray);
 }
 
+.toggle-modern {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+}
+
+#adminFeatureFlagsCard .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    padding: 14px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    background: var(--light-gray);
+}
+
+#adminFeatureFlagsCard .toggle-label {
+    flex: 1 1 auto;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1.2;
+}
+
+#adminFeatureFlagsCard .muted {
+    margin-top: 10px;
+}
+
 .toggle-input {
     position: absolute;
     opacity: 0;

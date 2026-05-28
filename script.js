@@ -16539,9 +16539,10 @@ async function switchSellerProfileSection(section = 'listings') {
     if (!listingsTab || !reviewsTab || !coursesTab || !listingsPanel || !reviewsPanel || !coursesPanel) return;
 
     const next = String(section || 'listings');
-    const showListings = next === 'listings';
-    const showCourses = next === 'courses';
+    const allowCourses = isCoursesFeatureEnabledForViewer();
     const showReviews = next === 'reviews';
+    const showCourses = next === 'courses' && allowCourses;
+    const showListings = next === 'listings' || (!showReviews && !showCourses);
 
     listingsTab.classList.toggle('active', showListings);
     coursesTab.classList.toggle('active', showCourses);
@@ -16733,6 +16734,7 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
             </div>
         </div>`;
     showSection('seller-profile-section');
+    applyCoursesFeatureVisibility();
     try {
         const sellerGrid = content.querySelector('#sellerListingsSection .listings-grid');
         if (sellerGrid) initCarouselsInContainer(sellerGrid);
@@ -16873,6 +16875,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
             </div>
         </div>`;
     showSection('seller-profile-section');
+    applyCoursesFeatureVisibility();
     try {
         const sellerGrid = content.querySelector('#sellerListingsSection .listings-grid');
         if (sellerGrid) initCarouselsInContainer(sellerGrid);
