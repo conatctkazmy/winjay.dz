@@ -846,7 +846,7 @@ function mapSupabaseListingRow(row, profilesById = {}) {
     };
 }
 
-async function fetchListingsFromSupabase({ silent = false, includeProfiles = false, limit = undefined, offset = 0, append = false } = {}) {
+async function fetchListingsFromSupabase({ silent = false, includeProfiles = true, limit = undefined, offset = 0, append = false } = {}) {
     const client = initSupabase();
     if (!client) return;
     const safeOffset = Math.max(0, Number(offset) || 0);
@@ -6512,7 +6512,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     await fetchListingsFromSupabase({
                         silent: false,
-                        includeProfiles: false,
+                        includeProfiles: true,
                         limit: LISTINGS_FETCH_PAGE_SIZE,
                         offset: listingsLoadedCount,
                         append: true
@@ -6531,7 +6531,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     homeInitialListingsLoading = true;
     homeInitialListingsLoaded = false;
-    const listingsPromise = fetchListingsFromSupabase({ silent: false, includeProfiles: false, limit: INITIAL_LISTINGS_FETCH_LIMIT, offset: 0, append: false });
+    const listingsPromise = fetchListingsFromSupabase({ silent: false, includeProfiles: true, limit: INITIAL_LISTINGS_FETCH_LIMIT, offset: 0, append: false });
 
     if (profileParam) {
         const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
@@ -12122,7 +12122,7 @@ function createMyListingCardHTML(item) {
     const pulse = pendingHeartPulses.has(item.id) && isFavorite;
     const carouselImages = getListingImagesForDetail(item).slice(0, 8);
     const mediaHTML = carouselImages.length > 1
-        ? `<div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
+        ? `<div class="card-media-wrap"><div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
                 <div class="carousel-viewport">
                     <div class="carousel-track">
                         ${carouselImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low" draggable="false"></div>`).join('')}
@@ -12131,8 +12131,8 @@ function createMyListingCardHTML(item) {
                 <div class="carousel-dots">
                     ${carouselImages.map((_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
                 </div>
-            </div>`
-        : `<img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low">`;
+            </div></div>`
+        : `<div class="card-media-wrap"><img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
     return `
         <div class="card my-listing-card" onclick="handleCardOpen(event, ${item.id})">
             <div class="listing-actions">
@@ -14844,6 +14844,20 @@ function setCarouselIndex(carouselEl, index, { animate = true, persist = false }
     const step = 100 / columns;
     const next = Math.max(0, Math.min(max, Number(index) || 0));
     carouselEl.dataset.index = String(next);
+    const vipWrap = carouselEl.closest('.vip-video-card-media');
+    if (vipWrap) {
+        vipWrap.dataset.carouselIndex = String(next);
+        if (next !== 0) {
+            const v = vipWrap.querySelector('video.vip-video-preview[data-vip-video="1"]');
+            if (v) {
+                try {
+                    v.pause();
+                } catch (e) {
+                    null;
+                }
+            }
+        }
+    }
     if (!animate) track.style.transition = 'none';
     track.style.transform = `translateX(-${next * step}%)`;
     const prevBtn = carouselEl.querySelector('.carousel-arrow.prev');
@@ -15075,16 +15089,46 @@ function createVipVideoCardHTML(item) {
     const availability = String(item.availability || '').toLowerCase();
     const badgeText = availability === 'sold' ? 'Sold' : (availability === 'reserved' ? 'Reserved' : '');
     const videoUrl = getListingVideoPublicUrl(item);
+    const carouselImages = getListingImagesForCard(item).slice(0, 8);
     const muted = getVipVideoMutedPreference();
     const muteIcon = muted ? 'volume-x' : 'volume-2';
-    const mediaHTML = videoUrl
-        ? `<div class="card-media-wrap vip-video-card-media">
+    const mediaHTML = videoUrl && carouselImages.length
+        ? `<div class="card-media-wrap vip-video-card-media" data-carousel-index="0">
+                <div class="vip-video-loader" aria-hidden="true"></div>
+                <div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
+                    <div class="carousel-viewport">
+                        <div class="carousel-track">
+                            <div class="carousel-slide"><video class="card-img vip-video-preview" data-vip-video="1" data-listing-id="${item.id}" data-src="${videoUrl}" ${carouselImages[0] ? `poster="${carouselImages[0]}"` : ''} playsinline muted loop preload="none"></video></div>
+                            ${carouselImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low" draggable="false"></div>`).join('')}
+                        </div>
+                    </div>
+                    <div class="carousel-dots">
+                        ${Array.from({ length: carouselImages.length + 1 }, (_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
+                    </div>
+                </div>
+                <button type="button" class="vip-video-mute-btn" data-listing-id="${item.id}" data-muted="${muted ? '1' : '0'}" aria-label="${muted ? 'Activer le son' : 'Couper le son'}" onclick="toggleVipVideoMuted(event, ${item.id})"><i data-lucide="${muteIcon}"></i></button>
+                <button type="button" class="vip-video-pause-btn" data-listing-id="${item.id}" data-paused="0" aria-label="Pause" onclick="toggleVipVideoPaused(event, ${item.id})"><i data-lucide="pause"></i></button>
+            </div>`
+        : (videoUrl
+            ? `<div class="card-media-wrap vip-video-card-media" data-carousel-index="0">
                 <div class="vip-video-loader" aria-hidden="true"></div>
                 <video class="card-img vip-video-preview" data-vip-video="1" data-listing-id="${item.id}" data-src="${videoUrl}" playsinline muted loop preload="none"></video>
                 <button type="button" class="vip-video-mute-btn" data-listing-id="${item.id}" data-muted="${muted ? '1' : '0'}" aria-label="${muted ? 'Activer le son' : 'Couper le son'}" onclick="toggleVipVideoMuted(event, ${item.id})"><i data-lucide="${muteIcon}"></i></button>
                 <button type="button" class="vip-video-pause-btn" data-listing-id="${item.id}" data-paused="0" aria-label="Pause" onclick="toggleVipVideoPaused(event, ${item.id})"><i data-lucide="pause"></i></button>
             </div>`
-        : `<div class="card-media-wrap"><img src="${item.cardImage || item.image}" data-src="${item.cardImage || item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
+            : (carouselImages.length > 1
+                ? `<div class="card-media-wrap"><div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
+                        <div class="carousel-viewport">
+                            <div class="carousel-track">
+                                ${carouselImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low" draggable="false"></div>`).join('')}
+                            </div>
+                        </div>
+                        <div class="carousel-dots">
+                            ${carouselImages.map((_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
+                        </div>
+                    </div></div>`
+                : `<div class="card-media-wrap"><img src="${item.cardImage || item.image}" data-src="${item.cardImage || item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`));
+    const sellerStrip = getPremiumSellerStripHTML(item);
     return `
         <div class="card" onclick="handleCardOpen(event, ${item.id})">
             <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
@@ -15095,6 +15139,7 @@ function createVipVideoCardHTML(item) {
             <div class="card-content">
                 <div class="card-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
                 <div class="card-title">${item.title}</div>
+                ${sellerStrip}
                 <div class="card-footer">
                     <span><i data-lucide="map-pin" style="width:12px"></i> ${item.location}</span>
                     <span>${item.date}</span>
@@ -15402,7 +15447,9 @@ function renderVipVideoSection() {
     }
     section.style.display = '';
     row.innerHTML = items.map((x) => createVipVideoCardHTML(x)).join('');
+    initCarouselsInContainer(row);
     setupVipVideoAutoplay(row);
+    scheduleLucideCreateIcons();
 }
 
 function renderListings() {
@@ -15453,6 +15500,29 @@ function renderFavorites() {
     scheduleLucideCreateIcons();
 }
 
+function getPremiumSellerStripHTML(item) {
+    const seller = item?.seller;
+    if (!seller || !(seller.verified || seller.vip)) return '';
+    const tag = String(seller.tag || '').trim();
+    const safeTag = tag ? escapeHtml(tag) : '';
+    const safeName = escapeHtml(String(seller.name || ''));
+    const safePic = escapeHtml(String(seller.pic || seller.profilePic || ''));
+    const badges = [
+        seller.verified ? '<i data-lucide="badge-check"></i>' : '',
+        seller.vip ? '<i data-lucide="crown"></i>' : ''
+    ].filter(Boolean).join('');
+    const badgesHTML = badges ? `<span class="card-seller-badges">${badges}</span>` : '';
+    return `
+        <div class="card-seller-strip">
+            <img class="card-seller-avatar" src="${safePic}" alt="${safeName}" loading="lazy" decoding="async">
+            <div class="card-seller-meta">
+                <div class="card-seller-name">${safeName} ${badgesHTML}</div>
+                ${safeTag ? `<div class="card-seller-tag">${safeTag}</div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
 function createCardHTML(item) {
     const isFavorite = favorites.includes(item.id);
     const pulse = pendingHeartPulses.has(item.id) && isFavorite;
@@ -15460,6 +15530,7 @@ function createCardHTML(item) {
     const badgeText = availability === 'sold' ? 'Sold' : (availability === 'reserved' ? 'Reserved' : '');
     const carouselImages = getListingImagesForCard(item).slice(0, 8);
     const videoBadge = hasListingVideo(item) ? `<span class="video-play-badge"><i data-lucide="play"></i></span>` : '';
+    const sellerStrip = getPremiumSellerStripHTML(item);
     const mediaHTML = carouselImages.length > 1
         ? `<div class="card-media-wrap"><div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
                 <div class="carousel-viewport">
@@ -15483,6 +15554,7 @@ function createCardHTML(item) {
             <div class="card-content">
                 <div class="card-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
                 <div class="card-title">${item.title}</div>
+                ${sellerStrip}
                 <div class="card-footer">
                     <span><i data-lucide="map-pin" style="width:12px"></i> ${item.location}</span>
                     <span>${item.date}</span>

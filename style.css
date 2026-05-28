@@ -2287,8 +2287,8 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 
 .card-img {
     width: 100%;
-    height: 200px;
-    object-fit: cover;
+    height: 100%;
+    object-fit: contain;
     cursor: zoom-in;
 }
 
@@ -2309,6 +2309,13 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 .card .card-img {
     aspect-ratio: 1 / 1;
     height: auto;
+}
+
+.card-media-wrap > .card-img,
+.card-media-wrap > video.card-img,
+.card-media-wrap > .card-carousel {
+    width: 100%;
+    height: 100%;
 }
 
 .detail-carousel {
@@ -2349,9 +2356,13 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 .carousel-slide .detail-image {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     cursor: pointer;
     user-select: none;
+}
+
+.carousel-slide .detail-image {
+    object-fit: cover;
 }
 
 .vip-video-section {
@@ -2576,6 +2587,12 @@ html[dir="rtl"] .home-category-swipe-item {
     opacity: 0;
 }
 
+.vip-video-card-media:not([data-carousel-index="0"]) .vip-video-mute-btn,
+.vip-video-card-media:not([data-carousel-index="0"]) .vip-video-pause-btn {
+    opacity: 0;
+    pointer-events: none;
+}
+
 .vip-video-mute-btn {
     position: absolute;
     top: 57px;
@@ -2751,6 +2768,9 @@ html[dir="rtl"] .home-category-swipe-item {
 
 .card-media-wrap {
     position: relative;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    background: var(--light-gray);
 }
 
 .video-play-badge {
@@ -2992,6 +3012,63 @@ body.dark-mode .listing-status-badge {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.card-seller-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: -4px 0 10px;
+}
+
+.card-seller-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    object-fit: cover;
+    background: var(--light-gray);
+    flex: 0 0 auto;
+}
+
+.card-seller-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 1px;
+}
+
+.card-seller-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.15;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.card-seller-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--primary-color);
+}
+
+.card-seller-badges svg,
+.card-seller-badges i {
+    width: 14px;
+    height: 14px;
+}
+
+.card-seller-tag {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 .card-footer {
