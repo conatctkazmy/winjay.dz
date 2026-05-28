@@ -1709,6 +1709,9 @@ html[data-initial-section="seller-profile-section"] #seller-profile-section {
     z-index: 5;
     background: var(--bg-main);
     padding-top: 10px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 html.app-booting .app-boot-skeleton {
@@ -1721,6 +1724,24 @@ html.app-booting .content-section {
 
 .boot-skeleton-variant {
     display: none;
+}
+
+.app-boot-skeleton .skeleton-block,
+.app-boot-skeleton .skeleton-card {
+    max-width: 100%;
+}
+
+.app-boot-skeleton .profile-skeleton-actions,
+.app-boot-skeleton .profile-skeleton-tabs {
+    flex-wrap: wrap;
+}
+
+.boot-skeleton-course [style*="grid-template-columns: 1fr 340px"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 340px) !important;
+}
+
+.boot-skeleton-course [style*="grid-template-columns: 1fr 340px"] > * {
+    min-width: 0;
 }
 
 html[data-initial-section="seller-profile-section"] .boot-skeleton-profile,
@@ -3026,7 +3047,7 @@ body.dark-mode .listing-status-badge {
 
 .skeleton-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
     gap: 25px;
 }
 
