@@ -3106,6 +3106,21 @@ body.dark-mode .listing-status-badge {
     border-radius: 9999px;
 }
 
+.profile-skeleton-actions-row .skeleton-block {
+    height: 42px;
+    width: 140px;
+    border-radius: 9999px;
+}
+
+.profile-skeleton-bio {
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.profile-skeleton-bio .skeleton-block {
+    border-radius: 9999px;
+}
+
 .profile-skeleton-tabs {
     display: flex;
     gap: 10px;

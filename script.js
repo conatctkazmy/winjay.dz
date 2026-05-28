@@ -14390,12 +14390,18 @@ function getSellerProfileSkeletonHTML() {
                                 <div class="skeleton-block" style="height: 22px; width: 220px;"></div>
                                 <div class="skeleton-block" style="height: 16px; width: 120px;"></div>
                                 <div class="skeleton-block" style="height: 18px; width: 160px;"></div>
-                                <div class="skeleton-block" style="height: 56px; width: min(520px, 100%);"></div>
+                                <div class="skeleton-block" style="height: 18px; width: 200px;"></div>
                             </div>
-                            <div class="profile-skeleton-actions">
-                                <div class="skeleton-block"></div>
-                                <div class="skeleton-block"></div>
+                            <div class="profile-bio-box profile-skeleton-bio">
+                                <div class="skeleton-block" style="height: 18px; width: 160px;"></div>
+                                <div class="skeleton-block" style="height: 18px; width: 150px;"></div>
+                                <div class="skeleton-block" style="height: 18px; width: 190px;"></div>
+                                <div class="skeleton-block" style="height: 18px; width: 210px;"></div>
                             </div>
+                        </div>
+                        <div class="profile-actions-row profile-skeleton-actions-row">
+                            <div class="skeleton-block"></div>
+                            <div class="skeleton-block"></div>
                         </div>
                     </div>
                 </div>
