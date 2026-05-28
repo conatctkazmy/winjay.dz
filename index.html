@@ -924,6 +924,20 @@
 
                     <div class="admin-panels">
                         <div class="admin-panel active" id="adminPanelOverview">
+                            <div class="admin-card" id="adminFeatureFlagsCard">
+                                <div class="admin-card-head">
+                                    <h3>Feature flags</h3>
+                                    <span class="muted">Hide incomplete features</span>
+                                </div>
+                                <div class="toggle-row">
+                                    <label class="toggle">
+                                        <input id="adminCoursesFeatureToggle" class="toggle-input" type="checkbox">
+                                        <span class="toggle-switch"></span>
+                                    </label>
+                                    <div class="toggle-label">Courses feature (public)</div>
+                                </div>
+                                <div class="muted" id="adminCoursesFeatureHint"></div>
+                            </div>
                             <div class="admin-two-col">
                                 <div class="admin-card">
                                     <div class="admin-card-head">
@@ -2276,6 +2290,6 @@
     </button>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script defer src="script.js?v=20260528_2"></script>
+    <script defer src="script.js?v=20260528_3"></script>
 </body>
 </html>

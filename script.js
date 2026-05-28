@@ -479,6 +479,9 @@ let hasLoadedSupabaseProfile = false;
 let hasLoadedIdentityStatus = false;
 let myIdentityStatus = null;
 
+let coursesFeatureEnabledFlag = true;
+let coursesFeatureFlagsLoaded = false;
+
 let listingsLoadedCount = 0;
 let listingsHasMore = true;
 let listingsLoadMoreBound = false;
@@ -578,6 +581,57 @@ function updateLoadMoreListingsUI() {
 
 function isLoggedIn() {
     return !!currentSupabaseUserId;
+}
+
+function isCoursesFeatureEnabledForViewer() {
+    return !!coursesFeatureEnabledFlag || !!userProfile?.isAdmin;
+}
+
+function applyCoursesFeatureVisibility() {
+    const allow = isCoursesFeatureEnabledForViewer();
+    const loggedIn = isLoggedIn();
+    const sidebarCoursesItem = document.getElementById('sidebarCoursesItem');
+    if (sidebarCoursesItem) sidebarCoursesItem.style.display = loggedIn && allow ? '' : 'none';
+
+    const myCoursesTab = document.getElementById('myProfileCoursesTab');
+    const myCoursesPanel = document.getElementById('myProfileCoursesSection');
+    if (myCoursesTab) myCoursesTab.style.display = loggedIn && allow ? '' : 'none';
+    if (!allow) {
+        if (myCoursesPanel) myCoursesPanel.classList.remove('active');
+        const listingsTab = document.getElementById('myProfileListingsTab');
+        const listingsPanel = document.getElementById('myProfileListingsSection');
+        if (listingsTab) listingsTab.classList.add('active');
+        if (listingsPanel) listingsPanel.classList.add('active');
+    }
+
+    const sellerCoursesTab = document.getElementById('sellerCoursesTab');
+    const sellerCoursesPanel = document.getElementById('sellerCoursesSection');
+    if (sellerCoursesTab) sellerCoursesTab.style.display = allow ? '' : 'none';
+    if (!allow && sellerCoursesPanel) sellerCoursesPanel.classList.remove('active');
+}
+
+async function refreshCoursesFeatureFlag({ silent = false } = {}) {
+    const client = initSupabase();
+    if (!client) {
+        coursesFeatureEnabledFlag = true;
+        coursesFeatureFlagsLoaded = true;
+        applyCoursesFeatureVisibility();
+        return coursesFeatureEnabledFlag;
+    }
+    try {
+        const { data, error } = await client.from('feature_flags').select('enabled').eq('key', 'courses_enabled').maybeSingle();
+        if (error) throw error;
+        if (data && typeof data.enabled === 'boolean') coursesFeatureEnabledFlag = data.enabled;
+        coursesFeatureFlagsLoaded = true;
+        applyCoursesFeatureVisibility();
+        return coursesFeatureEnabledFlag;
+    } catch (e) {
+        coursesFeatureEnabledFlag = true;
+        coursesFeatureFlagsLoaded = true;
+        applyCoursesFeatureVisibility();
+        if (!silent) null;
+        return coursesFeatureEnabledFlag;
+    }
 }
 
 function requireAuthOrPrompt() {
@@ -6239,6 +6293,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateNavbarAuthUI();
     initSupabase();
     await bootstrapSupabaseAuth();
+    await refreshCoursesFeatureFlag({ silent: true });
+    applyCoursesFeatureVisibility();
     bootstrapLivePresence();
     if (!supabaseClient) {
         loadUserProfileFromStorage();
@@ -6347,9 +6403,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (courseIdFromUrl) {
-        activeCourseId = courseIdFromUrl;
-        activeCourseFromSection = 'profile-section';
-        showSection('course-section');
+        if (isCoursesFeatureEnabledForViewer()) {
+            activeCourseId = courseIdFromUrl;
+            activeCourseFromSection = 'profile-section';
+            showSection('course-section');
+        } else {
+            try {
+                setCourseRouteParam('', { replace: true });
+            } catch (e) {
+                null;
+            }
+        }
     }
     if (!listingsLoadMoreBound) {
         listingsLoadMoreBound = true;
@@ -11480,7 +11544,7 @@ function updateNavbarAuthUI() {
     if (addListingBtn) addListingBtn.style.display = loggedIn ? '' : 'none';
     if (freeVerifiedPill) freeVerifiedPill.style.display = profileReady && !verified ? '' : 'none';
     if (profileMenu) profileMenu.style.display = loggedIn ? '' : 'none';
-    if (sidebarCoursesItem) sidebarCoursesItem.style.display = loggedIn ? '' : 'none';
+    if (sidebarCoursesItem) sidebarCoursesItem.style.display = loggedIn && isCoursesFeatureEnabledForViewer() ? '' : 'none';
 
     try {
         const showSkeleton = likelyLoggedIn && !profileReady;
@@ -11498,6 +11562,7 @@ function updateProfileUI() {
         if (skeleton) skeleton.style.display = '';
         if (content) content.style.display = 'none';
         updateNavbarAuthUI();
+        applyCoursesFeatureVisibility();
         return;
     }
     if (skeleton) skeleton.style.display = 'none';
@@ -11562,6 +11627,7 @@ function updateProfileUI() {
     updateFreeVerifiedPrimaryAction();
     updateAdminDashboardButtonVisibility();
     updateNavbarAuthUI();
+    applyCoursesFeatureVisibility();
     updateListingVideoGroupVisibility();
     lucide.createIcons();
     refreshMyProfileFollowCounts();
@@ -12239,7 +12305,7 @@ async function switchMyProfileSection(section) {
     const key = String(section || '').toLowerCase();
     const showListings = key === 'listings' || (!key || (key !== 'reviews' && key !== 'courses'));
     const showReviews = key === 'reviews';
-    const showCourses = key === 'courses';
+    const showCourses = key === 'courses' && isCoursesFeatureEnabledForViewer();
 
     try {
         localStorage.setItem(MY_PROFILE_LAST_TAB_STORAGE_KEY, showCourses ? 'courses' : showReviews ? 'reviews' : 'listings');
@@ -13437,6 +13503,40 @@ async function renderAdminOverviewLists() {
     activityEl.innerHTML = '<div class="muted">Use notifications/messages inbox for realtime activity.</div>';
 }
 
+async function renderAdminFeatureFlags() {
+    if (!isAdminAuthorized()) return;
+    const toggle = document.getElementById('adminCoursesFeatureToggle');
+    const hint = document.getElementById('adminCoursesFeatureHint');
+    if (!toggle) return;
+    await refreshCoursesFeatureFlag({ silent: true });
+    toggle.checked = !!coursesFeatureEnabledFlag;
+    if (hint) {
+        hint.textContent = coursesFeatureEnabledFlag
+            ? 'Courses are visible to everyone.'
+            : 'Courses are hidden for all users (admins can still access).';
+    }
+    if (!toggle.dataset.bound) {
+        toggle.dataset.bound = '1';
+        toggle.addEventListener('change', async () => {
+            const client = initSupabase();
+            if (!client) {
+                showToast('Supabase is not configured', 'alert-circle');
+                return;
+            }
+            const next = !!toggle.checked;
+            const { error } = await client.from('feature_flags').update({ enabled: next, updated_at: new Date().toISOString() }).eq('key', 'courses_enabled');
+            if (error) {
+                showToast(error.message || 'Failed to update feature flag', 'alert-circle');
+                await refreshCoursesFeatureFlag({ silent: true });
+                toggle.checked = !!coursesFeatureEnabledFlag;
+                return;
+            }
+            await refreshCoursesFeatureFlag({ silent: true });
+            showToast(next ? 'Courses enabled' : 'Courses hidden', 'check-circle');
+        });
+    }
+}
+
 async function renderAdminDashboard(force = false) {
     if (!isAdminAuthorized()) {
         showSection('home-section');
@@ -13446,6 +13546,7 @@ async function renderAdminDashboard(force = false) {
     setActiveAdminTab(adminActiveTab);
     await renderAdminKpis();
     if (adminActiveTab === 'overview') {
+        await renderAdminFeatureFlags();
         await renderAdminOverviewLists();
         await renderAdminGrowthChart();
     }
@@ -13466,6 +13567,15 @@ function showSection(sectionId) {
         openModal('authGateModal');
         lucide.createIcons();
         return;
+    }
+    if (sectionId === 'course-section' && !isCoursesFeatureEnabledForViewer()) {
+        try {
+            setCourseRouteParam('', { replace: true });
+        } catch (e) {
+            null;
+        }
+        showToast('Courses are temporarily unavailable', 'alert-circle');
+        sectionId = 'home-section';
     }
     if (sectionId !== 'create-listing-section' && sectionId !== 'listing-detail-section') {
         clearListingRouteParams({ replace: true });
@@ -17201,6 +17311,10 @@ function navigateBackFromCourse() {
 function openCourse(courseId, { fromSection = null } = {}) {
     const id = String(courseId || '').trim();
     if (!id) return;
+    if (!isCoursesFeatureEnabledForViewer()) {
+        showToast('Courses are temporarily unavailable', 'alert-circle');
+        return;
+    }
     activeCourseId = id;
     activeCourseFromSection = fromSection || getActiveSectionId() || 'profile-section';
     const prevState = history.state && typeof history.state === 'object' ? history.state : null;
@@ -17255,6 +17369,10 @@ async function requestCourseAccess(ownerTag, courseTitle) {
 
 function openCreateCourseModal() {
     if (!requireAuthOrPrompt()) return;
+    if (!isCoursesFeatureEnabledForViewer()) {
+        showToast('Courses are temporarily unavailable', 'alert-circle');
+        return;
+    }
     activeCourseEditId = null;
     const title = document.getElementById('createCourseTitle');
     const desc = document.getElementById('createCourseDescription');
