@@ -13658,6 +13658,16 @@ function showSection(sectionId) {
         showToast('Courses are temporarily unavailable', 'alert-circle');
         sectionId = 'home-section';
     }
+    if (sectionId !== 'course-section') {
+        activeCourseId = null;
+        activeCourseFromSection = 'profile-section';
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('course')) setCourseRouteParam('', { replace: true });
+        } catch (e) {
+            null;
+        }
+    }
     if (sectionId !== 'create-listing-section' && sectionId !== 'listing-detail-section') {
         clearListingRouteParams({ replace: true });
     }
