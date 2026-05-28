@@ -1719,6 +1719,23 @@ html.app-booting .content-section {
     display: none !important;
 }
 
+.boot-skeleton-variant {
+    display: none;
+}
+
+html[data-initial-section="seller-profile-section"] .boot-skeleton-profile,
+html[data-initial-section="profile-section"] .boot-skeleton-profile {
+    display: block;
+}
+
+html[data-initial-section="course-section"] .boot-skeleton-course {
+    display: block;
+}
+
+html:not([data-initial-section="seller-profile-section"]):not([data-initial-section="profile-section"]):not([data-initial-section="course-section"]) .boot-skeleton-home {
+    display: block;
+}
+
 #profile-section,
 #seller-profile-section {
     max-width: 980px;

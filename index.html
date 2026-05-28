@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>winjay.dz - Marché Moderne</title>
-    <link rel="stylesheet" href="style.css?v=20260528_1">
+    <link rel="stylesheet" href="style.css?v=20260528_2">
     <link rel="preconnect" href="https://rxlpesdvskyytbfoufvp.supabase.co" crossorigin>
     <script>
         document.documentElement.classList.add('app-loading');
@@ -53,10 +53,10 @@
             })();
 
             let initialSection = safeLastSection;
-            if (hasProfile) initialSection = 'seller-profile-section';
+            if (hasCourse) initialSection = 'course-section';
+            else if (hasProfile) initialSection = 'seller-profile-section';
             else if (hasNew || hasEdit) initialSection = 'create-listing-section';
             else if (hasListing) initialSection = 'listing-detail-section';
-            else if (hasCourse) initialSection = 'course-section';
             else if (!hasAuthToken && blocked.has(initialSection)) initialSection = 'home-section';
 
             document.documentElement.dataset.initialSection = initialSection;
@@ -246,15 +246,81 @@
 
         <main id="content-area">
             <div class="app-boot-skeleton loading-skeleton" id="appBootSkeleton" aria-hidden="true">
-                <div class="skeleton-block" style="height: 36px; width: 280px; margin-bottom: 18px;"></div>
-                <div class="skeleton-block" style="height: 18px; width: 420px; margin-bottom: 26px;"></div>
-                <div class="skeleton-grid">
-                    <div class="skeleton-card"></div>
-                    <div class="skeleton-card"></div>
-                    <div class="skeleton-card"></div>
-                    <div class="skeleton-card"></div>
-                    <div class="skeleton-card"></div>
-                    <div class="skeleton-card"></div>
+                <div class="boot-skeleton-variant boot-skeleton-home">
+                    <div class="skeleton-block" style="height: 36px; width: 280px; margin-bottom: 18px;"></div>
+                    <div class="skeleton-block" style="height: 18px; width: 420px; margin-bottom: 26px;"></div>
+                    <div class="skeleton-grid">
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                    </div>
+                </div>
+                <div class="boot-skeleton-variant boot-skeleton-profile">
+                    <div class="profile-skeleton">
+                        <div class="profile-header profile-skeleton-header">
+                            <div class="cover-photo-container profile-skeleton-cover">
+                                <div class="skeleton-block"></div>
+                            </div>
+                            <div class="profile-info-container">
+                                <div class="profile-pic-wrapper">
+                                    <div class="skeleton-block" style="width: 120px; height: 120px; border-radius: 50%;"></div>
+                                </div>
+                                <div class="profile-details">
+                                    <div class="profile-text">
+                                        <div class="profile-skeleton-lines">
+                                            <div class="skeleton-block" style="height: 24px; width: 260px;"></div>
+                                            <div class="skeleton-block" style="height: 16px; width: 140px;"></div>
+                                            <div class="skeleton-block" style="height: 18px; width: 190px;"></div>
+                                            <div class="skeleton-block" style="height: 54px; width: min(560px, 100%);"></div>
+                                        </div>
+                                        <div class="profile-skeleton-actions">
+                                            <div class="skeleton-block"></div>
+                                            <div class="skeleton-block"></div>
+                                            <div class="skeleton-block"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="profile-content">
+                            <div class="profile-skeleton-tabs">
+                                <div class="skeleton-block"></div>
+                                <div class="skeleton-block"></div>
+                                <div class="skeleton-block"></div>
+                            </div>
+                            <div class="loading-skeleton">
+                                <div class="skeleton-grid">
+                                    <div class="skeleton-card"></div>
+                                    <div class="skeleton-card"></div>
+                                    <div class="skeleton-card"></div>
+                                    <div class="skeleton-card"></div>
+                                    <div class="skeleton-card"></div>
+                                    <div class="skeleton-card"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="boot-skeleton-variant boot-skeleton-course">
+                    <div style="max-width: 1140px; margin: 0 auto; padding: 14px 18px;">
+                        <div class="skeleton-block" style="height: 18px; width: 120px; margin-bottom: 16px;"></div>
+                        <div class="skeleton-block" style="height: 360px; width: 100%; border-radius: 18px; margin-bottom: 18px;"></div>
+                        <div style="display: grid; grid-template-columns: 1fr 340px; gap: 18px;">
+                            <div>
+                                <div class="skeleton-block" style="height: 26px; width: 260px; margin-bottom: 12px;"></div>
+                                <div class="skeleton-block" style="height: 70px; width: 100%; border-radius: 16px; margin-bottom: 10px;"></div>
+                                <div class="skeleton-block" style="height: 70px; width: 100%; border-radius: 16px; margin-bottom: 10px;"></div>
+                                <div class="skeleton-block" style="height: 70px; width: 100%; border-radius: 16px; margin-bottom: 10px;"></div>
+                            </div>
+                            <div>
+                                <div class="skeleton-block" style="height: 210px; width: 100%; border-radius: 18px; margin-bottom: 12px;"></div>
+                                <div class="skeleton-block" style="height: 160px; width: 100%; border-radius: 18px;"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <section id="home-section" class="content-section active">
@@ -2290,6 +2356,6 @@
     </button>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script defer src="script.js?v=20260528_6"></script>
+    <script defer src="script.js?v=20260528_7"></script>
 </body>
 </html>
