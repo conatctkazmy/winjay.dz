@@ -14858,6 +14858,37 @@ function setCarouselIndex(carouselEl, index, { animate = true, persist = false }
             }
         }
     }
+    if (carouselEl.dataset.carousel === 'detail') {
+        const v = carouselEl.querySelector('video.detail-video[data-detail-video="1"]');
+        if (v) {
+            if (next !== 0) {
+                try {
+                    v.pause();
+                } catch (e) {
+                    null;
+                }
+            } else {
+                try {
+                    v.muted = false;
+                    v.volume = 1;
+                } catch (e) {
+                    null;
+                }
+                try {
+                    const p = v.play();
+                    if (p && typeof p.then === 'function') {
+                        p.then(() => {
+                            carouselEl.dataset.soundGate = '0';
+                        }).catch(() => {
+                            carouselEl.dataset.soundGate = '1';
+                        });
+                    }
+                } catch (e) {
+                    carouselEl.dataset.soundGate = '1';
+                }
+            }
+        }
+    }
     if (!animate) track.style.transition = 'none';
     track.style.transform = `translateX(-${next * step}%)`;
     const prevBtn = carouselEl.querySelector('.carousel-arrow.prev');
@@ -16599,8 +16630,13 @@ function getListingImagesForCard(item) {
 }
 
 function setListingDetailImage(listingId, index) {
-    const urls = getListingImagesForDetail(listings.find((l) => l.id === listingId));
-    const maxIdx = urls.length > 1 ? Math.max(0, urls.length - 2) : Math.max(0, urls.length - 1);
+    const item = listings.find((l) => l.id === listingId);
+    if (!item) return;
+    const urls = getListingImagesForDetail(item);
+    const hasVideo = hasListingVideo(item);
+    const columns = hasVideo ? 1 : 2;
+    const slidesCount = (hasVideo ? 1 : 0) + urls.length;
+    const maxIdx = Math.max(0, slidesCount - columns);
     const idx = Math.max(0, Math.min(maxIdx, Number(index) || 0));
     listingDetailImageIndex[listingId] = idx;
     const carousel = document.querySelector(`.js-carousel[data-carousel="detail"][data-listing-id="${Number(listingId) || 0}"]`);
@@ -16608,11 +16644,13 @@ function setListingDetailImage(listingId, index) {
         setCarouselIndex(carousel, idx, { animate: true });
         return;
     }
-    const main = document.getElementById('detailMainImage');
-    if (main && urls[idx]) {
-        main.src = urls[idx];
-        main.setAttribute('data-src', urls[idx]);
-        main.onclick = () => openLightbox(urls[idx]);
+    if (!hasVideo) {
+        const main = document.getElementById('detailMainImage');
+        if (main && urls[idx]) {
+            main.src = urls[idx];
+            main.setAttribute('data-src', urls[idx]);
+            main.onclick = () => openLightbox(urls[idx]);
+        }
     }
 }
 
@@ -16646,9 +16684,6 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     const pulse = pendingHeartPulses.has(listingId) && isLiked;
     const detailImages = getListingImagesForDetail(item);
     const selectedIdxRaw = listingDetailImageIndex[listingId] ?? 0;
-    const maxDetailIndex = detailImages.length > 1 ? Math.max(0, detailImages.length - 2) : 0;
-    const selectedIdx = Math.max(0, Math.min(maxDetailIndex, Number(selectedIdxRaw) || 0));
-    listingDetailImageIndex[listingId] = selectedIdx;
     const mainImageUrl = detailImages[0] || item.image;
     const videoMeta = getListingVideoMeta(item);
     let listingVideoUrl = videoMeta.url;
@@ -16661,21 +16696,26 @@ function openListingDetail(listingId, { pushState = true } = {}) {
             listingVideoUrl = '';
         }
     }
-    const listingVideoHtml = listingVideoUrl
-        ? `<div class="listing-video-wrap" data-video-ready="0" data-sound-gate="0"><div class="vip-video-loader" aria-hidden="true"></div><button type="button" class="listing-video-sound-gate" aria-label="Activer le son"><i data-lucide="volume-2"></i><span>Activer le son</span></button><video src="${listingVideoUrl}" controls playsinline preload="metadata"></video></div>`
-        : '';
-    const detailDotsCount = maxDetailIndex + 1;
-    const detailCarouselHtml = detailImages.length > 1
-        ? `<div class="detail-carousel js-carousel" data-carousel="detail" data-columns="2" data-listing-id="${listingId}" data-index="${selectedIdx}">
+    const hasDetailVideo = !!listingVideoUrl;
+    const detailColumns = hasDetailVideo ? 1 : 2;
+    const detailSlidesCount = (hasDetailVideo ? 1 : 0) + detailImages.length;
+    const detailMaxIndex = Math.max(0, detailSlidesCount - detailColumns);
+    const selectedIdxClamped = Math.max(0, Math.min(detailMaxIndex, Number(selectedIdxRaw) || 0));
+    listingDetailImageIndex[listingId] = selectedIdxClamped;
+    const detailDotsCount = detailMaxIndex + 1;
+    const detailCarouselHtml = (hasDetailVideo || detailImages.length > 1)
+        ? `<div class="detail-carousel js-carousel" data-carousel="detail" data-columns="${detailColumns}" data-listing-id="${listingId}" data-index="${selectedIdxClamped}" data-video-ready="0" data-sound-gate="0">
                 <button type="button" class="carousel-arrow prev" aria-label="Previous image"><i data-lucide="chevron-left"></i></button>
                 <div class="carousel-viewport">
                     <div class="carousel-track">
+                        ${hasDetailVideo ? `<div class="carousel-slide"><video class="detail-video" data-detail-video="1" src="${listingVideoUrl}" ${detailImages[0] ? `poster="${detailImages[0]}"` : ''} playsinline preload="metadata" loop></video></div>` : ''}
                         ${detailImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" class="detail-image" alt="${escapeHtml(item.title)}" loading="lazy" decoding="async" draggable="false"></div>`).join('')}
                     </div>
                 </div>
                 <button type="button" class="carousel-arrow next" aria-label="Next image"><i data-lucide="chevron-right"></i></button>
+                ${hasDetailVideo ? `<div class="vip-video-loader" aria-hidden="true"></div><button type="button" class="listing-video-sound-gate" aria-label="Activer le son"><i data-lucide="volume-2"></i><span>Activer le son</span></button>` : ''}
                 <div class="carousel-dots">
-                    ${Array.from({ length: detailDotsCount }, (_, i) => `<button type="button" class="carousel-dot ${i === selectedIdx ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
+                    ${Array.from({ length: detailDotsCount }, (_, i) => `<button type="button" class="carousel-dot ${i === selectedIdxClamped ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
                 </div>
             </div>`
         : `<img id="detailMainImage" src="${mainImageUrl}" data-src="${mainImageUrl}" class="detail-image" alt="${escapeHtml(item.title)}" onclick="openLightbox('${mainImageUrl}')">`;
@@ -16701,7 +16741,6 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     content.innerHTML = `
         <div class="detail-container">
             <div class="detail-gallery">
-                ${listingVideoHtml}
                 ${detailCarouselHtml}
             </div>
             <div class="detail-info">
@@ -16860,65 +16899,61 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                 </div>
             </div>
         </div>${similarHTML}`;
-    const detailVideoWrap = content.querySelector('.listing-video-wrap[data-video-ready]');
-    if (detailVideoWrap) {
-        const v = detailVideoWrap.querySelector('video');
-        if (v) {
-            const gateBtn = detailVideoWrap.querySelector('.listing-video-sound-gate');
-            if (gateBtn && !gateBtn.dataset.bound) {
-                gateBtn.dataset.bound = '1';
-                gateBtn.addEventListener('click', (e) => {
-                    try {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    } catch (err) {
-                        null;
-                    }
-                    try {
-                        v.muted = false;
-                        v.volume = 1;
-                    } catch (err) {
-                        null;
-                    }
-                    try {
-                        const p = v.play();
-                        if (p && typeof p.catch === 'function') p.catch(() => null);
-                    } catch (err) {
-                        null;
-                    }
-                    detailVideoWrap.dataset.soundGate = '0';
+    const detailCarousel = content.querySelector(`.js-carousel[data-carousel="detail"][data-listing-id="${Number(listingId) || 0}"]`);
+    const detailVideo = detailCarousel ? detailCarousel.querySelector('video.detail-video[data-detail-video="1"]') : null;
+    if (detailCarousel && detailVideo) {
+        const gateBtn = detailCarousel.querySelector('.listing-video-sound-gate');
+        if (gateBtn && !gateBtn.dataset.bound) {
+            gateBtn.dataset.bound = '1';
+            gateBtn.addEventListener('click', (e) => {
+                try {
+                    e.preventDefault();
+                    e.stopPropagation();
+                } catch (err) {
+                    null;
+                }
+                try {
+                    detailVideo.muted = false;
+                    detailVideo.volume = 1;
+                } catch (err) {
+                    null;
+                }
+                try {
+                    const p = detailVideo.play();
+                    if (p && typeof p.catch === 'function') p.catch(() => null);
+                } catch (err) {
+                    null;
+                }
+                detailCarousel.dataset.soundGate = '0';
+            });
+        }
+        try {
+            detailVideo.muted = false;
+            detailVideo.volume = 1;
+        } catch (err) {
+            null;
+        }
+        try {
+            const p = detailVideo.play();
+            if (p && typeof p.then === 'function') {
+                p.then(() => {
+                    if (currentListingDetailId !== listingId) return;
+                    detailCarousel.dataset.soundGate = '0';
+                }).catch(() => {
+                    if (currentListingDetailId !== listingId) return;
+                    detailCarousel.dataset.soundGate = '1';
                 });
             }
-            try {
-                v.muted = false;
-                v.volume = 1;
-            } catch (err) {
-                null;
-            }
-            try {
-                const p = v.play();
-                if (p && typeof p.then === 'function') {
-                    p.then(() => {
-                        if (currentListingDetailId !== listingId) return;
-                        detailVideoWrap.dataset.soundGate = '0';
-                    }).catch(() => {
-                        if (currentListingDetailId !== listingId) return;
-                        detailVideoWrap.dataset.soundGate = '1';
-                    });
-                }
-            } catch (err) {
-                detailVideoWrap.dataset.soundGate = '1';
-            }
-            v.addEventListener('canplay', () => {
-                detailVideoWrap.dataset.videoReady = '1';
-            }, { once: true });
-            v.addEventListener('loadeddata', () => {
-                detailVideoWrap.dataset.videoReady = '1';
-            }, { once: true });
-            v.addEventListener('error', () => {
-                detailVideoWrap.dataset.videoReady = '1';
-            }, { once: true });
+        } catch (err) {
+            detailCarousel.dataset.soundGate = '1';
         }
+        const ready = () => {
+            if (currentListingDetailId !== listingId) return;
+            detailCarousel.dataset.videoReady = '1';
+        };
+        detailVideo.addEventListener('canplay', ready, { once: true });
+        detailVideo.addEventListener('loadeddata', ready, { once: true });
+        detailVideo.addEventListener('error', ready, { once: true });
     }
     initCarouselsInContainer(content);
     scheduleLucideCreateIcons();

@@ -2818,6 +2818,23 @@ html[dir="rtl"] .home-category-swipe-item {
     opacity: 0;
 }
 
+.detail-carousel[data-video-ready="1"] .vip-video-loader {
+    opacity: 0;
+}
+
+.detail-video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #000;
+    object-fit: contain;
+}
+
+.detail-carousel[data-sound-gate="1"] .listing-video-sound-gate {
+    opacity: 1;
+    pointer-events: auto;
+}
+
 .listing-video-sound-gate {
     position: absolute;
     left: 50%;
