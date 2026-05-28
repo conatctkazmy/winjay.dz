@@ -12485,6 +12485,7 @@ function setActiveAdminTab(tab) {
         ['users', 'adminTabUsers', 'adminPanelUsers'],
         ['vip', 'adminTabVip', 'adminPanelVip'],
         ['verified', 'adminTabVerified', 'adminPanelVerified'],
+        ['moderation', 'adminTabModeration', 'adminPanelModeration'],
         ['submissions', 'adminTabSubmissions', 'adminPanelSubmissions'],
         ['live', 'adminTabLive', 'adminPanelLive']
     ];
@@ -13637,9 +13638,130 @@ async function renderAdminDashboard(force = false) {
         await renderVerifiedApplications();
         await renderIdentityApplications();
     }
+    if (adminActiveTab === 'moderation') await renderAdminModeration();
     if (adminActiveTab === 'submissions') await renderSubmissions();
     if (adminActiveTab === 'live') await renderAdminLiveVisitors();
     if (force) showToast('Updated', 'check-circle');
+}
+
+async function renderAdminModeration() {
+    const el = document.getElementById('adminModerationList');
+    if (!el) return;
+    if (!isAdminAuthorized()) {
+        el.innerHTML = '';
+        return;
+    }
+    el.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><div style="margin-top: 8px;">Loading…</div></div>`;
+    try {
+        lucide.createIcons();
+    } catch (e) {
+        null;
+    }
+    const client = initSupabase();
+    if (!client) {
+        el.innerHTML = `<div class="muted" style="padding: 12px 4px;">Supabase is not configured.</div>`;
+        return;
+    }
+    const { data, error } = await client
+        .from('listings')
+        .select('id, owner_id, title, created_at, is_approved, deleted_at')
+        .is('deleted_at', null)
+        .eq('is_approved', false)
+        .order('created_at', { ascending: false })
+        .limit(20);
+    if (error) {
+        el.innerHTML = `<div class="muted" style="padding: 12px 4px;">${escapeHtml(error.message || 'Failed to load pending listings')}</div>`;
+        return;
+    }
+    const rows = Array.isArray(data) ? data : [];
+    if (!rows.length) {
+        el.innerHTML = `<div class="muted" style="padding: 12px 4px;">No pending listings.</div>`;
+        return;
+    }
+    const ownerIds = Array.from(new Set(rows.map((r) => r?.owner_id).filter(Boolean)));
+    const profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
+    el.innerHTML = rows
+        .map((r) => {
+            const id = String(r.id || '').trim();
+            const title = String(r.title || '').trim() || 'Untitled listing';
+            const ownerId = String(r.owner_id || '').trim();
+            const p = profilesById[ownerId] || null;
+            const label = [String(p?.display_name || '').trim(), String(p?.tag || '').trim()].filter(Boolean).join(' ') || ownerId;
+            return `
+                <div class="admin-list-item">
+                    <div>
+                        <div style="font-weight: 900;">${escapeHtml(title)}</div>
+                        <div class="meta">${escapeHtml(label)} · ${escapeHtml(formatRelativeDate(r.created_at))}</div>
+                    </div>
+                    <div class="admin-actions">
+                        <button class="admin-action-btn primary" type="button" onclick="adminApproveListing('${escapeHtml(id)}')">Approve</button>
+                        <button class="admin-action-btn danger" type="button" onclick="adminDeleteListing('${escapeHtml(id)}')">Delete</button>
+                    </div>
+                </div>
+            `;
+        })
+        .join('');
+}
+
+async function adminApproveListing(listingId) {
+    const id = String(listingId || '').trim();
+    if (!id) return;
+    if (!isAdminAuthorized()) {
+        showToast('Not authorized', 'alert-circle');
+        return;
+    }
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    const { error } = await client
+        .from('listings')
+        .update({
+            is_approved: true,
+            approved_at: new Date().toISOString(),
+            approved_by: currentSupabaseUserId || null
+        })
+        .eq('id', id);
+    if (error) {
+        showToast(error.message || 'Failed to approve listing', 'alert-circle');
+        return;
+    }
+    showToast('Listing approved', 'check-circle');
+    await fetchListingsFromSupabase({ silent: true });
+    await renderAdminModeration();
+}
+
+function adminDeleteListing(listingId) {
+    const id = String(listingId || '').trim();
+    if (!id) return;
+    if (!isAdminAuthorized()) {
+        showToast('Not authorized', 'alert-circle');
+        return;
+    }
+    showConfirmModal(
+        'Delete listing',
+        'Are you sure you want to delete this listing?',
+        async () => {
+            const client = initSupabase();
+            if (!client) {
+                showToast('Supabase is not configured', 'alert-circle');
+                return;
+            }
+            const { error } = await client
+                .from('listings')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', id);
+            if (error) {
+                showToast(error.message || 'Failed to delete listing', 'alert-circle');
+                return;
+            }
+            showToast('Listing deleted', 'trash-2');
+            await fetchListingsFromSupabase({ silent: true });
+            await renderAdminModeration();
+        },
+        true
+    );
 }
 
 function showSection(sectionId) {

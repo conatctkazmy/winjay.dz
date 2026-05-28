@@ -996,6 +996,7 @@
                         <button class="admin-tab" id="adminTabUsers" type="button" onclick="switchAdminTab('users')">Users</button>
                         <button class="admin-tab" id="adminTabVip" type="button" onclick="switchAdminTab('vip')">VIP</button>
                         <button class="admin-tab" id="adminTabVerified" type="button" onclick="switchAdminTab('verified')">Verified</button>
+                        <button class="admin-tab" id="adminTabModeration" type="button" onclick="switchAdminTab('moderation')">Moderation</button>
                         <button class="admin-tab" id="adminTabSubmissions" type="button" onclick="switchAdminTab('submissions')">Submissions</button>
                         <button class="admin-tab" id="adminTabLive" type="button" onclick="switchAdminTab('live')">Live</button>
                     </div>
@@ -1094,6 +1095,16 @@
                                         <tbody id="adminVipTbody"></tbody>
                                     </table>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="admin-panel" id="adminPanelModeration">
+                            <div class="admin-card">
+                                <div class="admin-card-head">
+                                    <h3>Listing moderation</h3>
+                                    <span class="muted">Approve or delete pending listings</span>
+                                </div>
+                                <div id="adminModerationList" class="admin-list"></div>
                             </div>
                         </div>
 
@@ -2368,6 +2379,6 @@
     </button>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script defer src="script.js?v=20260528_10"></script>
+    <script defer src="script.js?v=20260528_11"></script>
 </body>
 </html>
