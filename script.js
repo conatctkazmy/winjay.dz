@@ -16726,16 +16726,8 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     const similarHTML = similarListings.length > 0 ? `
         <div class="similar-listings">
             <h3>Annonces similaires</h3>
-            <div class="similar-grid">
-                ${similarListings.map(s => `
-                    <div class="card" onclick="openListingDetail(${s.id})" style="cursor: pointer;">
-                        <img src="${s.cardImage || s.image}" alt="${s.title}" class="card-img" style="height: 120px;">
-                        <div class="card-content" style="padding: 10px;">
-                            <div class="card-price" style="font-size: 1rem;">${new Intl.NumberFormat('fr-DZ').format(s.price)} DA</div>
-                            <div class="card-title" style="font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${s.title}</div>
-                        </div>
-                    </div>
-                `).join('')}
+            <div class="listings-grid">
+                ${similarListings.map((s) => createCardHTML(s)).join('')}
             </div>
         </div>` : '';
     const phoneDigits = item.contact_phone ? String(item.contact_phone).replace(/[^0-9]/g, '') : '';
