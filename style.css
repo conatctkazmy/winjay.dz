@@ -2357,8 +2357,8 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     }
 
     .detail-gallery {
-        margin-left: -15px;
-        margin-right: -15px;
+        margin-left: -7px;
+        margin-right: -7px;
     }
 
     .detail-carousel {
@@ -2379,6 +2379,12 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
         max-width: none;
         aspect-ratio: 1 / 1;
         margin: 0 auto;
+        border-radius: 14px;
+    }
+
+    .detail-carousel .carousel-slide .detail-image,
+    .detail-carousel .detail-video {
+        object-fit: cover;
         border-radius: 0;
     }
 }
