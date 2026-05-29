@@ -182,6 +182,18 @@ html.nav-avatar-loading .navbar .profile-btn img {
     html.sidebar-collapsed .navbar {
         left: 72px;
     }
+
+    html.admin-dashboard-view .navbar {
+        left: 0;
+        padding-left: 30px;
+        padding-right: 30px;
+    }
+
+    html.admin-dashboard-view #sidebarToggle,
+    html.admin-dashboard-view .nav-center,
+    html.admin-dashboard-view #mobileSearchExpand {
+        display: none !important;
+    }
 }
 
 .is-touch-device .navbar {
@@ -1180,6 +1192,10 @@ html.sidebar-open {
     touch-action: pan-y;
 }
 
+html.admin-dashboard-view .sidebar {
+    display: none !important;
+}
+
 @media (min-width: 769px) {
     .sidebar {
         scrollbar-width: thin;
@@ -1314,6 +1330,10 @@ html[dir="rtl"] .sidebar-lang-menu {
     pointer-events: auto;
     touch-action: none;
     overscroll-behavior: none;
+}
+
+html.admin-dashboard-view .sidebar-overlay {
+    display: none !important;
 }
 
 .listing-images-grid {
@@ -1663,10 +1683,18 @@ main {
     position: relative;
 }
 
+html.admin-dashboard-view main {
+    margin-left: 0;
+}
+
 html[dir="rtl"] main {
     margin-left: 0;
     margin-right: 250px;
     transition: margin-right 0.3s ease;
+}
+
+html[dir="rtl"].admin-dashboard-view main {
+    margin-right: 0;
 }
 
 main.expanded {

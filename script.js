@@ -570,6 +570,20 @@ function endBootUI() {
     } catch (e) {
         null;
     }
+    try {
+        const activeSection = getActiveSectionId();
+        document.documentElement.classList.toggle('listing-detail-view', activeSection === 'listing-detail-section');
+        document.documentElement.classList.toggle('admin-dashboard-view', activeSection === 'admin-dashboard-section');
+    } catch (e) {
+        null;
+    }
+    try {
+        if (getActiveSectionId() === 'admin-dashboard-section') {
+            setSidebarMobileOpen(false);
+        }
+    } catch (e) {
+        null;
+    }
 }
 
 function setInnerHTMLIfEmpty(el, html) {
@@ -14111,6 +14125,20 @@ function showSection(sectionId) {
         sectionId = 'home-section';
     }
     stopAllActiveVideos();
+    if (sectionId === 'admin-dashboard-section') {
+        try {
+            setSidebarMobileOpen(false);
+        } catch (e) {
+            null;
+        }
+        try {
+            sidebar?.classList?.add?.('collapsed');
+            contentArea?.classList?.add?.('expanded');
+            document.documentElement.classList.add('sidebar-collapsed');
+        } catch (e) {
+            null;
+        }
+    }
     try {
         document.activeElement?.blur?.();
     } catch {}
@@ -14119,6 +14147,7 @@ function showSection(sectionId) {
     document.getElementById(sectionId).classList.add('active');
     try {
         document.documentElement.classList.toggle('listing-detail-view', sectionId === 'listing-detail-section');
+        document.documentElement.classList.toggle('admin-dashboard-view', sectionId === 'admin-dashboard-section');
     } catch (e) {
         null;
     }
