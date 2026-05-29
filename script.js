@@ -12517,6 +12517,7 @@ function setActiveAdminTab(tab) {
         ['verified', 'adminTabVerified', 'adminPanelVerified'],
         ['moderation', 'adminTabModeration', 'adminPanelModeration'],
         ['submissions', 'adminTabSubmissions', 'adminPanelSubmissions'],
+        ['banners', 'adminTabBanners', 'adminPanelBanners'],
         ['live', 'adminTabLive', 'adminPanelLive']
     ];
     tabs.forEach(([key, tabId, panelId]) => {
@@ -13881,6 +13882,7 @@ async function renderAdminDashboard(force = false) {
     }
     if (adminActiveTab === 'moderation') await renderAdminModeration();
     if (adminActiveTab === 'submissions') await renderSubmissions();
+    if (adminActiveTab === 'banners') await renderAdminHomeBanners();
     if (adminActiveTab === 'live') await renderAdminLiveVisitors();
     if (force) showToast('Updated', 'check-circle');
 }
@@ -13925,6 +13927,230 @@ async function renderAdminModeration() {
     el.innerHTML = mapped.map((item) => createModerationCardHTML(item)).join('');
     initCarouselsInContainer(el);
     scheduleLucideCreateIcons();
+}
+
+let adminHomeBannersRows = [];
+
+async function renderAdminHomeBanners(force = false) {
+    const el = document.getElementById('adminHomeBannersList');
+    if (!el) return;
+    if (!isAdminAuthorized()) {
+        el.innerHTML = '';
+        return;
+    }
+    el.innerHTML = `<div class="muted" style="padding: 10px 2px;">Loading…</div>`;
+    const raw = await fetchHomeBannersRaw({ force: true });
+    if (raw.error) {
+        el.innerHTML = `<div class="muted" style="padding: 10px 2px;">${escapeHtml(raw.error.message || 'Failed to load banners')}</div>`;
+        return;
+    }
+    const rows = Array.isArray(raw.rows) ? raw.rows : [];
+    adminHomeBannersRows = rows.slice();
+    if (!rows.length) {
+        el.innerHTML = `<div class="muted" style="padding: 10px 2px;">No banners.</div>`;
+        return;
+    }
+    el.innerHTML = rows
+        .map((b) => {
+            const id = Number(b.id) || 0;
+            const url = getHomeBannerPublicUrl(b.image_path);
+            const safeUrl = url ? escapeHtml(url) : '';
+            const link = escapeHtml(String(b.link_url || ''));
+            const checked = b.is_active ? 'checked' : '';
+            const order = Number.isFinite(Number(b.sort_order)) ? Number(b.sort_order) : 0;
+            return `
+                <div class="admin-banner-row" data-banner-id="${escapeHtml(String(id))}">
+                    <div class="admin-banner-thumb">${safeUrl ? `<img src="${safeUrl}" alt="">` : ''}</div>
+                    <div class="admin-banner-meta">
+                        <input id="adminBannerLink_${id}" type="text" value="${link}" placeholder="https://example.com">
+                        <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
+                            <label class="toggle-modern">
+                                <input class="toggle-input" type="checkbox" ${checked} onchange="adminSetHomeBannerActive(${id}, this.checked)">
+                                <span class="toggle-switch"></span>
+                            </label>
+                            <div class="muted">Order: ${escapeHtml(String(order))}</div>
+                            <input id="adminBannerReplace_${id}" type="file" accept="image/*" style="display:none" onchange="adminReplaceHomeBannerImage(${id})">
+                            <button class="admin-action-btn" type="button" onclick="document.getElementById('adminBannerReplace_${id}').click()">Replace</button>
+                        </div>
+                    </div>
+                    <div class="admin-banner-actions">
+                        <button class="admin-action-btn" type="button" onclick="adminMoveHomeBanner(${id}, 'up')">Up</button>
+                        <button class="admin-action-btn" type="button" onclick="adminMoveHomeBanner(${id}, 'down')">Down</button>
+                        <button class="admin-action-btn primary" type="button" onclick="adminSaveHomeBanner(${id})">Save</button>
+                        <button class="admin-action-btn danger" type="button" onclick="adminDeleteHomeBanner(${id})">Delete</button>
+                    </div>
+                </div>
+            `;
+        })
+        .join('');
+    scheduleLucideCreateIcons();
+}
+
+async function adminUploadHomeBannerFile(file) {
+    const client = initSupabase();
+    if (!client) throw new Error('Supabase is not configured');
+    const f = file;
+    if (!f) throw new Error('Missing file');
+    const safe = safeStorageFilename(f.name || 'banner.png');
+    const path = `banners/${Date.now()}_${safe}`;
+    const { error } = await client.storage.from(HOME_BANNERS_BUCKET).upload(path, f, { upsert: false });
+    if (error) throw error;
+    return path;
+}
+
+async function adminCreateHomeBanner() {
+    if (!isAdminAuthorized()) {
+        showToast('Not authorized', 'alert-circle');
+        return;
+    }
+    const fileInput = document.getElementById('adminNewBannerFile');
+    const linkInput = document.getElementById('adminNewBannerLink');
+    const activeInput = document.getElementById('adminNewBannerActive');
+    const file = fileInput?.files?.[0] || null;
+    if (!file) {
+        showToast('Please select an image', 'alert-circle');
+        return;
+    }
+    const link = safeExternalHttpUrl(linkInput?.value || '');
+    const isActive = !!activeInput?.checked;
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    try {
+        const imagePath = await adminUploadHomeBannerFile(file);
+        const maxOrder = adminHomeBannersRows.reduce((acc, b) => Math.max(acc, Number(b.sort_order) || 0), 0);
+        const nextOrder = adminHomeBannersRows.length ? maxOrder + 10 : 0;
+        const { error } = await client
+            .from(HOME_BANNERS_TABLE)
+            .insert([{ image_path: imagePath, link_url: link || null, is_active: isActive, sort_order: nextOrder }]);
+        if (error) {
+            showToast(error.message || 'Failed to add banner', 'alert-circle');
+            return;
+        }
+        if (fileInput) fileInput.value = '';
+        if (linkInput) linkInput.value = '';
+        if (activeInput) activeInput.checked = true;
+        homeBannersCache = null;
+        homeBannersCacheAt = 0;
+        await renderAdminHomeBanners(true);
+        void renderHomeHeroBanners({ force: true });
+        showToast('Banner added', 'check-circle');
+    } catch (e) {
+        showToast(String(e?.message || 'Failed to add banner'), 'alert-circle');
+    }
+}
+
+async function adminSaveHomeBanner(id) {
+    if (!isAdminAuthorized()) return;
+    const bannerId = Number(id) || 0;
+    if (!bannerId) return;
+    const linkInput = document.getElementById(`adminBannerLink_${bannerId}`);
+    const link = safeExternalHttpUrl(linkInput?.value || '');
+    const client = initSupabase();
+    if (!client) return;
+    const { error } = await client.from(HOME_BANNERS_TABLE).update({ link_url: link || null }).eq('id', bannerId);
+    if (error) {
+        showToast(error.message || 'Failed to save', 'alert-circle');
+        return;
+    }
+    homeBannersCache = null;
+    homeBannersCacheAt = 0;
+    void renderHomeHeroBanners({ force: true });
+    showToast('Saved', 'check-circle');
+}
+
+async function adminSetHomeBannerActive(id, active) {
+    if (!isAdminAuthorized()) return;
+    const bannerId = Number(id) || 0;
+    if (!bannerId) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { error } = await client.from(HOME_BANNERS_TABLE).update({ is_active: !!active }).eq('id', bannerId);
+    if (error) {
+        showToast(error.message || 'Failed to update', 'alert-circle');
+        await renderAdminHomeBanners(true);
+        return;
+    }
+    homeBannersCache = null;
+    homeBannersCacheAt = 0;
+    void renderHomeHeroBanners({ force: true });
+}
+
+async function adminReplaceHomeBannerImage(id) {
+    if (!isAdminAuthorized()) return;
+    const bannerId = Number(id) || 0;
+    if (!bannerId) return;
+    const fileInput = document.getElementById(`adminBannerReplace_${bannerId}`);
+    const file = fileInput?.files?.[0] || null;
+    if (!file) return;
+    const client = initSupabase();
+    if (!client) return;
+    try {
+        const imagePath = await adminUploadHomeBannerFile(file);
+        const { error } = await client.from(HOME_BANNERS_TABLE).update({ image_path: imagePath }).eq('id', bannerId);
+        if (error) {
+            showToast(error.message || 'Failed to replace image', 'alert-circle');
+            return;
+        }
+        if (fileInput) fileInput.value = '';
+        homeBannersCache = null;
+        homeBannersCacheAt = 0;
+        await renderAdminHomeBanners(true);
+        void renderHomeHeroBanners({ force: true });
+        showToast('Image replaced', 'check-circle');
+    } catch (e) {
+        showToast(String(e?.message || 'Failed to replace image'), 'alert-circle');
+    }
+}
+
+async function adminMoveHomeBanner(id, dir) {
+    if (!isAdminAuthorized()) return;
+    const bannerId = Number(id) || 0;
+    if (!bannerId) return;
+    const rows = adminHomeBannersRows.slice();
+    const idx = rows.findIndex((b) => Number(b.id) === bannerId);
+    if (idx < 0) return;
+    const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= rows.length) return;
+    const a = rows[idx];
+    const b = rows[swapIdx];
+    const aOrder = Number(a.sort_order) || 0;
+    const bOrder = Number(b.sort_order) || 0;
+    const client = initSupabase();
+    if (!client) return;
+    const { error } = await client
+        .from(HOME_BANNERS_TABLE)
+        .upsert([{ id: a.id, sort_order: bOrder }, { id: b.id, sort_order: aOrder }], { onConflict: 'id' });
+    if (error) {
+        showToast(error.message || 'Failed to reorder', 'alert-circle');
+        return;
+    }
+    homeBannersCache = null;
+    homeBannersCacheAt = 0;
+    await renderAdminHomeBanners(true);
+    void renderHomeHeroBanners({ force: true });
+}
+
+function adminDeleteHomeBanner(id) {
+    if (!isAdminAuthorized()) return;
+    const bannerId = Number(id) || 0;
+    if (!bannerId) return;
+    showConfirmModal('Delete banner', 'This will remove the banner from the slider.', async () => {
+        const client = initSupabase();
+        if (!client) return;
+        const { error } = await client.from(HOME_BANNERS_TABLE).delete().eq('id', bannerId);
+        if (error) {
+            showToast(error.message || 'Failed to delete', 'alert-circle');
+            return;
+        }
+        homeBannersCache = null;
+        homeBannersCacheAt = 0;
+        await renderAdminHomeBanners(true);
+        void renderHomeHeroBanners({ force: true });
+        showToast('Deleted', 'check-circle');
+    }, true, 'Delete', 'Cancel');
 }
 
 let adminModerationTopUpRunning = false;
@@ -14125,6 +14351,9 @@ function showSection(sectionId) {
         sectionId = 'home-section';
     }
     stopAllActiveVideos();
+    if (sectionId !== 'home-section') {
+        stopHomeHeroAutoplay();
+    }
     if (sectionId === 'admin-dashboard-section') {
         try {
             setSidebarMobileOpen(false);
@@ -14171,6 +14400,7 @@ function showSection(sectionId) {
     if (sectionId === 'home-section') {
         clearSellerProfileRouteTag();
         renderListings();
+        void renderHomeHeroBanners();
     } else if (sectionId === 'favorites-section') {
         clearSellerProfileRouteTag();
         renderFavorites();
@@ -15556,6 +15786,157 @@ function renderFavorites() {
     document.getElementById('favoritesEmpty').style.display = favoriteListings.length === 0 ? 'block' : 'none';
     initCarouselsInContainer(grid);
     scheduleLucideCreateIcons();
+}
+
+const HOME_BANNERS_TABLE = 'home_banners';
+const HOME_BANNERS_BUCKET = 'home_banners';
+const HOME_BANNERS_CACHE_TTL_MS = 60 * 1000;
+let homeBannersCache = null;
+let homeBannersCacheAt = 0;
+let homeHeroAutoplayTimer = null;
+let homeHeroAutoplayCarousel = null;
+
+function safeExternalHttpUrl(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return '';
+    try {
+        const u = new URL(raw);
+        const proto = String(u.protocol || '').toLowerCase();
+        if (proto !== 'http:' && proto !== 'https:') return '';
+        return u.toString();
+    } catch (e) {
+        return '';
+    }
+}
+
+function homeBannerIsActive(banner, now = new Date()) {
+    const b = banner && typeof banner === 'object' ? banner : {};
+    if (!b.is_active) return false;
+    const nowMs = now instanceof Date ? now.getTime() : Date.now();
+    const startMs = b.starts_at ? new Date(b.starts_at).getTime() : null;
+    const endMs = b.ends_at ? new Date(b.ends_at).getTime() : null;
+    if (Number.isFinite(startMs) && nowMs < startMs) return false;
+    if (Number.isFinite(endMs) && nowMs >= endMs) return false;
+    return true;
+}
+
+async function fetchHomeBannersRaw({ force = false } = {}) {
+    const client = initSupabase();
+    if (!client) return { rows: [], error: new Error('Supabase is not configured') };
+    const nowMs = Date.now();
+    if (!force && Array.isArray(homeBannersCache) && nowMs - homeBannersCacheAt < HOME_BANNERS_CACHE_TTL_MS) {
+        return { rows: homeBannersCache, error: null };
+    }
+    try {
+        const { data, error } = await client
+            .from(HOME_BANNERS_TABLE)
+            .select('*')
+            .order('sort_order', { ascending: true })
+            .order('id', { ascending: true });
+        if (error) return { rows: [], error };
+        const rows = Array.isArray(data) ? data : [];
+        homeBannersCache = rows;
+        homeBannersCacheAt = nowMs;
+        return { rows, error: null };
+    } catch (e) {
+        return { rows: [], error: e };
+    }
+}
+
+function getHomeBannerPublicUrl(imagePath) {
+    const client = initSupabase();
+    if (!client) return '';
+    const path = String(imagePath || '').trim();
+    if (!path) return '';
+    try {
+        const { data } = client.storage.from(HOME_BANNERS_BUCKET).getPublicUrl(path);
+        return String(data?.publicUrl || '').trim();
+    } catch (e) {
+        return '';
+    }
+}
+
+function stopHomeHeroAutoplay() {
+    if (homeHeroAutoplayTimer) clearInterval(homeHeroAutoplayTimer);
+    homeHeroAutoplayTimer = null;
+    homeHeroAutoplayCarousel = null;
+}
+
+function startHomeHeroAutoplay(carouselEl) {
+    stopHomeHeroAutoplay();
+    const el = carouselEl;
+    if (!el) return;
+    const slides = el.querySelectorAll('.carousel-slide');
+    const total = slides.length;
+    if (total <= 1) return;
+    homeHeroAutoplayCarousel = el;
+    let paused = false;
+    el.addEventListener('mouseenter', () => { paused = true; });
+    el.addEventListener('mouseleave', () => { paused = false; });
+    homeHeroAutoplayTimer = setInterval(() => {
+        if (paused) return;
+        if (!homeHeroAutoplayCarousel || getActiveSectionId() !== 'home-section') return;
+        const current = Number(homeHeroAutoplayCarousel.dataset.index || 0) || 0;
+        const next = (current + 1) % total;
+        setCarouselIndex(homeHeroAutoplayCarousel, next, { animate: true });
+    }, 5000);
+}
+
+async function renderHomeHeroBanners({ force = false } = {}) {
+    const slot = document.getElementById('homeHeroSlot');
+    if (!slot) return;
+    if (getActiveSectionId() !== 'home-section') return;
+    const nowMs = Date.now();
+    const renderedAt = Number(slot.dataset.renderedAt) || 0;
+    if (!force && renderedAt && nowMs - renderedAt < HOME_BANNERS_CACHE_TTL_MS) return;
+    slot.dataset.renderedAt = String(nowMs);
+    const fallbackHTML = `
+        <div class="hero">
+            <h1 data-i18n="home_hero_title">Trouvez ce dont vous avez besoin, localement.</h1>
+            <p data-i18n="home_hero_subtitle">Le meilleur marché pour tout.</p>
+        </div>
+    `;
+    const raw = await fetchHomeBannersRaw({ force });
+    const allRows = raw.error ? [] : raw.rows;
+    const activeRows = (Array.isArray(allRows) ? allRows : []).filter((b) => homeBannerIsActive(b));
+    if (!activeRows.length) {
+        stopHomeHeroAutoplay();
+        slot.innerHTML = fallbackHTML;
+        applyTranslations();
+        scheduleLucideCreateIcons();
+        return;
+    }
+    const slidesHTML = activeRows
+        .map((b) => {
+            const url = getHomeBannerPublicUrl(b.image_path);
+            if (!url) return '';
+            const href = safeExternalHttpUrl(b.link_url);
+            const img = `<img class="home-hero-img" src="${escapeHtml(url)}" alt="${escapeHtml(String(b.title || ''))}" loading="lazy" decoding="async">`;
+            if (href) return `<a class="carousel-slide" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${img}</a>`;
+            return `<div class="carousel-slide">${img}</div>`;
+        })
+        .filter(Boolean)
+        .join('');
+    if (!slidesHTML) {
+        stopHomeHeroAutoplay();
+        slot.innerHTML = fallbackHTML;
+        applyTranslations();
+        scheduleLucideCreateIcons();
+        return;
+    }
+    slot.innerHTML = `
+        <div class="home-hero-carousel js-carousel" data-columns="1" data-carousel="home-hero">
+            <div class="carousel-viewport">
+                <div class="carousel-track">
+                    ${slidesHTML}
+                </div>
+            </div>
+            <div class="carousel-dots"></div>
+        </div>
+    `;
+    initCarouselsInContainer(slot);
+    const carouselEl = slot.querySelector('.js-carousel');
+    if (carouselEl) startHomeHeroAutoplay(carouselEl);
 }
 
 function getPremiumSellerStripHTML(item) {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>winjay.dz - Marché Moderne</title>
-    <link rel="stylesheet" href="style.css?v=20260529_17">
+    <link rel="stylesheet" href="style.css?v=20260529_18">
     <link rel="preconnect" href="https://rxlpesdvskyytbfoufvp.supabase.co" crossorigin>
     <script>
         document.documentElement.classList.add('app-loading');
@@ -332,10 +332,7 @@
                 </div>
             </div>
             <section id="home-section" class="content-section active">
-                <div class="hero">
-                    <h1 data-i18n="home_hero_title">Trouvez ce dont vous avez besoin, localement.</h1>
-                    <p data-i18n="home_hero_subtitle">Le meilleur marché pour tout.</p>
-                </div>
+                <div id="homeHeroSlot" class="home-hero-slot"></div>
                 <div class="listings-controls">
                     <div class="filter-bar">
                         <button class="filter-btn" onclick="toggleFilterPanel()">
@@ -1000,6 +997,7 @@
                         <button class="admin-tab" id="adminTabVerified" type="button" onclick="switchAdminTab('verified')">Verified</button>
                         <button class="admin-tab" id="adminTabModeration" type="button" onclick="switchAdminTab('moderation')">Moderation</button>
                         <button class="admin-tab" id="adminTabSubmissions" type="button" onclick="switchAdminTab('submissions')">Submissions</button>
+                        <button class="admin-tab" id="adminTabBanners" type="button" onclick="switchAdminTab('banners')">Banners</button>
                         <button class="admin-tab" id="adminTabLive" type="button" onclick="switchAdminTab('live')">Live</button>
                     </div>
 
@@ -1114,6 +1112,25 @@
                                         <tbody id="adminVipTbody"></tbody>
                                     </table>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="admin-panel" id="adminPanelBanners">
+                            <div class="admin-card">
+                                <div class="admin-card-head">
+                                    <h3>Home banners</h3>
+                                    <span class="muted">Ads slider (auto 5s)</span>
+                                </div>
+                                <div class="admin-banner-create">
+                                    <input id="adminNewBannerFile" type="file" accept="image/*">
+                                    <input id="adminNewBannerLink" type="text" placeholder="https://example.com">
+                                    <label class="toggle-modern">
+                                        <input id="adminNewBannerActive" class="toggle-input" type="checkbox" checked>
+                                        <span class="toggle-switch"></span>
+                                    </label>
+                                    <button class="submit-btn small" type="button" onclick="adminCreateHomeBanner()">Add banner</button>
+                                </div>
+                                <div id="adminHomeBannersList" class="admin-banners-list"></div>
                             </div>
                         </div>
 
@@ -2398,6 +2415,6 @@
     </button>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script defer src="script.js?v=20260529_16"></script>
+    <script defer src="script.js?v=20260529_17"></script>
 </body>
 </html>
