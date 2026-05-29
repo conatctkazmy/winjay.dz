@@ -2337,6 +2337,30 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 }
 
 @media (max-width: 768px) {
+    #listingDetailPage.page-card {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    .detail-container {
+        gap: 14px;
+    }
+
+    .detail-head,
+    .detail-sidebar,
+    .detail-body {
+        padding-left: 15px;
+        padding-right: 15px;
+    }
+
+    .detail-gallery {
+        margin-left: -15px;
+        margin-right: -15px;
+    }
+
     .detail-carousel {
         min-height: 0;
         aspect-ratio: auto;
@@ -2355,6 +2379,7 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
         max-width: none;
         aspect-ratio: 1 / 1;
         margin: 0 auto;
+        border-radius: 0;
     }
 }
 
