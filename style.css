@@ -170,6 +170,20 @@ html.nav-avatar-loading .navbar .profile-btn img {
     overflow: visible;
 }
 
+@media (min-width: 1000px) {
+    .navbar {
+        left: 250px;
+        right: 0;
+        width: auto;
+        padding-left: 30px;
+        padding-right: 30px;
+    }
+
+    html.sidebar-collapsed .navbar {
+        left: 72px;
+    }
+}
+
 .is-touch-device .navbar {
     padding: 0 12px;
 }

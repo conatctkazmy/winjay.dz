@@ -6363,6 +6363,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) {
         null;
     }
+
+    try {
+        document.documentElement.classList.toggle('sidebar-collapsed', sidebar?.classList?.contains('collapsed'));
+    } catch (e) {
+        null;
+    }
     try {
         document.documentElement.classList.remove('app-loading');
     } catch (e) {
@@ -9462,6 +9468,11 @@ function closeSidebarOverlay() {
     }
     sidebar.classList.add('collapsed');
     contentArea.classList.add('expanded');
+    try {
+        document.documentElement.classList.add('sidebar-collapsed');
+    } catch (e) {
+        null;
+    }
 }
 
 sidebarToggle.addEventListener('click', () => {
@@ -9470,6 +9481,11 @@ sidebarToggle.addEventListener('click', () => {
     } else {
         sidebar.classList.toggle('collapsed');
         contentArea.classList.toggle('expanded');
+        try {
+            document.documentElement.classList.toggle('sidebar-collapsed', sidebar.classList.contains('collapsed'));
+        } catch (e) {
+            null;
+        }
     }
 });
 
