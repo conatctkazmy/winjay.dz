@@ -2319,32 +2319,17 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 }
 
 .detail-carousel {
-    height: 380px;
+    height: auto;
+    aspect-ratio: 16 / 9;
     border-radius: 16px;
     border: 1px solid var(--border-color);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    overflow: hidden;
     background: var(--bg-muted);
 }
 
 .detail-carousel[data-columns="2"] {
     height: auto;
     aspect-ratio: 2 / 1;
-}
-
-.detail-carousel .carousel-viewport {
-    width: min(100%, 560px);
-    height: auto;
-    aspect-ratio: 1 / 1;
-    border-radius: 16px;
-    overflow: hidden;
-    background: var(--light-gray);
-}
-
-.detail-carousel .carousel-track,
-.detail-carousel .carousel-slide {
-    height: 100%;
 }
 
 .detail-carousel[data-columns="2"] .carousel-slide {
@@ -5638,6 +5623,67 @@ body.dark-mode .listing-status-badge {
     display: flex;
     flex-direction: column;
     gap: 20px;
+}
+
+.detail-head {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.detail-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.detail-sidebar-card {
+    background-color: var(--light-gray);
+    border: 1px solid var(--border-color);
+    border-radius: 18px;
+    padding: 14px;
+}
+
+.detail-sidebar-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.detail-sidebar-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-main);
+    font-weight: 700;
+}
+
+.detail-sidebar-meta-row svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+}
+
+.detail-body {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+@media (min-width: 1000px) {
+    .detail-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        align-items: start;
+        gap: 20px;
+    }
+
+    .detail-sidebar {
+        position: sticky;
+        top: 90px;
+        align-self: start;
+    }
 }
 
 .detail-gallery {

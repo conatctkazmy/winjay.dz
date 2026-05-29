@@ -16715,14 +16715,46 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                 `).join('')}
             </div>
         </div>` : '';
+    const phoneDigits = item.contact_phone ? String(item.contact_phone).replace(/[^0-9]/g, '') : '';
     content.innerHTML = `
         <div class="detail-container">
-            <div class="detail-gallery">
-                ${detailCarouselHtml}
-            </div>
-            <div class="detail-info">
+            <div class="detail-head">
                 <h2>${item.title} <span class="listing-status-badge ${String(item.availability || 'Available').toLowerCase() === 'sold' ? 'sold' : (String(item.availability || 'Available').toLowerCase() === 'reserved' ? 'pending' : 'ok')}">${escapeHtml(item.availability || 'Available')}</span></h2>
                 <div class="detail-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
+            </div>
+            <div class="detail-hero">
+                <div class="detail-gallery">
+                    ${detailCarouselHtml}
+                </div>
+                <div class="detail-sidebar">
+                    <div class="detail-sidebar-card">
+                        <div class="detail-sidebar-meta">
+                            <div class="detail-sidebar-meta-row"><i data-lucide="map-pin"></i> ${escapeHtml(item.location || '—')}</div>
+                            ${item.subcategory || item.category ? `<div class="detail-sidebar-meta-row"><i data-lucide="tag"></i> ${escapeHtml(item.subcategory ? `${item.category} · ${item.subcategory}` : item.category)}</div>` : ''}
+                        </div>
+                        <div class="seller-card" onclick="openSellerProfileByOwnerId('${item.owner_id}')">
+                            <div class="seller-info">
+                                <img id="listingSellerAvatar" src="${seller.pic || seller.profilePic}" class="seller-avatar">
+                                <div>
+                                    <div class="seller-name" id="listingSellerName">${seller.name} ${getUserBadgesHTML(seller)}</div>
+                                    <div class="seller-tag" id="listingSellerTag">${seller.tag}</div>
+                                    <div id="listingSellerRating">${getRatingHTML(seller.rating || 0, seller.reviews || 0, { showEmpty: true })}</div>
+                                </div>
+                            </div>
+                            <i data-lucide="chevron-right"></i>
+                        </div>
+                        <div class="detail-contact-actions">
+                            <button class="message-contact-btn" onclick="startChatWithSellerByOwnerId('${item.owner_id}', ${item.id})">
+                                <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
+                                Message
+                            </button>
+                            ${item.contact_phone ? `<a class="call-contact-btn" href="tel:${String(item.contact_phone).replace(/[^0-9+]/g, '')}" onclick="trackListingContactAction('call', ${item.id}); event.stopPropagation();"><i data-lucide="phone-call" style="width: 18px; height: 18px;"></i> Appeler</a>` : ''}
+                            ${item.contact_phone && phoneDigits ? `<a class="call-contact-btn" href="https://wa.me/${phoneDigits}" target="_blank" rel="noopener" onclick="trackListingContactAction('whatsapp', ${item.id}); event.stopPropagation();"><i data-lucide="message-square" style="width: 18px; height: 18px;"></i> WhatsApp</a>` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="detail-body">
                 <div class="detail-kv-grid">
                     <div class="kv-card">
                         <div class="kv-card-head">
@@ -16809,25 +16841,6 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                     </div>` : ''}
                 </div>
                 ${item.description ? `<div class="detail-description"><h3>Description</h3><p>${escapeHtml(item.description)}</p></div>` : ''}
-                <h3>Vendeur</h3>
-                <div class="seller-card" onclick="openSellerProfileByOwnerId('${item.owner_id}')">
-                    <div class="seller-info">
-                        <img id="listingSellerAvatar" src="${seller.pic || seller.profilePic}" class="seller-avatar">
-                        <div>
-                            <div class="seller-name" id="listingSellerName">${seller.name} ${getUserBadgesHTML(seller)}</div>
-                            <div class="seller-tag" id="listingSellerTag">${seller.tag}</div>
-                            <div id="listingSellerRating">${getRatingHTML(seller.rating || 0, seller.reviews || 0, { showEmpty: true })}</div>
-                        </div>
-                    </div>
-                    <i data-lucide="chevron-right"></i>
-                </div>
-                <div class="detail-contact-actions">
-                    <button class="message-contact-btn" onclick="startChatWithSellerByOwnerId('${item.owner_id}', ${item.id})">
-                        <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
-                        Message
-                    </button>
-                    ${item.contact_phone ? `<a class="call-contact-btn" href="tel:${String(item.contact_phone).replace(/[^0-9+]/g, '')}" onclick="trackListingContactAction('call', ${item.id}); event.stopPropagation();"><i data-lucide="phone-call" style="width: 18px; height: 18px;"></i> Appeler</a>` : ''}
-                </div>
                 <div id="listingReviewHighlightWrap">
                     ${bestListingReview ? `
                     <div class="review-highlight clickable" onclick="expandListingReviews(${item.id})">
