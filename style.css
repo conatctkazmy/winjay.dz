@@ -2361,6 +2361,10 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     user-select: none;
 }
 
+.card-carousel .carousel-slide .card-img {
+    object-fit: cover;
+}
+
 .carousel-slide .detail-image {
     object-fit: cover;
 }
