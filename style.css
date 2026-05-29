@@ -2336,6 +2336,12 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     background: var(--bg-muted);
 }
 
+@media (max-width: 768px) {
+    .detail-carousel {
+        min-height: clamp(200px, 70vw, 280px);
+    }
+}
+
 .detail-carousel[data-columns="2"] {
     height: auto;
     aspect-ratio: 2 / 1;
