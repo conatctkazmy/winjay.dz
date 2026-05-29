@@ -14869,12 +14869,6 @@ function setCarouselIndex(carouselEl, index, { animate = true, persist = false }
                 }
             } else {
                 try {
-                    v.muted = false;
-                    v.volume = 1;
-                } catch (e) {
-                    null;
-                }
-                try {
                     const p = v.play();
                     if (p && typeof p.then === 'function') {
                         p.then(() => {
@@ -15119,19 +15113,29 @@ function createVipVideoCardHTML(item) {
     const pulse = pendingHeartPulses.has(item.id) && isFavorite;
     const availability = String(item.availability || '').toLowerCase();
     const badgeText = availability === 'sold' ? 'Sold' : (availability === 'reserved' ? 'Reserved' : '');
+    const videoUrl = getListingVideoPublicUrl(item);
     const carouselImages = getListingImagesForCard(item).slice(0, 8);
-    const mediaHTML = carouselImages.length > 1
-        ? `<div class="card-media-wrap"><div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
-                <div class="carousel-viewport">
-                    <div class="carousel-track">
-                        ${carouselImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low" draggable="false"></div>`).join('')}
+    const muted = getVipVideoMutedPreference();
+    const muteIcon = muted ? 'volume-x' : 'volume-2';
+    const mediaHTML = videoUrl
+        ? `<div class="card-media-wrap vip-video-card-media" data-carousel-index="0">
+                <div class="vip-video-loader" aria-hidden="true"></div>
+                <video class="card-img vip-video-preview" data-vip-video="1" data-listing-id="${item.id}" data-src="${videoUrl}" ${carouselImages[0] ? `poster="${carouselImages[0]}"` : ''} playsinline muted loop preload="none"></video>
+                <button type="button" class="vip-video-mute-btn" data-listing-id="${item.id}" data-muted="${muted ? '1' : '0'}" aria-label="${muted ? 'Activer le son' : 'Couper le son'}" onclick="toggleVipVideoMuted(event, ${item.id})"><i data-lucide="${muteIcon}"></i></button>
+                <button type="button" class="vip-video-pause-btn" data-listing-id="${item.id}" data-paused="0" aria-label="Pause" onclick="toggleVipVideoPaused(event, ${item.id})"><i data-lucide="pause"></i></button>
+            </div>`
+        : (carouselImages.length > 1
+            ? `<div class="card-media-wrap"><div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
+                    <div class="carousel-viewport">
+                        <div class="carousel-track">
+                            ${carouselImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low" draggable="false"></div>`).join('')}
+                        </div>
                     </div>
-                </div>
-                <div class="carousel-dots">
-                    ${carouselImages.map((_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
-                </div>
-            </div></div>`
-        : `<div class="card-media-wrap"><img src="${item.cardImage || item.image}" data-src="${item.cardImage || item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
+                    <div class="carousel-dots">
+                        ${carouselImages.map((_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
+                    </div>
+                </div></div>`
+            : `<div class="card-media-wrap"><img src="${item.cardImage || item.image}" data-src="${item.cardImage || item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`);
     const sellerStrip = getPremiumSellerStripHTML(item);
     return `
         <div class="card" onclick="handleCardOpen(event, ${item.id})">
@@ -15452,7 +15456,7 @@ function renderVipVideoSection() {
     section.style.display = '';
     row.innerHTML = items.map((x) => createVipVideoCardHTML(x)).join('');
     initCarouselsInContainer(row);
-    stopVipVideoAutoplayObserver();
+    setupVipVideoAutoplay(row);
     scheduleLucideCreateIcons();
 }
 
@@ -16681,12 +16685,12 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                 <button type="button" class="carousel-arrow prev" aria-label="Previous image"><i data-lucide="chevron-left"></i></button>
                 <div class="carousel-viewport">
                     <div class="carousel-track">
-                        ${hasDetailVideo ? `<div class="carousel-slide"><video class="detail-video" data-detail-video="1" src="${listingVideoUrl}" ${detailImages[0] ? `poster="${detailImages[0]}"` : ''} playsinline preload="metadata" loop></video></div>` : ''}
+                        ${hasDetailVideo ? `<div class="carousel-slide"><video class="detail-video" data-detail-video="1" src="${listingVideoUrl}" ${detailImages[0] ? `poster="${detailImages[0]}"` : ''} playsinline controls preload="metadata"></video></div>` : ''}
                         ${detailImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" class="detail-image" alt="${escapeHtml(item.title)}" loading="lazy" decoding="async" draggable="false"></div>`).join('')}
                     </div>
                 </div>
                 <button type="button" class="carousel-arrow next" aria-label="Next image"><i data-lucide="chevron-right"></i></button>
-                ${hasDetailVideo ? `<div class="vip-video-loader" aria-hidden="true"></div><button type="button" class="listing-video-sound-gate" aria-label="Activer le son"><i data-lucide="volume-2"></i><span>Activer le son</span></button>` : ''}
+                ${hasDetailVideo ? `<div class="vip-video-loader" aria-hidden="true"></div><button type="button" class="listing-video-sound-gate" aria-label="Lancer la vidéo"><i data-lucide="play"></i><span>Lancer la vidéo</span></button>` : ''}
                 <div class="carousel-dots">
                     ${Array.from({ length: detailDotsCount }, (_, i) => `<button type="button" class="carousel-dot ${i === selectedIdxClamped ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
                 </div>
@@ -16882,12 +16886,6 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                 try {
                     e.preventDefault();
                     e.stopPropagation();
-                } catch (err) {
-                    null;
-                }
-                try {
-                    detailVideo.muted = false;
-                    detailVideo.volume = 1;
                 } catch (err) {
                     null;
                 }
