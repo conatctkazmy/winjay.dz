@@ -16674,7 +16674,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
         }
     }
     const hasDetailVideo = !!listingVideoUrl;
-    const detailColumns = hasDetailVideo ? 1 : 2;
+    const detailColumns = 1;
     const detailSlidesCount = (hasDetailVideo ? 1 : 0) + detailImages.length;
     const detailMaxIndex = Math.max(0, detailSlidesCount - detailColumns);
     const selectedIdxClamped = Math.max(0, Math.min(detailMaxIndex, Number(selectedIdxRaw) || 0));
