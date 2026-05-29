@@ -2366,7 +2366,7 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 }
 
 .carousel-slide .detail-image {
-    object-fit: cover;
+    object-fit: contain;
 }
 
 .vip-video-section {
