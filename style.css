@@ -1966,6 +1966,12 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     margin-right: auto;
 }
 
+@media (min-width: 1000px) {
+    #listing-detail-section {
+        max-width: 1240px;
+    }
+}
+
 .create-listing-step-hidden {
     display: none !important;
 }
@@ -5683,6 +5689,19 @@ body.dark-mode .listing-status-badge {
         position: sticky;
         top: 90px;
         align-self: start;
+    }
+
+    .detail-container {
+        gap: 16px;
+    }
+
+    .detail-hero {
+        gap: 16px;
+    }
+
+    .detail-carousel {
+        height: clamp(360px, 34vw, 520px);
+        aspect-ratio: auto;
     }
 }
 
