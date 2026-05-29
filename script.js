@@ -16611,7 +16611,7 @@ function setListingDetailImage(listingId, index) {
     if (!item) return;
     const urls = getListingImagesForDetail(item);
     const hasVideo = hasListingVideo(item);
-    const columns = hasVideo ? 1 : 2;
+    const columns = 1;
     const slidesCount = (hasVideo ? 1 : 0) + urls.length;
     const maxIdx = Math.max(0, slidesCount - columns);
     const idx = Math.max(0, Math.min(maxIdx, Number(index) || 0));
@@ -16695,7 +16695,11 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                     ${Array.from({ length: detailDotsCount }, (_, i) => `<button type="button" class="carousel-dot ${i === selectedIdxClamped ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
                 </div>
             </div>`
-        : `<img id="detailMainImage" src="${mainImageUrl}" data-src="${mainImageUrl}" class="detail-image" alt="${escapeHtml(item.title)}" onclick="openLightbox('${mainImageUrl}')">`;
+        : `<div class="detail-carousel">
+                <div class="carousel-viewport">
+                    <img id="detailMainImage" src="${mainImageUrl}" data-src="${mainImageUrl}" class="detail-image" alt="${escapeHtml(item.title)}" onclick="openLightbox('${mainImageUrl}')">
+                </div>
+            </div>`;
     const bestListingReview = item.reviewsData.length > 0 ? item.reviewsData[0] : null;
     const similarListings = getSimilarListings(item);
     const reviewsCount = item.reviewsData.length;
