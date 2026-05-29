@@ -1676,7 +1676,7 @@ html.admin-dashboard-view .sidebar-overlay {
 
 main {
     flex: 1;
-    margin-left: 250px;
+    margin-left: 72px;
     padding: 30px;
     transition: margin-left 0.3s ease;
     position: relative;
@@ -1688,7 +1688,7 @@ html.admin-dashboard-view main {
 
 html[dir="rtl"] main {
     margin-left: 0;
-    margin-right: 250px;
+    margin-right: 72px;
     transition: margin-right 0.3s ease;
 }
 
