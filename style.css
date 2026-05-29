@@ -186,7 +186,7 @@ html.nav-avatar-loading .navbar .profile-btn img {
         max-width: 1240px;
         padding-left: 30px;
         padding-right: 30px;
-        transform: translateX(6px);
+        transform: translateX(36px);
     }
 }
 
@@ -1729,7 +1729,7 @@ html[dir="rtl"] .is-touch-device.listing-detail-view main {
 
 @media (min-width: 1000px) {
     html[dir="rtl"] .navbar-inner {
-        transform: translateX(-6px);
+        transform: translateX(-36px);
     }
 }
 
