@@ -183,9 +183,9 @@ html.nav-avatar-loading .navbar .profile-btn img {
 
 @media (min-width: 1000px) {
     .navbar-inner {
-        max-width: 1240px;
-        padding-left: 30px;
-        padding-right: 30px;
+        max-width: 1560px;
+        padding-left: 18px;
+        padding-right: 18px;
         transform: translateX(36px);
     }
 }
@@ -1687,6 +1687,12 @@ main {
     position: relative;
 }
 
+@media (min-width: 1000px) {
+    main {
+        padding: 18px;
+    }
+}
+
 html.admin-dashboard-view main {
     margin-left: 0;
 }
@@ -1695,6 +1701,12 @@ html[dir="rtl"] main {
     margin-left: 0;
     margin-right: 72px;
     transition: margin-right 0.3s ease;
+}
+
+@media (min-width: 1000px) {
+    html[dir="rtl"] main {
+        padding: 18px;
+    }
 }
 
 html[dir="rtl"].admin-dashboard-view main {
@@ -2028,13 +2040,13 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 
 @media (min-width: 1000px) {
     #home-section {
-        max-width: 1240px;
+        max-width: 1560px;
         margin-left: auto;
         margin-right: auto;
     }
 
     #listing-detail-section {
-        max-width: 1240px;
+        max-width: 1560px;
     }
 }
 
