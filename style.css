@@ -2322,11 +2322,29 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     height: 380px;
     border-radius: 16px;
     border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-muted);
 }
 
 .detail-carousel[data-columns="2"] {
     height: auto;
     aspect-ratio: 2 / 1;
+}
+
+.detail-carousel .carousel-viewport {
+    width: min(100%, 560px);
+    height: auto;
+    aspect-ratio: 1 / 1;
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--light-gray);
+}
+
+.detail-carousel .carousel-track,
+.detail-carousel .carousel-slide {
+    height: 100%;
 }
 
 .detail-carousel[data-columns="2"] .carousel-slide {
