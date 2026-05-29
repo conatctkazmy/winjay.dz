@@ -14101,6 +14101,11 @@ function showSection(sectionId) {
     closeMobileSearchExpand();
     document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
     document.getElementById(sectionId).classList.add('active');
+    try {
+        document.documentElement.classList.toggle('listing-detail-view', sectionId === 'listing-detail-section');
+    } catch (e) {
+        null;
+    }
     endBootUI();
     if (window.innerWidth <= 768) {
         setSidebarMobileOpen(false);
