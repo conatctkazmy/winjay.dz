@@ -2338,7 +2338,23 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 
 @media (max-width: 768px) {
     .detail-carousel {
-        min-height: clamp(200px, 70vw, 280px);
+        min-height: 0;
+        aspect-ratio: auto;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        overflow: visible;
+        display: block;
+        align-items: stretch;
+        justify-content: stretch;
+    }
+
+    .detail-carousel .carousel-viewport {
+        width: 100%;
+        height: auto;
+        max-width: none;
+        aspect-ratio: 1 / 1;
+        margin: 0 auto;
     }
 }
 
