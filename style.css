@@ -2339,6 +2339,8 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 .detail-carousel[data-columns="2"] {
     height: auto;
     aspect-ratio: 2 / 1;
+    align-items: stretch;
+    justify-content: stretch;
 }
 
 .detail-carousel .carousel-viewport {
@@ -2349,6 +2351,13 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     border-radius: 16px;
     overflow: hidden;
     background: var(--light-gray);
+}
+
+.detail-carousel[data-columns="2"] .carousel-viewport {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    aspect-ratio: auto;
 }
 
 .detail-carousel .carousel-track,

@@ -16606,13 +16606,27 @@ function getListingImagesForCard(item) {
     return urls;
 }
 
+function isDesktopListingDetailLayout() {
+    try {
+        return !!(window.matchMedia && window.matchMedia('(min-width: 1000px)').matches);
+    } catch (e) {
+        return false;
+    }
+}
+
+function getListingDetailCarouselColumns(slidesCount) {
+    const count = Math.max(0, Number(slidesCount) || 0);
+    if (isDesktopListingDetailLayout() && count >= 2) return 2;
+    return 1;
+}
+
 function setListingDetailImage(listingId, index) {
     const item = listings.find((l) => l.id === listingId);
     if (!item) return;
     const urls = getListingImagesForDetail(item);
     const hasVideo = hasListingVideo(item);
-    const columns = 1;
     const slidesCount = (hasVideo ? 1 : 0) + urls.length;
+    const columns = getListingDetailCarouselColumns(slidesCount);
     const maxIdx = Math.max(0, slidesCount - columns);
     const idx = Math.max(0, Math.min(maxIdx, Number(index) || 0));
     listingDetailImageIndex[listingId] = idx;
@@ -16674,8 +16688,8 @@ function openListingDetail(listingId, { pushState = true } = {}) {
         }
     }
     const hasDetailVideo = !!listingVideoUrl;
-    const detailColumns = 1;
     const detailSlidesCount = (hasDetailVideo ? 1 : 0) + detailImages.length;
+    const detailColumns = getListingDetailCarouselColumns(detailSlidesCount);
     const detailMaxIndex = Math.max(0, detailSlidesCount - detailColumns);
     const selectedIdxClamped = Math.max(0, Math.min(detailMaxIndex, Number(selectedIdxRaw) || 0));
     listingDetailImageIndex[listingId] = selectedIdxClamped;
