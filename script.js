@@ -560,7 +560,7 @@ function scheduleLucideCreateIcons(rootEl = null) {
     }, 50);
 }
 
-function scheduleMarketplaceRenders(opts = {}) {
+function scheduleMarketplaceRenders(flags = undefined) {
     if (document.visibilityState !== 'visible') return;
     if (marketplaceRenderTimer) {
         try {
@@ -571,46 +571,44 @@ function scheduleMarketplaceRenders(opts = {}) {
     }
     marketplaceRenderTimer = setTimeout(() => {
         marketplaceRenderTimer = null;
-        const activeSectionId = (() => {
-            try {
-                if (typeof getActiveSectionId === 'function') return getActiveSectionId();
-            } catch {}
-            return '';
-        })();
-        const forceAll = !!opts?.forceAll;
-        const renderHome = forceAll || !!opts?.home || activeSectionId === 'home-section';
-        const renderProfile = forceAll || !!opts?.profile || activeSectionId === 'profile-section';
-        const renderFav = forceAll || !!opts?.favorites || activeSectionId === 'favorites-section';
+        const opts = flags && typeof flags === 'object' ? flags : null;
+        const doAll = !opts;
 
-        if (renderProfile) {
+        const doSync = doAll || !!opts.syncMyListings;
+        const doListings = doAll || !!opts.listings;
+        const doMyListings = doAll || !!opts.myListings;
+        const doFavorites = doAll || !!opts.favorites;
+        const doLoadMoreUi = doAll || !!opts.loadMoreUI;
+
+        if (doSync) {
             try {
                 syncMyListingsFromListings();
             } catch (e) {
                 null;
             }
         }
-        if (renderHome) {
+        if (doListings) {
             try {
                 renderListings();
             } catch (e) {
                 null;
             }
         }
-        if (renderProfile) {
+        if (doMyListings) {
             try {
                 renderMyListings();
             } catch (e) {
                 null;
             }
         }
-        if (renderFav) {
+        if (doFavorites) {
             try {
                 renderFavorites();
             } catch (e) {
                 null;
             }
         }
-        if (renderHome) {
+        if (doLoadMoreUi) {
             try {
                 updateLoadMoreListingsUI();
             } catch (e) {
@@ -618,13 +616,7 @@ function scheduleMarketplaceRenders(opts = {}) {
             }
         }
 
-        const rootEl = (() => {
-            try {
-                if (opts?.iconsRoot instanceof Element) return opts.iconsRoot;
-                if (activeSectionId) return document.getElementById(activeSectionId);
-            } catch {}
-            return null;
-        })();
+        const rootEl = opts?.iconsRoot instanceof Element ? opts.iconsRoot : null;
         scheduleLucideCreateIcons(rootEl);
     }, 50);
 }
@@ -985,7 +977,7 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
             homeInitialListingsLoading = false;
             homeInitialListingsLoaded = true;
             listingsHasMore = false;
-            scheduleMarketplaceRenders();
+            scheduleMarketplaceRenders({ listings: true, loadMoreUI: true, iconsRoot: document.getElementById('home-section') });
         }
         return;
     }
@@ -1007,7 +999,7 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
         homeInitialListingsLoaded = true;
     }
     scheduleSaveMarketplaceListingsToStorage();
-    scheduleMarketplaceRenders();
+    scheduleMarketplaceRenders({ listings: true, loadMoreUI: true, iconsRoot: document.getElementById('home-section') });
 }
 
 function loadMarketplaceListingsFromStorage() {
@@ -1752,7 +1744,7 @@ function toggleMobileSearchExpand(e) {
         const main = document.getElementById('mainSearchInput');
         if (input && main) input.value = main.value || '';
         setTimeout(() => input?.focus(), 50);
-        lucide.createIcons();
+        scheduleLucideCreateIcons(panel);
     }
 }
 
@@ -1825,7 +1817,7 @@ function maybeGrantVerifiedBadge() {
     updateProfileUI();
     updateFreeVerifiedCounterUI();
     openModal('verifiedCongratsModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('verifiedCongratsModal'));
 }
 
 function renderVerifiedQuestCard() {
@@ -1878,7 +1870,7 @@ function renderVerifiedQuestCard() {
                     </div>
                 </div>
                 <div class="quest-actions">
-                    ${!p.hasBasics ? actionBtn('Edit', 'pencil', "openModal('editProfileModal'); lucide.createIcons();") : ''}
+                    ${!p.hasBasics ? actionBtn('Edit', 'pencil', "openModal('editProfileModal'); scheduleLucideCreateIcons(document.getElementById('editProfileModal'));") : ''}
                     ${doneMark(p.hasBasics)}
                 </div>
             </div>
@@ -1891,7 +1883,7 @@ function renderVerifiedQuestCard() {
                     </div>
                 </div>
                 <div class="quest-actions">
-                    ${!p.hasPhone ? actionBtn('Add', 'pencil', "openModal('editProfileModal'); lucide.createIcons();") : ''}
+                    ${!p.hasPhone ? actionBtn('Add', 'pencil', "openModal('editProfileModal'); scheduleLucideCreateIcons(document.getElementById('editProfileModal'));") : ''}
                     ${doneMark(p.hasPhone)}
                 </div>
             </div>
@@ -1904,7 +1896,7 @@ function renderVerifiedQuestCard() {
                     </div>
                 </div>
                 <div class="quest-actions">
-                    ${!p.hasWork ? actionBtn('Choose', 'pencil', "openModal('editProfileModal'); lucide.createIcons();") : ''}
+                    ${!p.hasWork ? actionBtn('Choose', 'pencil', "openModal('editProfileModal'); scheduleLucideCreateIcons(document.getElementById('editProfileModal'));") : ''}
                     ${doneMark(p.hasWork)}
                 </div>
             </div>
@@ -1930,7 +1922,7 @@ function renderVerifiedQuestCard() {
                     </div>
                 </div>
                 <div class="quest-actions">
-                    ${!p.hasIdentity && identityStatus !== 'pending' ? actionBtn(identityStatus === 'rejected' ? 'Resubmit' : 'Verify', 'upload', "openModal('identityVerificationModal'); lucide.createIcons();") : ''}
+                    ${!p.hasIdentity && identityStatus !== 'pending' ? actionBtn(identityStatus === 'rejected' ? 'Resubmit' : 'Verify', 'upload', "openModal('identityVerificationModal'); scheduleLucideCreateIcons(document.getElementById('identityVerificationModal'));") : ''}
                     ${identityMark()}
                 </div>
             </div>
@@ -1941,7 +1933,7 @@ function renderVerifiedQuestCard() {
         </div>
     `;
 
-    lucide.createIcons();
+    scheduleLucideCreateIcons(card);
     if (DEMO_MODE) maybeGrantVerifiedBadge();
 }
 
@@ -2654,7 +2646,7 @@ function setThemeMode(nextIsDark, { persist = true } = {}) {
     if (settingsToggle) settingsToggle.checked = isDarkMode;
 
     applyWinjayLogoTheme();
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.body);
 }
 
 function loadThemeModeFromStorage() {
@@ -2680,7 +2672,7 @@ function togglePasswordVisibility(inputId, btnEl) {
     const icon = btnEl?.querySelector('i');
     if (icon) icon.setAttribute('data-lucide', nextType === 'password' ? 'eye' : 'eye-off');
     btnEl?.setAttribute('aria-label', nextType === 'password' ? 'Afficher le mot de passe' : 'Masquer le mot de passe');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(btnEl instanceof Element ? btnEl : null);
 }
 
 function newMessageId() {
@@ -2896,7 +2888,7 @@ function appendChatMessageToActiveThread(m) {
         updateChatJumpLatestButton();
     }
     bindChatAutoStickToBottom(messagesEl, { force: wasNearBottom });
-    lucide.createIcons();
+    scheduleLucideCreateIcons(inserted || messagesEl);
 }
 
 function applyIncomingRowsToActiveChat(rows) {
@@ -3125,7 +3117,7 @@ function toggleChatActions(e) {
     const actions = document.getElementById('chatActions');
     if (!actions) return;
     actions.classList.toggle('active');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(actions);
 }
 
 function closeChatActions() {
@@ -3254,7 +3246,7 @@ async function openChatCamera() {
         preview.srcObject = cameraStream;
         preview.play();
         openModal('cameraModal');
-        lucide.createIcons();
+        scheduleLucideCreateIcons(document.getElementById('cameraModal'));
     } catch {
         showToast('Permission caméra refusée', 'alert-circle');
         cameraStream?.getTracks()?.forEach(t => t.stop());
@@ -3302,7 +3294,7 @@ function toggleCameraRecording() {
         sendBtn.disabled = false;
         if (cameraTimerInterval) clearInterval(cameraTimerInterval);
         cameraTimerInterval = null;
-        lucide.createIcons();
+        scheduleLucideCreateIcons(recordBtn);
     };
 
     cameraRecorder.start();
@@ -3319,7 +3311,7 @@ function toggleCameraRecording() {
         const seconds = (Date.now() - cameraRecordingStart) / 1000;
         el.textContent = formatTime(seconds);
     }, 250);
-    lucide.createIcons();
+    scheduleLucideCreateIcons(recordBtn);
     showToast('Enregistrement vidéo...', 'video');
 }
 
@@ -3373,7 +3365,7 @@ function closeCameraModal(keepRecorded = false) {
     if (!keepRecorded) recordedVideoBlob = null;
 
     closeModal('cameraModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.body);
 }
 
 async function handleChatFiles(e) {
@@ -3747,7 +3739,7 @@ async function renderNotificationsModal() {
                 <p>No notifications yet.</p>
             </div>
         `;
-        lucide.createIcons();
+        scheduleLucideCreateIcons(listEl);
         return;
     }
     const actorIds = Array.from(new Set(rows.map((r) => r.actor_id).filter(Boolean)));
@@ -3800,7 +3792,7 @@ async function renderNotificationsModal() {
         })
     );
     listEl.innerHTML = items.join('');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(listEl);
 }
 
 async function handleNotificationClick(notificationId) {
@@ -4149,7 +4141,7 @@ function renderSellerFollowButtonState(isFollowing) {
     } else {
         btn.innerHTML = `<i data-lucide="user-plus"></i><span id="sellerFollowBtnLabel">Suivre</span>`;
     }
-    lucide.createIcons();
+    scheduleLucideCreateIcons(btn);
 }
 
 async function initSellerProfileFollowUI(ownerId) {
@@ -4498,12 +4490,12 @@ function renderAmbassadorsFromCache() {
 
     if (!list.length) {
         listEl.innerHTML = `<div class="muted" style="padding: 12px 4px;">No ambassadors found.</div>`;
-        lucide.createIcons();
+        scheduleLucideCreateIcons(listEl);
         return;
     }
 
     listEl.innerHTML = list.map((a) => buildAmbassadorCardHTML(a)).join('');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(listEl);
 }
 
 async function refreshAmbassadorsSection(force = false) {
@@ -4691,7 +4683,7 @@ async function refreshListingCountsFromSupabase(listingId) {
     }
 
     const render = arguments.length > 1 ? arguments[1]?.render !== false : true;
-    if (render) scheduleMarketplaceRenders();
+    if (render) scheduleMarketplaceRenders({ listings: true, iconsRoot: document.getElementById('home-section') });
     return data;
 }
 
@@ -4848,7 +4840,7 @@ async function refreshListingReviewsForListingDetail(listingId, sellerName) {
             : '';
     }
 
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('listingReviewsList') || highlightEl || document.body);
 }
 
 function computeRatingSummaryFromReviews(reviewsData) {
@@ -5643,7 +5635,7 @@ function renderMessagesList() {
             </div>
         `;
         renderEmptyChat();
-        lucide.createIcons();
+        scheduleLucideCreateIcons(listEl);
         return;
     }
     if (enriched.length === 0) {
@@ -5654,7 +5646,7 @@ function renderMessagesList() {
                 <p>Try a different search.</p>
             </div>
         `;
-        lucide.createIcons();
+        scheduleLucideCreateIcons(listEl);
         return;
     }
 
@@ -5684,7 +5676,7 @@ function renderMessagesList() {
         })
         .join('');
 
-    lucide.createIcons();
+    scheduleLucideCreateIcons(listEl);
 }
 
 function setupMessagesTwitterUI() {
@@ -5857,7 +5849,7 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
     if (!chat) {
         activeChatTag = null;
         renderEmptyChat();
-        lucide.createIcons();
+        scheduleLucideCreateIcons(document.getElementById('messages-section') || document.body);
         return;
     }
 
@@ -6022,7 +6014,7 @@ async function switchChat(tag, isModal = false, { skipFetch = false } = {}) {
     if (plusBtn) plusBtn.disabled = false;
     const micBtn = document.getElementById(`chatMicBtn${prefix}`);
     if (micBtn) micBtn.disabled = false;
-    lucide.createIcons();
+    scheduleLucideCreateIcons(chatArea);
 }
 
 function initChatVideoThumbsInChat(chatMessagesEl) {
@@ -6333,7 +6325,7 @@ function renderHomeCategorySwipe() {
             const isActive = active === c.name ? 'active' : '';
             return `<button type="button" class="home-category-swipe-item ${isActive}" data-main="${escapeHtml(c.name)}"><i data-lucide="${escapeHtml(c.icon)}"></i><span class="home-category-swipe-label">${escapeHtml(label)}</span></button>`;
         }).join('');
-        lucide.createIcons();
+        scheduleLucideCreateIcons(listEl);
         return;
     }
 
@@ -6349,7 +6341,7 @@ function renderHomeCategorySwipe() {
             const isActive = activeSub === s ? 'active' : '';
             return `<button type="button" class="home-category-swipe-item ${isActive}" data-main="${escapeHtml(main)}" data-sub="${escapeHtml(s)}"><i data-lucide="${escapeHtml(mainIcon)}"></i><span class="home-category-swipe-label">${escapeHtml(s)}</span></button>`;
         }).join('');
-        lucide.createIcons();
+        scheduleLucideCreateIcons(listEl);
     }
 }
 
@@ -7984,7 +7976,7 @@ function populateCategories() {
             refreshSelectPicker(this);
         }
     });
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('sidebar') || document.body);
 }
 
 function populateListingSubcategorySelect(selectEl, mainCategory, selectedValue = '') {
@@ -8836,7 +8828,7 @@ function addHotelRoomField(roomData = {}) {
         const bathSelect = document.getElementById(`hotelRoomBathroom_${id}`);
         if (bathSelect) bathSelect.value = roomData.bathroom_type;
     }
-    lucide.createIcons();
+    scheduleLucideCreateIcons(card);
 }
 
 function removeHotelRoomField(cardId) {
@@ -8894,7 +8886,7 @@ function populateAllExtraCategories() {
     const grid = document.getElementById('allCategoriesGrid');
     const combined = [...categories.filter(c => c.special !== 'other'), ...allExtraCategories];
     grid.innerHTML = combined.map(cat => `<div class="category-item" onclick="selectCategoryFromModal('${cat.name}')"><i data-lucide="${cat.icon}"></i><span>${cat.name}</span></div>`).join('');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(grid);
 }
 
 function openOtherCategoriesModal(clearTarget = false) {
@@ -9269,7 +9261,7 @@ function openSelectPickerFor(selectId) {
     } else {
         openNow();
     }
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('selectPickerModal'));
 }
 
 function renderSelectPickerOptions(options, currentValue) {
@@ -9509,14 +9501,14 @@ function renderListingImagesSlots() {
         }
         return `<div class="listing-image-slot" role="button" tabindex="0" onclick="selectListingImageSlot(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectListingImageSlot(${i});}"><div class="slot-label"><i data-lucide="plus"></i><span>${i + 1}</span></div></div>`;
     }).join('');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(container);
 }
 
 function openListingImagesModal() {
     openModal('listingImagesModal');
     renderListingImagesSlots();
     updateListingImagesMiniPreview();
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('listingImagesModal'));
 }
 
 function closeListingImagesModal() {
@@ -9737,21 +9729,21 @@ function openListingLimitModal(limit = FREE_LISTING_LIMIT) {
     const messageEl = document.getElementById('listingLimitMessage');
     if (messageEl) messageEl.textContent = `You reached your listing limit of ${limit}.`;
     openModal('listingLimitModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('listingLimitModal'));
 }
 
 function upgradeToVipFromListingLimit() {
     closeModal('listingLimitModal');
     showSection('home-section');
     openVipModal();
-    lucide.createIcons();
+    scheduleLucideCreateIcons();
 }
 
 function upgradeToVerifiedFromListingLimit() {
     closeModal('listingLimitModal');
     showSection('home-section');
     openVerifiedUpgradeModal();
-    lucide.createIcons();
+    scheduleLucideCreateIcons();
 }
 
 function closeProfileDropdown() {
@@ -9769,7 +9761,7 @@ function toggleProfileDropdown(e) {
     const next = !dropdown.classList.contains('active');
     dropdown.classList.toggle('active', next);
     btn.setAttribute('aria-expanded', next ? 'true' : 'false');
-    if (next) lucide.createIcons();
+    if (next) scheduleLucideCreateIcons(dropdown);
 }
 
 function showConfirmModal(title, message, callback, isDanger = false, okText = 'Confirmer', cancelText = 'Annuler') {
@@ -9818,13 +9810,13 @@ function maybeOpenPendingSectionAfterAuth() {
 function openAuthGateLogin() {
     closeModal('authGateModal');
     openModal('loginModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('loginModal'));
 }
 
 function openAuthGateRegister() {
     closeModal('authGateModal');
     openModal('registerModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('registerModal'));
 }
 
 function closeConfirmModal() {
@@ -9891,7 +9883,7 @@ function openImageEditor(type) {
     const titleEl = document.getElementById('imageChooserTitle');
     if (titleEl) titleEl.textContent = title;
     openModal('imageChooserModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('imageChooserModal'));
 }
 
 function triggerImageUpload() {
@@ -9934,7 +9926,7 @@ function handleImageSelect(e) {
         img.src = currentImageData;
         closeModal('imageChooserModal');
         openModal('imageEditorModal');
-        lucide.createIcons();
+        scheduleLucideCreateIcons(document.getElementById('imageEditorModal'));
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -10429,7 +10421,7 @@ function openVipCodModalForSelection(offer, billing) {
 
     populateWilayasSelect('codWilaya');
     openModal('codModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('codModal'));
 }
 
 function openVerifiedCodModalForSelection(offer, billing) {
@@ -10450,7 +10442,7 @@ function openVerifiedCodModalForSelection(offer, billing) {
 
     populateWilayasSelect('verifiedWilaya');
     openModal('verifiedCodModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('verifiedCodModal'));
 }
 
 function openVipModal() {
@@ -10461,7 +10453,7 @@ function openVipModal() {
     }
     openModal('vipModal');
     setVipBilling(vipBilling);
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('vipModal'));
 }
 
 function openVerifiedUpgradeModal() {
@@ -10472,7 +10464,7 @@ function openVerifiedUpgradeModal() {
     }
     openModal('verifiedUpgradeModal');
     setVerifiedBilling(verifiedBilling);
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('verifiedUpgradeModal'));
 }
 
 function selectVipPlan(plan) {
@@ -11762,7 +11754,7 @@ function showToast(message, icon = 'info') {
     toast.className = 'toast';
     toast.innerHTML = `<i data-lucide="${icon}"></i><span>${message}</span>`;
     toastContainer.appendChild(toast);
-    lucide.createIcons();
+    scheduleLucideCreateIcons(toast);
     setTimeout(() => toast.classList.add('active'), 10);
     setTimeout(() => {
         toast.classList.remove('active');
@@ -11890,7 +11882,7 @@ function updateProfileUI() {
     updateNavbarAuthUI();
     applyCoursesFeatureVisibility();
     updateListingVideoGroupVisibility();
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('profile-section') || document.body);
     refreshMyProfileFollowCounts();
     refreshSidebarFollowing();
 }
@@ -11914,7 +11906,7 @@ async function refreshMyProfileFollowCounts() {
         followingElId: 'profileFollowingCount',
         counts
     });
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('profile-section') || document.body);
 }
 
 function updateUpgradeOfferVisibility() {
@@ -11985,13 +11977,13 @@ function updateAdminDashboardButtonVisibility() {
 function showVerifiedPopup(event) {
     event.stopPropagation();
     openModal('verifiedSellerModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('verifiedSellerModal'));
 }
 
 function showVipPopup(event) {
     event.stopPropagation();
     openModal('vipBadgeModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('vipBadgeModal'));
 }
 
 function formatUsernameInput(input) {
@@ -12055,6 +12047,19 @@ function commitListingsSearch(searchTerm) {
     }
 }
 
+let listingsSearchCommitTimer = null;
+
+function scheduleListingsSearchCommit(searchTerm, delayMs = 200) {
+    try {
+        clearTimeout(listingsSearchCommitTimer);
+    } catch (e) {
+        null;
+    }
+    listingsSearchCommitTimer = setTimeout(() => {
+        commitListingsSearch(searchTerm);
+    }, Math.max(0, Number(delayMs) || 0));
+}
+
 function handleSearch(inputId = 'mainSearchInput', opts = {}) {
     const input = document.getElementById(inputId) || document.getElementById('mainSearchInput');
     const searchTerm = (input?.value || '').toLowerCase().trim();
@@ -12066,7 +12071,16 @@ function handleSearch(inputId = 'mainSearchInput', opts = {}) {
     if (mobileExpandInput && inputId !== 'mobileSearchExpandInput') mobileExpandInput.value = searchTerm;
 
     scheduleProfileSearch(searchTerm);
-    if (opts?.immediate) commitListingsSearch(searchTerm);
+    if (opts?.immediate) {
+        try {
+            clearTimeout(listingsSearchCommitTimer);
+        } catch (e) {
+            null;
+        }
+        commitListingsSearch(searchTerm);
+        return;
+    }
+    scheduleListingsSearchCommit(searchTerm, 200);
 }
 
 let profileSearchTimer = null;
@@ -12076,7 +12090,7 @@ function scheduleProfileSearch(term) {
     clearTimeout(profileSearchTimer);
     profileSearchTimer = setTimeout(() => {
         fetchProfileSearchResults(term);
-    }, 360);
+    }, 200);
 }
 
 async function fetchProfileSearchResults(term) {
@@ -12146,7 +12160,7 @@ function showSearchHistory(inputId = 'mainSearchInput', dropdownId = 'searchHist
                 <span>${term}</span>
             </div>`).join('');
         dropdown.classList.add('active');
-        lucide.createIcons();
+        scheduleLucideCreateIcons(dropdown);
     }
 }
 
@@ -12396,7 +12410,7 @@ function openEditListingModal(event, id) {
     } catch (e) {
         null;
     }
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('editListingModal'));
 }
 
 async function saveEditedListing() {
@@ -12538,7 +12552,7 @@ function renderMyProfileReviews() {
     const list = document.getElementById('myProfileReviewsList');
     if (!list) return;
     list.innerHTML = getReviewsListHTML(userProfile.reviewsData || [], userProfile.name, false, 'profile', userProfile.tag);
-    lucide.createIcons();
+    scheduleLucideCreateIcons(list);
 }
 
 let myProfileReviewsLoaded = false;
@@ -12590,7 +12604,7 @@ async function switchMyProfileSection(section) {
         const list = document.getElementById('myProfileReviewsList');
         if (list && !myProfileReviewsLoaded) {
             list.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><p style="margin-top: 10px;">Loading reviews...</p></div>`;
-            lucide.createIcons();
+            scheduleLucideCreateIcons(list);
         }
         const ok = await ensureMyProfileReviewsLoaded();
         if (!ok) {
@@ -13252,7 +13266,7 @@ async function adminOpenIdentityDocs(userId, frontPath, backPath) {
     resetSide(frontImg, frontLoading, frontError, frontOpen, frontDownload);
     resetSide(backImg, backLoading, backError, backOpen, backDownload);
     openModal(modalId);
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById(modalId));
 
     const loadOne = async (path, img, loading, err, openEl, dlEl, label) => {
         const p = String(path || '').trim();
@@ -13288,7 +13302,7 @@ async function adminOpenIdentityDocs(userId, frontPath, backPath) {
             dlEl.download = `${base}_${label}.jpg`;
             dlEl.style.display = 'inline-flex';
         }
-        lucide.createIcons();
+        scheduleLucideCreateIcons(document.getElementById(modalId));
     };
 
     await Promise.all([
@@ -14051,7 +14065,7 @@ async function renderAdminModeration() {
     }
     el.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-muted); grid-column: 1 / -1;"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><div style="margin-top: 8px;">Loading…</div></div>`;
     try {
-        lucide.createIcons();
+        scheduleLucideCreateIcons(el);
     } catch (e) {
         null;
     }
@@ -14473,7 +14487,7 @@ function showSection(sectionId) {
     if (sectionId === 'profile-section' && !isLoggedIn()) {
         setPendingSectionAfterAuth('profile-section');
         openModal('authGateModal');
-        lucide.createIcons();
+        scheduleLucideCreateIcons(document.getElementById('authGateModal'));
         return;
     }
     if (sectionId === 'course-section' && !isCoursesFeatureEnabledForViewer()) {
@@ -14767,7 +14781,7 @@ function openEditListingPageById(id, { pushState = true } = {}) {
     } catch (e) {
         null;
     }
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('create-listing-section') || document.body);
 }
 
 function openCreateListingPage({ pushState = true } = {}) {
@@ -14820,7 +14834,7 @@ function openCreateListingPage({ pushState = true } = {}) {
         setCreateListingStep('category');
     }
     
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('create-listing-section') || document.body);
 }
 
 function normalizeText(str) {
@@ -15892,7 +15906,7 @@ function renderVipVideoSection() {
     row.innerHTML = items.map((x) => createVipVideoCardHTML(x)).join('');
     initCarouselsInContainer(row);
     setupVipVideoAutoplay(row);
-    scheduleLucideCreateIcons();
+    scheduleLucideCreateIcons(row);
 }
 
 function renderListings() {
@@ -15921,6 +15935,22 @@ function renderListings() {
     listingsGrid.innerHTML = totalItems > 0 ?
         pageItems.map(item => createCardHTML(item)).join('') :
         '';
+    try {
+        const imgs = Array.from(listingsGrid.querySelectorAll('img.card-img'));
+        imgs.forEach((img, idx) => {
+            if (!(img instanceof HTMLImageElement)) return;
+            if (idx < 4) {
+                img.loading = 'eager';
+                img.setAttribute('fetchpriority', 'high');
+            } else {
+                img.loading = 'lazy';
+                img.removeAttribute('fetchpriority');
+            }
+            img.decoding = 'async';
+        });
+    } catch (e) {
+        null;
+    }
     const isHome = getActiveSectionId() === 'home-section';
     const shouldShowEmpty = totalItems === 0 && vipItems.length === 0 && (!isHome || (homeInitialListingsLoaded && !homeInitialListingsLoading));
     document.getElementById('emptyState').style.display = shouldShowEmpty ? 'block' : 'none';
@@ -15929,7 +15959,7 @@ function renderListings() {
     updateLoadMoreListingsUI();
     initCarouselsInContainer(listingsGrid);
     renderVipVideoSection();
-    scheduleLucideCreateIcons();
+    scheduleLucideCreateIcons(listingsGrid);
 }
 
 function renderFavorites() {
@@ -15940,7 +15970,7 @@ function renderFavorites() {
         '';
     document.getElementById('favoritesEmpty').style.display = favoriteListings.length === 0 ? 'block' : 'none';
     initCarouselsInContainer(grid);
-    scheduleLucideCreateIcons();
+    scheduleLucideCreateIcons(grid);
 }
 
 const HOME_BANNERS_TABLE = 'home_banners';
@@ -17672,7 +17702,7 @@ async function ensureSellerProfileReviewsLoaded(ownerId) {
     if (ratingEl) ratingEl.innerHTML = getRatingHTML(summary.rating, summary.reviews);
     const listEl = document.getElementById('sellerProfileReviewsList');
     if (listEl) listEl.innerHTML = getReviewsListHTML(rows, currentSellerProfileName || 'Seller', false, 'profile', currentSellerProfileTag || '');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(listEl || ratingEl || document.getElementById('seller-profile-section') || document.body);
     return rows;
 }
 
@@ -17694,7 +17724,7 @@ async function ensureSellerProfileCoursesLoaded(ownerId) {
     sellerProfileCoursesCache.set(id, rows);
     const listEl = document.getElementById('sellerProfileCoursesList');
     if (listEl) listEl.innerHTML = getSellerProfileCoursesHTML(rows);
-    lucide.createIcons();
+    scheduleLucideCreateIcons(listEl || document.getElementById('seller-profile-section') || document.body);
     return rows;
 }
 
@@ -17756,7 +17786,7 @@ async function switchSellerProfileSection(section = 'listings') {
         const listEl = document.getElementById('sellerProfileReviewsList');
         if (listEl && !sellerProfileReviewsCache.has(String(currentSellerProfileOwnerId))) {
             listEl.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><p style="margin-top: 10px;">Loading reviews...</p></div>`;
-            lucide.createIcons();
+            scheduleLucideCreateIcons(listEl);
         }
         try {
             await ensureSellerProfileReviewsLoaded(currentSellerProfileOwnerId);
@@ -17769,7 +17799,7 @@ async function switchSellerProfileSection(section = 'listings') {
         const listEl = document.getElementById('sellerProfileCoursesList');
         if (listEl && !sellerProfileCoursesCache.has(String(currentSellerProfileOwnerId))) {
             listEl.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);"><i data-lucide="loader" style="width: 36px; height: 36px;"></i><p style="margin-top: 10px;">Loading courses...</p></div>`;
-            lucide.createIcons();
+            scheduleLucideCreateIcons(listEl);
         }
         try {
             await ensureSellerProfileCoursesLoaded(currentSellerProfileOwnerId);
@@ -17948,9 +17978,9 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
         profileRatingSummaryCache.set(String(profileRow.id), summary);
         const el = document.getElementById('sellerProfileRatingContainer');
         if (el) el.innerHTML = getRatingHTML(summary.rating, summary.reviews);
-        lucide.createIcons();
+        scheduleLucideCreateIcons(el || document.getElementById('seller-profile-section') || document.body);
     });
-    lucide.createIcons();
+    scheduleLucideCreateIcons(content);
 }
 
 async function openSellerProfile(tag, section = 'listings', { pushState = true } = {}) {
@@ -17967,7 +17997,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         showToast('Seller profile not found', 'alert-circle');
         if (content) {
             content.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-muted);"><i data-lucide="user-x" style="width: 44px; height: 44px;"></i><p style="margin-top: 12px;">Profile not found.</p></div>`;
-            lucide.createIcons();
+            scheduleLucideCreateIcons(content);
         }
         return;
     }
@@ -18089,9 +18119,9 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         profileRatingSummaryCache.set(String(profileRow.id), summary);
         const el = document.getElementById('sellerProfileRatingContainer');
         if (el) el.innerHTML = getRatingHTML(summary.rating, summary.reviews);
-        lucide.createIcons();
+        scheduleLucideCreateIcons(el || document.getElementById('seller-profile-section') || document.body);
     });
-    lucide.createIcons();
+    scheduleLucideCreateIcons(content);
 }
 
 function openLightbox(imageSrc) {
@@ -18436,7 +18466,7 @@ function markCourseLessonCompletedInDom(lessonId) {
     const meta = el.querySelector('.course-lesson-meta');
     if (meta) meta.textContent = 'Completed';
     try {
-        lucide.createIcons();
+        scheduleLucideCreateIcons(el);
     } catch (e) {
         null;
     }
@@ -18589,7 +18619,7 @@ function openCreateCourseModal() {
     if (modalTitle) modalTitle.textContent = 'Create course';
     if (submitBtn) submitBtn.textContent = 'Create';
     openModal('createCourseModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('createCourseModal'));
 }
 
 async function openEditCourseModal(courseId) {
@@ -18622,7 +18652,7 @@ async function openEditCourseModal(courseId) {
     if (modalTitle) modalTitle.textContent = 'Edit course';
     if (submitBtn) submitBtn.textContent = 'Save';
     openModal('createCourseModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('createCourseModal'));
 }
 
 function openCreateCourseModuleModal(courseId) {
@@ -18636,7 +18666,7 @@ function openCreateCourseModuleModal(courseId) {
     if (modalTitle) modalTitle.textContent = 'Add module';
     if (submitBtn) submitBtn.textContent = 'Add';
     openModal('createCourseModuleModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('createCourseModuleModal'));
 }
 
 async function openEditCourseModuleModal(courseId, moduleId) {
@@ -18660,7 +18690,7 @@ async function openEditCourseModuleModal(courseId, moduleId) {
     if (modalTitle) modalTitle.textContent = 'Edit module';
     if (submitBtn) submitBtn.textContent = 'Save';
     openModal('createCourseModuleModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('createCourseModuleModal'));
 }
 
 function openCreateCourseLessonModal(courseId, moduleId) {
@@ -18678,7 +18708,7 @@ function openCreateCourseLessonModal(courseId, moduleId) {
     if (modalTitle) modalTitle.textContent = 'Add lesson';
     if (submitBtn) submitBtn.textContent = 'Add';
     openModal('createCourseLessonModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('createCourseLessonModal'));
 }
 
 async function openEditCourseLessonModal(courseId, moduleId, lessonId) {
@@ -18713,7 +18743,7 @@ async function openEditCourseLessonModal(courseId, moduleId, lessonId) {
     if (modalTitle) modalTitle.textContent = 'Edit lesson';
     if (submitBtn) submitBtn.textContent = 'Save';
     openModal('createCourseLessonModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('createCourseLessonModal'));
 }
 
 function openInviteCourseStudentModal(courseId) {
@@ -18722,7 +18752,7 @@ function openInviteCourseStudentModal(courseId) {
     const input = document.getElementById('inviteCourseStudentEmail');
     if (input) input.value = '';
     openModal('inviteCourseStudentModal');
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('inviteCourseStudentModal'));
     renderOwnerCourseInvitesList();
 }
 
@@ -19443,7 +19473,7 @@ async function renderMyProfileCoursesPanel() {
               .join('')
         : '<div class="muted">No courses created yet.</div>';
 
-    lucide.createIcons();
+    scheduleLucideCreateIcons(document.getElementById('myProfileCoursesSection') || document.getElementById('profile-section') || document.body);
 }
 
 async function renderOwnerCourseInvitesList() {
@@ -19832,7 +19862,7 @@ async function renderCourseSection() {
               .join('')
         : '<div class="muted">No achievements yet.</div>';
 
-    lucide.createIcons();
+    scheduleLucideCreateIcons(achievementsList);
 }
 
 function findNextCourseLessonToContinue(lessons, progressByLesson) {
@@ -19852,7 +19882,7 @@ function toggleCourseModule(moduleId) {
     body.style.display = next ? '' : 'none';
     const moduleEl = body.closest('.course-module');
     if (moduleEl) moduleEl.classList.toggle('collapsed', !next);
-    lucide.createIcons();
+    scheduleLucideCreateIcons(moduleEl || body);
 }
 
 async function toggleCoursePublish(courseId, next) {
