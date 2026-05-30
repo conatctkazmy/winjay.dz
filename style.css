@@ -2171,6 +2171,14 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     display: block;
 }
 
+.home-hero-carousel .home-hero-banner {
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    display: block;
+}
+
 .home-hero-carousel .carousel-dots {
     position: absolute;
     left: 50%;
