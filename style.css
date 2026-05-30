@@ -8333,6 +8333,15 @@ footer {
         height: 100dvh;
     }
 
+    .sidebar.collapsed {
+        width: 250px;
+        transform: translateX(-100%);
+    }
+
+    html[dir="rtl"] .sidebar.collapsed {
+        transform: translateX(100%);
+    }
+
     .sidebar.active {
         transform: translateX(0);
     }
