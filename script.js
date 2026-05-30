@@ -1646,6 +1646,7 @@ function closeMobileSearchExpand() {
 
 function submitMobileSearch() {
     handleSearch('mobileSearchExpandInput', { immediate: true });
+    showSection('home-section');
     closeMobileSearchExpand();
 }
 
