@@ -11896,9 +11896,6 @@ function formatUsernameInput(input) {
     }, 250);
 }
 
-let listingsSearchApplyTimer = null;
-const LISTINGS_SEARCH_DEBOUNCE_MS = 360;
-
 function commitListingsSearch(searchTerm) {
     applyFilters();
     if (searchTerm && !searchHistory.includes(searchTerm)) {
@@ -11906,17 +11903,6 @@ function commitListingsSearch(searchTerm) {
         if (searchHistory.length > 5) searchHistory.pop();
         localStorage.setItem('winjaySearchHistory', JSON.stringify(searchHistory));
     }
-}
-
-function scheduleListingsSearchCommit(searchTerm, { immediate = false } = {}) {
-    clearTimeout(listingsSearchApplyTimer);
-    if (immediate) {
-        commitListingsSearch(searchTerm);
-        return;
-    }
-    listingsSearchApplyTimer = setTimeout(() => {
-        commitListingsSearch(searchTerm);
-    }, LISTINGS_SEARCH_DEBOUNCE_MS);
 }
 
 function handleSearch(inputId = 'mainSearchInput', opts = {}) {
@@ -11929,8 +11915,8 @@ function handleSearch(inputId = 'mainSearchInput', opts = {}) {
     if (mainInput && inputId !== 'mainSearchInput') mainInput.value = searchTerm;
     if (mobileExpandInput && inputId !== 'mobileSearchExpandInput') mobileExpandInput.value = searchTerm;
 
-    scheduleListingsSearchCommit(searchTerm, { immediate: !!opts?.immediate });
     scheduleProfileSearch(searchTerm);
+    if (opts?.immediate) commitListingsSearch(searchTerm);
 }
 
 let profileSearchTimer = null;
