@@ -1645,7 +1645,7 @@ function closeMobileSearchExpand() {
 }
 
 function submitMobileSearch() {
-    handleSearch('mobileSearchExpandInput');
+    handleSearch('mobileSearchExpandInput', { immediate: true });
     closeMobileSearchExpand();
 }
 
@@ -1660,7 +1660,7 @@ function handleSearchKeydown(e, inputId = 'mainSearchInput') {
         document.getElementById('searchHistoryDropdown')?.classList.remove('active');
         return;
     }
-    handleSearch(inputId);
+    handleSearch(inputId, { immediate: true });
     showSection('home-section');
     if (inputId === 'mobileSearchExpandInput') {
         closeMobileSearchExpand();
@@ -11896,21 +11896,41 @@ function formatUsernameInput(input) {
     }, 250);
 }
 
-function handleSearch(inputId = 'mainSearchInput') {
-    const input = document.getElementById(inputId) || document.getElementById('mainSearchInput');
-    const searchTerm = (input?.value || '').toLowerCase().trim();
-    currentFilters.search = searchTerm;
+let listingsSearchApplyTimer = null;
+const LISTINGS_SEARCH_DEBOUNCE_MS = 360;
+
+function commitListingsSearch(searchTerm) {
     applyFilters();
-    scheduleProfileSearch(searchTerm);
-    const mainInput = document.getElementById('mainSearchInput');
-    const mobileExpandInput = document.getElementById('mobileSearchExpandInput');
-    if (mainInput && inputId !== 'mainSearchInput') mainInput.value = searchTerm;
-    if (mobileExpandInput && inputId !== 'mobileSearchExpandInput') mobileExpandInput.value = searchTerm;
     if (searchTerm && !searchHistory.includes(searchTerm)) {
         searchHistory.unshift(searchTerm);
         if (searchHistory.length > 5) searchHistory.pop();
         localStorage.setItem('winjaySearchHistory', JSON.stringify(searchHistory));
     }
+}
+
+function scheduleListingsSearchCommit(searchTerm, { immediate = false } = {}) {
+    clearTimeout(listingsSearchApplyTimer);
+    if (immediate) {
+        commitListingsSearch(searchTerm);
+        return;
+    }
+    listingsSearchApplyTimer = setTimeout(() => {
+        commitListingsSearch(searchTerm);
+    }, LISTINGS_SEARCH_DEBOUNCE_MS);
+}
+
+function handleSearch(inputId = 'mainSearchInput', opts = {}) {
+    const input = document.getElementById(inputId) || document.getElementById('mainSearchInput');
+    const searchTerm = (input?.value || '').toLowerCase().trim();
+    currentFilters.search = searchTerm;
+
+    const mainInput = document.getElementById('mainSearchInput');
+    const mobileExpandInput = document.getElementById('mobileSearchExpandInput');
+    if (mainInput && inputId !== 'mainSearchInput') mainInput.value = searchTerm;
+    if (mobileExpandInput && inputId !== 'mobileSearchExpandInput') mobileExpandInput.value = searchTerm;
+
+    scheduleListingsSearchCommit(searchTerm, { immediate: !!opts?.immediate });
+    scheduleProfileSearch(searchTerm);
 }
 
 let profileSearchTimer = null;
@@ -11920,7 +11940,7 @@ function scheduleProfileSearch(term) {
     clearTimeout(profileSearchTimer);
     profileSearchTimer = setTimeout(() => {
         fetchProfileSearchResults(term);
-    }, 220);
+    }, 360);
 }
 
 async function fetchProfileSearchResults(term) {
@@ -11974,7 +11994,6 @@ async function fetchProfileSearchResults(term) {
             .join('')}
     `;
     container.style.display = 'block';
-    lucide.createIcons();
 }
 
 function showSearchHistory(inputId = 'mainSearchInput', dropdownId = 'searchHistoryDropdown', listId = 'searchHistoryList') {
@@ -12001,7 +12020,7 @@ function selectSearchTerm(term) {
     if (mobileExpand) mobileExpand.value = term;
     document.getElementById('searchHistoryDropdown').classList.remove('active');
     document.getElementById('mobileSearchHistoryDropdown')?.classList.remove('active');
-    handleSearch();
+    handleSearch('mainSearchInput', { immediate: true });
     showSection('home-section');
     closeMobileSearchExpand();
 }
