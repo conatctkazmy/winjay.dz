@@ -299,19 +299,58 @@ function applyLanguageToDocument() {
 }
 
 function applyTranslations() {
-    document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const nodes = translationsCached && Array.isArray(cachedI18nNodes) && cachedI18nNodes.length
+        ? cachedI18nNodes
+        : Array.from(document.querySelectorAll('[data-i18n]'));
+    nodes.forEach((el) => {
         const key = el.getAttribute('data-i18n');
         if (!key) return;
         el.textContent = t(key);
     });
-    document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    const placeholderNodes = translationsCached && Array.isArray(cachedI18nPlaceholderNodes) && cachedI18nPlaceholderNodes.length
+        ? cachedI18nPlaceholderNodes
+        : Array.from(document.querySelectorAll('[data-i18n-placeholder]'));
+    placeholderNodes.forEach((el) => {
         const key = el.getAttribute('data-i18n-placeholder');
         if (!key) return;
         el.setAttribute('placeholder', t(key));
     });
 
+    if (translationsCached) {
+        try {
+            const activeSectionId = typeof getActiveSectionId === 'function' ? getActiveSectionId() : '';
+            const root = activeSectionId ? document.getElementById(activeSectionId) : null;
+            if (root) {
+                root.querySelectorAll('[data-i18n]').forEach((el) => {
+                    const key = el.getAttribute('data-i18n');
+                    if (!key) return;
+                    el.textContent = t(key);
+                });
+                root.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+                    const key = el.getAttribute('data-i18n-placeholder');
+                    if (!key) return;
+                    el.setAttribute('placeholder', t(key));
+                });
+            }
+        } catch (e) {
+            null;
+        }
+    }
+
     const langLabel = document.querySelector('#sidebarLang .sidebar-lang-label[data-i18n="lang_current"]');
     if (langLabel) langLabel.textContent = t('lang_current');
+}
+
+function cacheTranslationNodes() {
+    try {
+        cachedI18nNodes = Array.from(document.querySelectorAll('[data-i18n]'));
+        cachedI18nPlaceholderNodes = Array.from(document.querySelectorAll('[data-i18n-placeholder]'));
+        translationsCached = true;
+    } catch (e) {
+        translationsCached = false;
+        cachedI18nNodes = [];
+        cachedI18nPlaceholderNodes = [];
+    }
 }
 
 function initLanguageSelector() {
@@ -491,8 +530,13 @@ let marketplaceRenderTimer = null;
 let lastCarouselSwipeAt = 0;
 let homeInitialListingsLoading = true;
 let homeInitialListingsLoaded = false;
+let translationsCached = false;
+let cachedI18nNodes = [];
+let cachedI18nPlaceholderNodes = [];
+let marketplaceListingsSaveTimer = null;
+let marketplaceListingsSaveQueued = false;
 
-function scheduleLucideCreateIcons() {
+function scheduleLucideCreateIcons(rootEl = null) {
     if (document.visibilityState !== 'visible') return;
     if (lucideRenderTimer) {
         try {
@@ -504,6 +548,11 @@ function scheduleLucideCreateIcons() {
     lucideRenderTimer = setTimeout(() => {
         lucideRenderTimer = null;
         try {
+            const root = rootEl && rootEl instanceof Element ? rootEl : null;
+            if (root && typeof lucide?.createIcons === 'function') {
+                lucide.createIcons({ root });
+                return;
+            }
             lucide.createIcons();
         } catch (e) {
             null;
@@ -511,7 +560,7 @@ function scheduleLucideCreateIcons() {
     }, 50);
 }
 
-function scheduleMarketplaceRenders() {
+function scheduleMarketplaceRenders(opts = {}) {
     if (document.visibilityState !== 'visible') return;
     if (marketplaceRenderTimer) {
         try {
@@ -522,32 +571,61 @@ function scheduleMarketplaceRenders() {
     }
     marketplaceRenderTimer = setTimeout(() => {
         marketplaceRenderTimer = null;
-        try {
-            syncMyListingsFromListings();
-        } catch (e) {
-            null;
+        const activeSectionId = (() => {
+            try {
+                if (typeof getActiveSectionId === 'function') return getActiveSectionId();
+            } catch {}
+            return '';
+        })();
+        const forceAll = !!opts?.forceAll;
+        const renderHome = forceAll || !!opts?.home || activeSectionId === 'home-section';
+        const renderProfile = forceAll || !!opts?.profile || activeSectionId === 'profile-section';
+        const renderFav = forceAll || !!opts?.favorites || activeSectionId === 'favorites-section';
+
+        if (renderProfile) {
+            try {
+                syncMyListingsFromListings();
+            } catch (e) {
+                null;
+            }
         }
-        try {
-            renderListings();
-        } catch (e) {
-            null;
+        if (renderHome) {
+            try {
+                renderListings();
+            } catch (e) {
+                null;
+            }
         }
-        try {
-            renderMyListings();
-        } catch (e) {
-            null;
+        if (renderProfile) {
+            try {
+                renderMyListings();
+            } catch (e) {
+                null;
+            }
         }
-        try {
-            renderFavorites();
-        } catch (e) {
-            null;
+        if (renderFav) {
+            try {
+                renderFavorites();
+            } catch (e) {
+                null;
+            }
         }
-        try {
-            updateLoadMoreListingsUI();
-        } catch (e) {
-            null;
+        if (renderHome) {
+            try {
+                updateLoadMoreListingsUI();
+            } catch (e) {
+                null;
+            }
         }
-        scheduleLucideCreateIcons();
+
+        const rootEl = (() => {
+            try {
+                if (opts?.iconsRoot instanceof Element) return opts.iconsRoot;
+                if (activeSectionId) return document.getElementById(activeSectionId);
+            } catch {}
+            return null;
+        })();
+        scheduleLucideCreateIcons(rootEl);
     }, 50);
 }
 
@@ -821,7 +899,8 @@ function mapSupabaseListingRow(row, profilesById = {}) {
     const firstUrl = images[0]?.url || '';
     const firstThumb = images[0]?.thumbnail_url || '';
     const ownerId = row?.owner_id || null;
-    const profileRow = ownerId ? profilesById[ownerId] || null : null;
+    const embeddedProfile = row?.profiles && typeof row.profiles === 'object' ? row.profiles : null;
+    const profileRow = embeddedProfile || (ownerId ? profilesById[ownerId] || null : null);
     const sellerFromProfile = profileRow ? mapProfileRowToSeller(profileRow) : buildSellerPlaceholder(ownerId);
 
     const rawCategory = row.category || '';
@@ -869,18 +948,37 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
         homeInitialListingsLoading = true;
         homeInitialListingsLoaded = false;
     }
-    let query = client
-        .from('listings')
-        .select(
-            'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)'
-        )
-        .order('created_at', { ascending: false });
+    const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
+    const embeddedSelect = `${baseSelect}, profiles(id, display_name, tag, avatar_url, verified, is_vip)`;
+    const buildQuery = (selectStr) => {
+        let q = client
+            .from('listings')
+            .select(selectStr)
+            .order('created_at', { ascending: false });
+        if (safeLimit > 0) q = q.range(safeOffset, safeOffset + safeLimit - 1);
+        return q;
+    };
     const safeLimitRaw = Number(limit);
     const safeLimit = Number.isFinite(safeLimitRaw) && safeLimitRaw > 0
         ? safeLimitRaw
         : Math.max(INITIAL_LISTINGS_FETCH_LIMIT, Number(listingsLoadedCount) || 0);
-    if (safeLimit > 0) query = query.range(safeOffset, safeOffset + safeLimit - 1);
-    const { data, error } = await query;
+    let data = null;
+    let error = null;
+    {
+        const q = buildQuery(includeProfiles ? embeddedSelect : baseSelect);
+        const res = await q;
+        data = res.data;
+        error = res.error;
+    }
+    let profilesById = {};
+    if (error && includeProfiles) {
+        const q = buildQuery(baseSelect);
+        const res = await q;
+        data = res.data;
+        error = res.error;
+        const ownerIds = Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean)));
+        profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
+    }
     if (error) {
         if (!silent) showToast(error.message || 'Failed to load listings', 'alert-circle');
         if (initialLoad) {
@@ -891,8 +989,6 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
         }
         return;
     }
-    const ownerIds = includeProfiles ? Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean))) : [];
-    const profilesById = includeProfiles && ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
     const mapped = (data || []).map((row) => mapSupabaseListingRow(row, profilesById));
     if (append) {
         const byId = new Map((listings || []).map((x) => [x.id, x]));
@@ -910,8 +1006,7 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
         homeInitialListingsLoading = false;
         homeInitialListingsLoaded = true;
     }
-    saveMarketplaceListingsToStorage();
-    await refreshFavoritesFromSupabase({ silent: true });
+    scheduleSaveMarketplaceListingsToStorage();
     scheduleMarketplaceRenders();
 }
 
@@ -941,12 +1036,37 @@ function loadMarketplaceListingsFromStorage() {
     }
 }
 
-function saveMarketplaceListingsToStorage() {
+function flushMarketplaceListingsSave() {
+    marketplaceListingsSaveTimer = null;
+    marketplaceListingsSaveQueued = false;
     try {
         localStorage.setItem(MARKETPLACE_LISTINGS_STORAGE_KEY, JSON.stringify(listings));
     } catch (e) {
         null;
     }
+}
+
+function scheduleSaveMarketplaceListingsToStorage(delayMs = 2500) {
+    if (marketplaceListingsSaveQueued) return;
+    marketplaceListingsSaveQueued = true;
+    if (marketplaceListingsSaveTimer) {
+        try {
+            clearTimeout(marketplaceListingsSaveTimer);
+        } catch (e) {
+            null;
+        }
+    }
+    marketplaceListingsSaveTimer = setTimeout(() => {
+        try {
+            if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(() => flushMarketplaceListingsSave(), { timeout: 4000 });
+                return;
+            }
+        } catch (e) {
+            null;
+        }
+        flushMarketplaceListingsSave();
+    }, Math.max(0, Number(delayMs) || 0));
 }
 
 function syncMyListingsFromListings() {
@@ -6377,6 +6497,7 @@ function runWhenIdle(fn, timeout = 1500) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     setPendingReferralFromUrl();
+    cacheTranslationNodes();
     initLanguage();
     try {
         if (!window.__winjayBootTimer) {
