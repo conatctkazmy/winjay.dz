@@ -13,6 +13,8 @@
     --scrollbar-track: var(--light-gray);
     --scrollbar-thumb: var(--primary-color);
     --scrollbar-thumb-hover: var(--primary-hover);
+    --desktop-shell-max-width: 1240px;
+    --desktop-shell-gutter: 12px;
 }
 
 .dark-mode {
@@ -183,10 +185,10 @@ html.nav-avatar-loading .navbar .profile-btn img {
 
 @media (min-width: 1000px) {
     .navbar-inner {
-        max-width: 1560px;
-        padding-left: 18px;
-        padding-right: 18px;
-        transform: translateX(36px);
+        max-width: var(--desktop-shell-max-width);
+        padding-left: var(--desktop-shell-gutter);
+        padding-right: var(--desktop-shell-gutter);
+        transform: none;
     }
 }
 
@@ -1475,6 +1477,21 @@ html.admin-dashboard-view .sidebar-overlay {
     transform: none;
 }
 
+@media (min-width: 1000px) {
+    .sidebar {
+        transform: translateX(0);
+    }
+
+    .sidebar.collapsed {
+        width: 250px;
+        transform: translateX(-100%);
+    }
+
+    html[dir="rtl"] .sidebar.collapsed {
+        transform: translateX(100%);
+    }
+}
+
 @media (min-width: 769px) {
     .sidebar-mobile-header {
         display: flex;
@@ -1681,9 +1698,8 @@ html.admin-dashboard-view .sidebar-overlay {
 
 main {
     flex: 1;
-    margin-left: 72px;
+    margin-left: 0;
     padding: 30px;
-    transition: margin-left 0.3s ease;
     position: relative;
 }
 
@@ -1699,8 +1715,7 @@ html.admin-dashboard-view main {
 
 html[dir="rtl"] main {
     margin-left: 0;
-    margin-right: 72px;
-    transition: margin-right 0.3s ease;
+    margin-right: 0;
 }
 
 @media (min-width: 1000px) {
@@ -1714,12 +1729,12 @@ html[dir="rtl"].admin-dashboard-view main {
 }
 
 main.expanded {
-    margin-left: 72px;
+    margin-left: 0;
 }
 
 html[dir="rtl"] main.expanded {
     margin-left: 0;
-    margin-right: 72px;
+    margin-right: 0;
 }
 
 .is-touch-device main {
@@ -1741,7 +1756,7 @@ html[dir="rtl"] .is-touch-device.listing-detail-view main {
 
 @media (min-width: 1000px) {
     html[dir="rtl"] .navbar-inner {
-        transform: translateX(-36px);
+        transform: none;
     }
 }
 
@@ -2040,7 +2055,7 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 
 @media (min-width: 1000px) {
     #home-section {
-        max-width: 1560px;
+        max-width: var(--desktop-shell-max-width);
         margin-left: auto;
         margin-right: auto;
     }
