@@ -6362,6 +6362,19 @@ const toastContainer = document.getElementById('toastContainer');
 
 loadThemeModeFromStorage();
 
+function runWhenIdle(fn, timeout = 1500) {
+    try {
+        const w = window;
+        if (typeof w.requestIdleCallback === 'function') {
+            w.requestIdleCallback(() => fn(), { timeout });
+            return;
+        }
+    } catch (e) {
+        null;
+    }
+    setTimeout(() => fn(), 1);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     setPendingReferralFromUrl();
     initLanguage();
@@ -6392,16 +6405,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateNavbarAuthUI();
     initSupabase();
     await bootstrapSupabaseAuth();
-    await refreshCoursesFeatureFlag({ silent: true });
-    applyCoursesFeatureVisibility();
-    bootstrapLivePresence();
+    runWhenIdle(() => {
+        refreshCoursesFeatureFlag({ silent: true })
+            .then(() => {
+                applyCoursesFeatureVisibility();
+            })
+            .catch(() => null);
+    }, 1200);
+    runWhenIdle(() => {
+        bootstrapLivePresence();
+    }, 1200);
     if (!supabaseClient) {
         loadUserProfileFromStorage();
     }
-    setupListingVideoUploader();
-    setupCreateCourseMediaUploader();
-    setupCreateCourseLessonUploader();
-    updateListingVideoGroupVisibility();
+    runWhenIdle(() => {
+        setupListingVideoUploader();
+        setupCreateCourseMediaUploader();
+        setupCreateCourseLessonUploader();
+        updateListingVideoGroupVisibility();
+    }, 1200);
     populateWilayas();
     populateCategories();
     setupHomeCategorySwipe();
@@ -6421,14 +6443,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateEditProfileWorkCategoryVisibility();
     setupCategoryPickers();
     setupSelectPickers();
-    loadUserProfileImages();
-    setupImageEditorDrag();
-    handleIdentityFilePreview('idFrontInput', 'idFrontPreview');
-    handleIdentityFilePreview('idBackInput', 'idBackPreview');
-    updateFreeVerifiedCounterUI();
-    updateMobileFooterBarState();
-    setupMobileFooterDocking();
-    setupPasswordNoSpaceInputs();
+    runWhenIdle(() => {
+        loadUserProfileImages();
+        setupImageEditorDrag();
+        handleIdentityFilePreview('idFrontInput', 'idFrontPreview');
+        handleIdentityFilePreview('idBackInput', 'idBackPreview');
+    }, 1200);
+    runWhenIdle(() => {
+        updateFreeVerifiedCounterUI();
+        updateMobileFooterBarState();
+        setupMobileFooterDocking();
+        setupPasswordNoSpaceInputs();
+    }, 1200);
     loadThemeModeFromStorage();
     const settingsToggle = document.getElementById('defaultDarkMode');
     if (settingsToggle && !settingsToggle.dataset.bound) {
@@ -6592,11 +6618,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (DEMO_MODE) renderListings();
-    updateProfileUI();
-    renderFavorites();
-    setupChatFeatures();
-    setupMessagesTwitterUI();
-    bindChatJumpLatestScroll();
+    runWhenIdle(() => {
+        updateProfileUI();
+        renderFavorites();
+        setupChatFeatures();
+        setupMessagesTwitterUI();
+        bindChatJumpLatestScroll();
+    }, 1200);
     bootstrapMessages();
     maybeOpenPendingAdmin();
     if (!window.__winjayRouteHooked) {
