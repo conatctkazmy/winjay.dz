@@ -2139,6 +2139,10 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 
 .home-hero-slot {
     margin-bottom: 30px;
+    min-height: clamp(160px, 18vw, 280px);
+    border-radius: 24px;
+    overflow: hidden;
+    background: var(--light-gray);
 }
 
 .home-hero-carousel {

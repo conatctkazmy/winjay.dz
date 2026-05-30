@@ -15913,11 +15913,11 @@ async function renderHomeHeroBanners({ force = false } = {}) {
         return;
     }
     const slidesHTML = activeRows
-        .map((b) => {
+        .map((b, i) => {
             const url = getHomeBannerPublicUrl(b.image_path);
             if (!url) return '';
             const href = safeExternalHttpUrl(b.link_url);
-            const img = `<img class="home-hero-img" src="${escapeHtml(url)}" alt="${escapeHtml(String(b.title || ''))}" loading="lazy" decoding="async">`;
+            const img = `<img class="home-hero-img" src="${escapeHtml(url)}" alt="${escapeHtml(String(b.title || ''))}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async" fetchpriority="${i === 0 ? 'high' : 'low'}">`;
             if (href) return `<a class="carousel-slide" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${img}</a>`;
             return `<div class="carousel-slide">${img}</div>`;
         })
