@@ -25,7 +25,7 @@ function createEmptyUserProfile() {
         userId: null,
         name: "Guest",
         tag: "@guest",
-        profilePic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay",
+        profilePic: DEFAULT_AVATAR_SVG,
         coverPic: "https://images.unsplash.com/photo-1557683316-973673baf926?w=1200",
         location: "",
         businessType: "Particulier",
@@ -69,6 +69,8 @@ const FREE_LISTING_LIMIT = 4;
 const SELLER_PROFILE_LAST_TAG_STORAGE_KEY = 'winjayLastSellerProfileTagV1';
 const INITIAL_LISTINGS_FETCH_LIMIT = 24;
 const LISTINGS_FETCH_PAGE_SIZE = 24;
+
+const DEFAULT_AVATAR_SVG = "data:image/svg+xml,%3Csvg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23e2e8f0'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%2394a3b8'/%3E%3Cellipse cx='20' cy='35' rx='12' ry='8' fill='%2394a3b8'/%3E%3C/svg%3E";
 
 const SUPPORTED_LANGS = ['fr', 'ar', 'en'];
 let currentLang = 'fr';
@@ -833,7 +835,7 @@ function buildSellerPlaceholder(ownerId) {
     return {
         name: 'Seller',
         tag: `@${short}`,
-        pic: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(short)}`,
+        pic: DEFAULT_AVATAR_SVG,
         verified: false,
         rating: 0,
         reviews: 0,
@@ -998,6 +1000,7 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
         homeInitialListingsLoading = false;
         homeInitialListingsLoaded = true;
     }
+    clearCardHtmlCache();
     scheduleSaveMarketplaceListingsToStorage();
     scheduleMarketplaceRenders({ listings: true, loadMoreUI: true, iconsRoot: document.getElementById('home-section') });
 }
@@ -1135,7 +1138,7 @@ function applyAuthSessionToLocalState(session) {
         userId: user.id,
         name: fullName || user.email || 'User',
         tag: tag || `@${user.id.slice(0, 8)}`,
-        profilePic: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.id)}`,
+        profilePic: avatar || DEFAULT_AVATAR_SVG,
         joinedDate: user.created_at
             ? new Date(user.created_at).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })
             : userProfile.joinedDate
@@ -2179,24 +2182,24 @@ async function submitIdentityVerification() {
 const DEMO_MODE = false;
 
 const botProfiles = DEMO_MODE ? [
-    { name: "Amine Tech", tag: "@amine_dz", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Amine", cover: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?w=1200", verified: true, vip: true, location: "Alger", businessType: "Magasin d'électronique", joinedDate: "Janvier 2023", rating: 4.9, reviews: 156, reviewsData: [] },
-    { name: "Sarah Immo", tag: "@sarah_immobilier", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah", cover: "https://images.unsplash.com/photo-1449844908441-8829872d2607?w=1200", verified: true, location: "Oran", businessType: "Agence Immobilière", joinedDate: "Mars 2022", rating: 4.7, reviews: 89, reviewsData: [] },
-    { name: "Karim Auto", tag: "@karim_cars", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Karim", cover: "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=1200", verified: false, vip: true, location: "Constantine", businessType: "Vendeur de véhicules", joinedDate: "Juin 2023", rating: 4.5, reviews: 42, reviewsData: [] },
-    { name: "Lina Fashion", tag: "@lina_style", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Lina", cover: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200", verified: true, location: "Alger", businessType: "Boutique de Mode", joinedDate: "Novembre 2023", rating: 4.8, reviews: 67, reviewsData: [] },
-    { name: "Yacine Informatique", tag: "@yacine_it", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Yacine", cover: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200", verified: false, location: "Sétif", businessType: "Services Informatiques", joinedDate: "Février 2024", rating: 4.6, reviews: 28, reviewsData: [] }
+    { name: "Amine Tech", tag: "@amine_dz", pic: DEFAULT_AVATAR_SVG, cover: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?w=1200", verified: true, vip: true, location: "Alger", businessType: "Magasin d'électronique", joinedDate: "Janvier 2023", rating: 4.9, reviews: 156, reviewsData: [] },
+    { name: "Sarah Immo", tag: "@sarah_immobilier", pic: DEFAULT_AVATAR_SVG, cover: "https://images.unsplash.com/photo-1449844908441-8829872d2607?w=1200", verified: true, location: "Oran", businessType: "Agence Immobilière", joinedDate: "Mars 2022", rating: 4.7, reviews: 89, reviewsData: [] },
+    { name: "Karim Auto", tag: "@karim_cars", pic: DEFAULT_AVATAR_SVG, cover: "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=1200", verified: false, vip: true, location: "Constantine", businessType: "Vendeur de véhicules", joinedDate: "Juin 2023", rating: 4.5, reviews: 42, reviewsData: [] },
+    { name: "Lina Fashion", tag: "@lina_style", pic: DEFAULT_AVATAR_SVG, cover: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200", verified: true, location: "Alger", businessType: "Boutique de Mode", joinedDate: "Novembre 2023", rating: 4.8, reviews: 67, reviewsData: [] },
+    { name: "Yacine Informatique", tag: "@yacine_it", pic: DEFAULT_AVATAR_SVG, cover: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200", verified: false, location: "Sétif", businessType: "Services Informatiques", joinedDate: "Février 2024", rating: 4.6, reviews: 28, reviewsData: [] }
 ] : [];
 
 const reviewers = DEMO_MODE ? [
-    { name: "Mohamed", tag: "@mohamed_dz", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Mohamed", location: "Alger", businessType: "Particulier", joinedDate: "Janvier 2024", rating: 4.5, reviews: 5, reviewsData: [] },
-    { name: "Lydia", tag: "@lydia_b", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Lydia", location: "Oran", businessType: "Particulier", joinedDate: "Mars 2024", rating: 4.2, reviews: 3, reviewsData: [] },
-    { name: "Ryad", tag: "@ryad_k", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ryad", location: "Alger", businessType: "Passionné Tech", joinedDate: "Février 2024", rating: 4.8, reviews: 12, reviewsData: [] },
-    { name: "Sonia", tag: "@sonia_tech", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sonia", location: "Constantine", businessType: "Particulier", joinedDate: "Avril 2024", rating: 4.6, reviews: 8, reviewsData: [] },
-    { name: "Imad", tag: "@imad_ed", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Imad", location: "Sétif", businessType: "Particulier", joinedDate: "Mai 2024", rating: 4.4, reviews: 6, reviewsData: [] },
-    { name: "Ahmed", tag: "@ahmed_dz", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed", location: "Béjaïa", businessType: "Particulier", joinedDate: "Janvier 2024", rating: 4.7, reviews: 15, reviewsData: [] },
-    { name: "Fatiha", tag: "@fatiha_w", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Fatiha", location: "Alger", businessType: "Particulier", joinedDate: "Mars 2024", rating: 4.9, reviews: 20, reviewsData: [] },
-    { name: "Kamel", tag: "@kamel_s", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Kamel", location: "Tlemcen", businessType: "Particulier", joinedDate: "Février 2024", rating: 4.3, reviews: 4, reviewsData: [] },
-    { name: "Yanis", tag: "@yanis_j", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Yanis", location: "Alger", businessType: "Particulier", joinedDate: "Avril 2024", rating: 4.5, reviews: 7, reviewsData: [] },
-    { name: "Amel", tag: "@amel_z", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Amel", location: "Annaba", businessType: "Particulier", joinedDate: "Mai 2024", rating: 4.6, reviews: 9, reviewsData: [] }
+    { name: "Mohamed", tag: "@mohamed_dz", pic: DEFAULT_AVATAR_SVG, location: "Alger", businessType: "Particulier", joinedDate: "Janvier 2024", rating: 4.5, reviews: 5, reviewsData: [] },
+    { name: "Lydia", tag: "@lydia_b", pic: DEFAULT_AVATAR_SVG, location: "Oran", businessType: "Particulier", joinedDate: "Mars 2024", rating: 4.2, reviews: 3, reviewsData: [] },
+    { name: "Ryad", tag: "@ryad_k", pic: DEFAULT_AVATAR_SVG, location: "Alger", businessType: "Passionné Tech", joinedDate: "Février 2024", rating: 4.8, reviews: 12, reviewsData: [] },
+    { name: "Sonia", tag: "@sonia_tech", pic: DEFAULT_AVATAR_SVG, location: "Constantine", businessType: "Particulier", joinedDate: "Avril 2024", rating: 4.6, reviews: 8, reviewsData: [] },
+    { name: "Imad", tag: "@imad_ed", pic: DEFAULT_AVATAR_SVG, location: "Sétif", businessType: "Particulier", joinedDate: "Mai 2024", rating: 4.4, reviews: 6, reviewsData: [] },
+    { name: "Ahmed", tag: "@ahmed_dz", pic: DEFAULT_AVATAR_SVG, location: "Béjaïa", businessType: "Particulier", joinedDate: "Janvier 2024", rating: 4.7, reviews: 15, reviewsData: [] },
+    { name: "Fatiha", tag: "@fatiha_w", pic: DEFAULT_AVATAR_SVG, location: "Alger", businessType: "Particulier", joinedDate: "Mars 2024", rating: 4.9, reviews: 20, reviewsData: [] },
+    { name: "Kamel", tag: "@kamel_s", pic: DEFAULT_AVATAR_SVG, location: "Tlemcen", businessType: "Particulier", joinedDate: "Février 2024", rating: 4.3, reviews: 4, reviewsData: [] },
+    { name: "Yanis", tag: "@yanis_j", pic: DEFAULT_AVATAR_SVG, location: "Alger", businessType: "Particulier", joinedDate: "Avril 2024", rating: 4.5, reviews: 7, reviewsData: [] },
+    { name: "Amel", tag: "@amel_z", pic: DEFAULT_AVATAR_SVG, location: "Annaba", businessType: "Particulier", joinedDate: "Mai 2024", rating: 4.6, reviews: 9, reviewsData: [] }
 ] : [];
 
 const comments = [
@@ -2336,7 +2339,7 @@ let ambassadorsUIState = { sort: 'trust', wilaya: '' };
 let mockChats = DEMO_MODE ? {
     "@amine_dz": {
         name: "Amine Tech",
-        pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Amine",
+        pic: DEFAULT_AVATAR_SVG,
         verified: true,
         vip: true,
         messages: [
@@ -2346,7 +2349,7 @@ let mockChats = DEMO_MODE ? {
     },
     "@sarah_immobilier": {
         name: "Sarah Immo",
-        pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah",
+        pic: DEFAULT_AVATAR_SVG,
         verified: true,
         vip: false,
         messages: [
@@ -2355,7 +2358,7 @@ let mockChats = DEMO_MODE ? {
     },
     "@karim_cars": {
         name: "Karim Auto",
-        pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Karim",
+        pic: DEFAULT_AVATAR_SVG,
         verified: false,
         vip: true,
         messages: [
@@ -3763,20 +3766,20 @@ async function renderNotificationsModal() {
             else if (r.type === 'profile_review_reply') text = 'replied to a review on your profile';
             else if (r.type === 'message_received') text = 'sent you a message';
             else if (r.type === 'identity_approved') {
-                seller = { name: 'Winjay', tag: '', pic: `https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay` };
+                seller = { name: 'Winjay', tag: '', pic: DEFAULT_AVATAR_SVG };
                 text = 'approved your identity verification';
             }
             else if (r.type === 'identity_rejected') {
-                seller = { name: 'Winjay', tag: '', pic: `https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay` };
+                seller = { name: 'Winjay', tag: '', pic: DEFAULT_AVATAR_SVG };
                 text = 'rejected your identity verification';
             }
             else if (r.type === 'verified_granted') {
-                seller = { name: 'Winjay', tag: '', pic: `https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay` };
+                seller = { name: 'Winjay', tag: '', pic: DEFAULT_AVATAR_SVG };
                 text = 'your account is now Verified';
             }
             else if (r.type === 'listing_view_milestone') {
                 const milestone = Number(meta.milestone) || Number(meta.views) || 0;
-                seller = { name: 'Winjay', tag: '', pic: `https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay` };
+                seller = { name: 'Winjay', tag: '', pic: DEFAULT_AVATAR_SVG };
                 text = `Your listing reached ${milestone || ''} views${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`.trim();
             }
             else text = escapeHtml(String(r.type || 'notification'));
@@ -4787,7 +4790,7 @@ function renderListingReviewsListHTML(reviewsData) {
             const tag = String(r.tag || '@user');
             const user = escapeHtml(r.user || 'User');
             const date = escapeHtml(r.date || '');
-            const pic = String(r.pic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(tag)}`);
+            const pic = String(r.pic || DEFAULT_AVATAR_SVG);
             const comment = String(r.comment || '');
             return `
             <div class="review-item">
@@ -4937,7 +4940,7 @@ async function fetchProfileReviews(profileId) {
             authorId: r.author_id,
             user: p.display_name || 'User',
             tag: p.tag || `@${String(r.author_id || '').slice(0, 8)}`,
-            pic: p.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(r.author_id || 'user'))}`,
+            pic: p.avatar_url || DEFAULT_AVATAR_SVG,
             rating: Number(r.rating) || 0,
             date: formatRelativeDate(r.created_at),
             comment: escapeHtml(r.comment || ''),
@@ -5285,6 +5288,41 @@ const analyticsDedupeKeys = new Set();
 const analyticsQueue = [];
 let analyticsGateOpen = false;
 let analyticsGateSetup = false;
+let analyticsBatch = [];
+let analyticsBatchTimer = null;
+
+function scheduleAnalyticsBatchFlush() {
+    if (analyticsBatchTimer) return;
+    analyticsBatchTimer = setTimeout(flushAnalyticsBatch, 2000);
+}
+
+async function flushAnalyticsBatch() {
+    analyticsBatchTimer = null;
+    if (!analyticsBatch.length) return;
+    const items = analyticsBatch.splice(0);
+    const client = initSupabase();
+    if (!client) return;
+    try {
+        const { error } = await client.from('analytics_events').insert(items);
+        if (error) {
+            for (const item of items) {
+                if (item && item.__dedupeKey) analyticsDedupeKeys.delete(item.__dedupeKey);
+            }
+        }
+    } catch (e) {
+        for (const item of items) {
+            if (item && item.__dedupeKey) analyticsDedupeKeys.delete(item.__dedupeKey);
+        }
+    }
+}
+
+try {
+    window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushAnalyticsBatch();
+    });
+} catch (e) {
+    null;
+}
 
 function setupAnalyticsGate() {
     if (analyticsGateSetup) return;
@@ -5321,8 +5359,6 @@ function setupAnalyticsGate() {
 }
 
 async function sendAnalyticsEventNow(name, opts, key) {
-    const client = initSupabase();
-    if (!client) return;
     const payload = {
         event_name: name,
         user_id: currentSupabaseUserId || null,
@@ -5336,13 +5372,12 @@ async function sendAnalyticsEventNow(name, opts, key) {
         meta: opts?.meta && typeof opts.meta === 'object' ? opts.meta : null
     };
     try {
-        const { error } = await client.from('analytics_events').insert(payload);
-        if (error) {
-            analyticsDedupeKeys.delete(key);
-        }
+        Object.defineProperty(payload, '__dedupeKey', { value: key, enumerable: false });
     } catch (e) {
-        analyticsDedupeKeys.delete(key);
+        null;
     }
+    analyticsBatch.push(payload);
+    scheduleAnalyticsBatchFlush();
 }
 
 async function trackAnalyticsEvent(eventName, { listingId = null, category = null, wilaya = null, meta = null, dedupeKey = '' } = {}) {
@@ -5825,7 +5860,7 @@ async function startChatWithSeller(tag, { pushState = false } = {}) {
 
         mockChats[tag] = {
             name: seller?.name || 'Seller',
-            pic: seller?.pic || seller?.profilePic || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Seller',
+            pic: seller?.pic || seller?.profilePic || DEFAULT_AVATAR_SVG,
             verified: !!seller?.verified,
             vip: !!(seller?.vip || seller?.isVip),
             messages: []
@@ -10312,14 +10347,31 @@ window.onclick = function(event) {
     closeModal(modalId);
 };
 
+let scrollTopBtnEl = null;
+let scrollRafPending = false;
+try {
+    scrollTopBtnEl = document.getElementById('scrollTopBtn');
+} catch (e) {
+    scrollTopBtnEl = null;
+}
+
 window.addEventListener('scroll', () => {
-    const btn = document.getElementById('scrollTopBtn');
-    if (window.scrollY > 500) {
-        btn.classList.add('visible');
-    } else {
-        btn.classList.remove('visible');
-    }
-});
+    if (scrollRafPending) return;
+    scrollRafPending = true;
+    requestAnimationFrame(() => {
+        scrollRafPending = false;
+        if (!scrollTopBtnEl) {
+            try {
+                scrollTopBtnEl = document.getElementById('scrollTopBtn');
+            } catch (e) {
+                scrollTopBtnEl = null;
+            }
+        }
+        if (!scrollTopBtnEl) return;
+        if (window.scrollY > 500) scrollTopBtnEl.classList.add('visible');
+        else scrollTopBtnEl.classList.remove('visible');
+    });
+}, { passive: true });
 
 function scrollToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -12127,9 +12179,7 @@ async function fetchProfileSearchResults(term) {
         <div class="profile-search-header">People</div>
         ${rows
             .map((p) => {
-                const pic =
-                    p.avatar_url ||
-                    `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(p.id || p.tag || 'user'))}`;
+                const pic = p.avatar_url || DEFAULT_AVATAR_SVG;
                 const name = p.display_name || 'User';
                 const tag = p.tag || '';
                 return `
@@ -12506,6 +12556,7 @@ async function saveEditedListing() {
     }
     closeModal('editListingModal');
     showToast('Listing updated!', 'check-circle');
+    clearCardHtmlCache();
     await fetchListingsFromSupabase({ silent: true });
 }
 
@@ -12532,6 +12583,7 @@ function deleteMyListing(event, id) {
                 return;
             }
             favorites = favorites.filter(fid => fid !== id);
+            clearCardHtmlCache();
             showToast('Listing deleted', 'trash-2');
             await fetchListingsFromSupabase({ silent: true });
             renderFavorites();
@@ -16148,7 +16200,24 @@ function getPremiumSellerStripHTML(item) {
     `;
 }
 
+const cardHtmlCache = new Map();
+
+function clearCardHtmlCache() {
+    try {
+        cardHtmlCache.clear();
+    } catch (e) {
+        null;
+    }
+}
+
 function createCardHTML(item) {
+    const cacheKey = `${item.id}:${item.likes_count}:${item.status}:${item.availability}:${item.title}`;
+    try {
+        if (cardHtmlCache.has(cacheKey)) return cardHtmlCache.get(cacheKey);
+    } catch (e) {
+        null;
+    }
+
     const isFavorite = favorites.includes(item.id);
     const pulse = pendingHeartPulses.has(item.id) && isFavorite;
     const availability = String(item.availability || '').toLowerCase();
@@ -16169,7 +16238,7 @@ function createCardHTML(item) {
                 </div>
             </div></div>`
         : `<div class="card-media-wrap">${videoBadge}<img src="${item.cardImage || item.image}" data-src="${item.cardImage || item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
-    return `
+    const html = `
         <div class="card" onclick="handleCardOpen(event, ${item.id})">
             <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
                 <i data-lucide="heart"></i>
@@ -16190,6 +16259,16 @@ function createCardHTML(item) {
                 </div>
             </div>
         </div>`;
+    try {
+        cardHtmlCache.set(cacheKey, html);
+        if (cardHtmlCache.size > 200) {
+            const firstKey = cardHtmlCache.keys().next().value;
+            cardHtmlCache.delete(firstKey);
+        }
+    } catch (e) {
+        null;
+    }
+    return html;
 }
 
 function getRatingHTML(rating, reviews, { showEmpty = false } = {}) {
@@ -17287,7 +17366,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     }
     const content = document.getElementById('listingDetailPage');
     if (!content) return;
-    const seller = item.seller || { name: "Utilisateur Winjay", tag: "@user", pic: "https://api.dicebear.com/7.x/avataaars/svg?seed=Winjay", verified: false, rating: 0, reviews: 0, reviewsData: [] };
+    const seller = item.seller || { name: "Utilisateur Winjay", tag: "@user", pic: DEFAULT_AVATAR_SVG, verified: false, rating: 0, reviews: 0, reviewsData: [] };
     const isLiked = favorites.includes(listingId);
     const pulse = pendingHeartPulses.has(listingId) && isLiked;
     const detailImages = getListingImagesForDetail(item);
@@ -17813,7 +17892,7 @@ function mapProfileRowToSeller(row) {
     const id = row?.id || '';
     const pic =
         pickFirstValue(row, ['avatar_url', 'profile_pic', 'profilePic', 'picture', 'photo_url']) ||
-        `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(String(id || 'user'))}`;
+        DEFAULT_AVATAR_SVG;
     const cover =
         pickFirstValue(row, ['cover_url', 'cover_pic', 'coverPic', 'cover_url']) || 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1200';
     const rawTag =
