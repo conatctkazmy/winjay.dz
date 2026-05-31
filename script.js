@@ -14270,37 +14270,6 @@ async function adminUploadHomeBannerFile(file) {
     return path;
 }
 
-function getImageDimensions(file) {
-    return new Promise((resolve, reject) => {
-        const f = file;
-        if (!f) {
-            reject(new Error('Missing file'));
-            return;
-        }
-        const url = URL.createObjectURL(f);
-        const img = new Image();
-        img.onload = () => {
-            const width = Number(img.naturalWidth) || 0;
-            const height = Number(img.naturalHeight) || 0;
-            try {
-                URL.revokeObjectURL(url);
-            } catch (e) {
-                null;
-            }
-            resolve({ width, height });
-        };
-        img.onerror = () => {
-            try {
-                URL.revokeObjectURL(url);
-            } catch (e) {
-                null;
-            }
-            reject(new Error('Invalid image'));
-        };
-        img.src = url;
-    });
-}
-
 async function adminCreateHomeBanner() {
     if (!isAdminAuthorized()) {
         showToast('Not authorized', 'alert-circle');
@@ -14327,11 +14296,6 @@ async function adminCreateHomeBanner() {
             addBtn.disabled = true;
             addBtn.dataset.prevText = addBtn.textContent || '';
             addBtn.textContent = 'Uploading…';
-        }
-        const dims = await getImageDimensions(file);
-        if (dims.width !== 960 || dims.height !== 250) {
-            showToast(`Banner must be exactly 960×250 px (yours is ${dims.width}×${dims.height})`, 'alert-circle');
-            return;
         }
         const imagePath = await adminUploadHomeBannerFile(file);
         const maxOrder = adminHomeBannersRows.reduce((acc, b) => Math.max(acc, Number(b.sort_order) || 0), 0);
@@ -16332,7 +16296,9 @@ async function renderHomeHeroBanners({ force = false } = {}) {
         scheduleLucideCreateIcons();
         return;
     }
-    const slidesHTML = activeRows
+    const sideRow = activeRows.length > 1 ? activeRows[1] : null;
+    const carouselRows = sideRow ? activeRows.filter((_, idx) => idx !== 1) : activeRows;
+    const slidesHTML = carouselRows
         .map((b) => {
             const url = getHomeBannerPublicUrl(b.image_path);
             if (!url) return '';
@@ -16351,14 +16317,30 @@ async function renderHomeHeroBanners({ force = false } = {}) {
         scheduleLucideCreateIcons();
         return;
     }
+    const sideHTML = (() => {
+        if (!sideRow) return '';
+        const url = getHomeBannerPublicUrl(sideRow.image_path);
+        if (!url) return '';
+        const href = safeExternalHttpUrl(sideRow.link_url);
+        const label = escapeHtml(String(sideRow.title || ''));
+        const pane = `<div class="home-hero-side-banner" role="img" aria-label="${label}" style="background-image:url('${escapeHtml(url)}')"></div>`;
+        if (href) return `<a class="home-hero-side" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${pane}</a>`;
+        return `<div class="home-hero-side">${pane}</div>`;
+    })();
+
     slot.innerHTML = `
-        <div class="home-hero-carousel js-carousel" data-columns="1" data-carousel="home-hero">
-            <div class="carousel-viewport">
-                <div class="carousel-track">
-                    ${slidesHTML}
+        <div class="home-hero-layout">
+            <div class="home-hero-main">
+                <div class="home-hero-carousel js-carousel" data-columns="1" data-carousel="home-hero">
+                    <div class="carousel-viewport">
+                        <div class="carousel-track">
+                            ${slidesHTML}
+                        </div>
+                    </div>
+                    <div class="carousel-dots"></div>
                 </div>
             </div>
-            <div class="carousel-dots"></div>
+            ${sideHTML}
         </div>
     `;
     initCarouselsInContainer(slot);
