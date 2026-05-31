@@ -2926,7 +2926,36 @@ html[dir="rtl"] .home-category-swipe-item {
 }
 
 .vip-verified-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
     margin-bottom: 12px;
+}
+
+.vip-verified-more-btn {
+    appearance: none;
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    color: var(--text-color);
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-weight: 800;
+    font-size: 0.85rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.vip-verified-more-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.page-card-head.vip-verified-page-head {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
 }
 
 .vip-verified-title {

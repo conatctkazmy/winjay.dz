@@ -14679,6 +14679,9 @@ async function showSection(sectionId) {
         clearSellerProfileRouteTag();
         renderListings();
         void renderHomeHeroBanners();
+    } else if (sectionId === 'vip-verified-listings-section') {
+        clearSellerProfileRouteTag();
+        renderVipVerifiedListingsPage();
     } else if (sectionId === 'favorites-section') {
         clearSellerProfileRouteTag();
         renderFavorites();
@@ -16083,14 +16086,17 @@ function renderListings() {
     const regularListings = allFiltered.filter(item => !isVipOrVerifiedSeller(item));
     const vipVerifiedSection = document.getElementById('vipVerifiedSection');
     const vipVerifiedRow = document.getElementById('vipVerifiedRow');
+    const vipVerifiedMoreBtn = document.getElementById('vipVerifiedMoreBtn');
     const regularHeader = document.getElementById('regularListingsHeader');
     if (vipVerifiedSection && vipVerifiedRow) {
         if (vipVerifiedListings.length > 0) {
             vipVerifiedSection.style.display = '';
-            vipVerifiedRow.innerHTML = vipVerifiedListings.slice(0, 20).map(item => createVipVerifiedCardHTML(item)).join('');
+            vipVerifiedRow.innerHTML = vipVerifiedListings.slice(0, 4).map(item => createVipVerifiedCardHTML(item)).join('');
+            if (vipVerifiedMoreBtn) vipVerifiedMoreBtn.style.display = vipVerifiedListings.length > 4 ? '' : 'none';
         } else {
             vipVerifiedSection.style.display = 'none';
             vipVerifiedRow.innerHTML = '';
+            if (vipVerifiedMoreBtn) vipVerifiedMoreBtn.style.display = 'none';
         }
     }
     if (regularHeader) {
@@ -16135,6 +16141,23 @@ function renderListings() {
     void renderFeaturedStoresSection();
     scheduleLucideCreateIcons(vipVerifiedRow);
     scheduleLucideCreateIcons(listingsGrid);
+}
+
+function openVipVerifiedListingsPage() {
+    showSection('vip-verified-listings-section');
+}
+
+function renderVipVerifiedListingsPage() {
+    const grid = document.getElementById('vipVerifiedPageGrid');
+    const empty = document.getElementById('vipVerifiedPageEmpty');
+    if (!grid) return;
+    const items = getFilteredListings()
+        .filter((l) => !hasListingVideo(l))
+        .filter((l) => isVipOrVerifiedSeller(l));
+    grid.innerHTML = items.length > 0 ? items.map((item) => createVipVerifiedCardHTML(item)).join('') : '';
+    if (empty) empty.style.display = items.length > 0 ? 'none' : 'block';
+    initCarouselsInContainer(grid);
+    scheduleLucideCreateIcons(grid);
 }
 
 function renderFavorites() {

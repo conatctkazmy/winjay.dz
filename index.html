@@ -34,7 +34,8 @@
                 'admin-dashboard-section',
                 'create-listing-section',
                 'listing-detail-section',
-                'seller-profile-section'
+                'seller-profile-section',
+                'vip-verified-listings-section'
             ]);
             const blocked = new Set(['profile-section', 'course-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section']);
             const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
@@ -426,6 +427,7 @@
                             <h3 class="vip-verified-title"><i data-lucide="badge-check"></i> Annonces VIP & Vérifiées</h3>
                             <p class="vip-verified-subtitle">Les meilleures offres de nos vendeurs vérifiés</p>
                         </div>
+                        <button class="vip-verified-more-btn" id="vipVerifiedMoreBtn" type="button" style="display: none;" onclick="openVipVerifiedListingsPage()">Voir plus</button>
                     </div>
                     <div class="vip-verified-row" id="vipVerifiedRow"></div>
                 </div>
@@ -450,6 +452,27 @@
                         <div class="skeleton-card"></div>
                         <div class="skeleton-card"></div>
                         <div class="skeleton-card"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="vip-verified-listings-section" class="content-section">
+                <div class="page-card">
+                    <div class="page-card-head vip-verified-page-head">
+                        <div>
+                            <h2 style="margin: 0;"><i data-lucide="badge-check"></i> Annonces VIP & Vérifiées</h2>
+                            <p style="margin: 0; color: var(--text-muted);">Toutes les annonces VIP et vérifiées</p>
+                        </div>
+                        <button class="icon-btn" type="button" onclick="showSection('home-section')" title="Retour">
+                            <i data-lucide="arrow-left"></i>
+                        </button>
+                    </div>
+                    <div class="listings-grid" id="vipVerifiedPageGrid"></div>
+                    <div class="empty-state" id="vipVerifiedPageEmpty" style="display: none;">
+                        <i data-lucide="search-x"></i>
+                        <h3>Aucune annonce trouvée</h3>
+                        <p>Essayez de modifier vos filtres ou votre recherche.</p>
+                        <button class="submit-btn" onclick="showSection('home-section')">Retour</button>
                     </div>
                 </div>
             </section>
