@@ -2514,15 +2514,19 @@ function unescapeHtml(str) {
         .replaceAll('&amp;', '&');
 }
 
-const WINJAY_LOGO_FILENAME = 'endinar.com';
-const WINJAY_LOGO_FILENAME_ENCODED = 'endinar.com';
+const WINJAY_LOGO_FILENAME = 'endinar.com.png';
+const WINJAY_LOGO_FILENAME_ENCODED = 'endinar.com.png';
 const winjayTransparentLogoCache = new Map();
 const winjayTransparentLogoPromiseCache = new Map();
 
 function isWinjayLogoSrc(src) {
     if (!src) return false;
     const s = String(src).toLowerCase();
-    return s.includes(WINJAY_LOGO_FILENAME) || s.includes(WINJAY_LOGO_FILENAME_ENCODED);
+    return (
+        s.includes('endinar.com') ||
+        s.includes(WINJAY_LOGO_FILENAME) ||
+        s.includes(WINJAY_LOGO_FILENAME_ENCODED)
+    );
 }
 
 function getWinjayLogoImgs() {
