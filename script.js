@@ -1066,7 +1066,11 @@ function scheduleSaveMarketplaceListingsToStorage(delayMs = 2500) {
 }
 
 function syncMyListingsFromListings() {
-    myListings = listings.filter((l) => l?.owner_id && currentSupabaseUserId && l.owner_id === currentSupabaseUserId);
+    myListings = listings.filter((l) => {
+        const oid = String(l?.owner_id || '').trim();
+        const uid = String(currentSupabaseUserId || '').trim();
+        return oid && uid && oid === uid;
+    });
 }
 
 function initSupabase() {
@@ -12637,8 +12641,15 @@ async function ensureMyProfileListingsLoaded() {
             .limit(100);
         if (error) return false;
         const mapped = (data || []).map((row) => mapSupabaseListingRow(row, {}));
+        
+        // Merge into global listings to keep everything in sync
+        const byId = new Map((listings || []).map((x) => [x.id, x]));
+        mapped.forEach((x) => byId.set(x.id, x));
+        listings = Array.from(byId.values()).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+        
+        // Directly set myListings from our fresh fetch
         myListings = mapped;
-        syncMyListingsFromListings();
+        
         myProfileListingsLoaded = true;
         return true;
     } catch (e) {
