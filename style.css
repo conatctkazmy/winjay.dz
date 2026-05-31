@@ -2063,8 +2063,9 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     color: var(--text-muted);
 }
 
-#create-listing-section {
-    max-width: var(--desktop-shell-max-width);
+#create-listing-section,
+#listing-detail-section {
+    max-width: 920px;
     margin-left: auto;
     margin-right: auto;
 }
