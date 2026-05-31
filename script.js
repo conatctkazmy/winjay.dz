@@ -18169,7 +18169,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         ? `<h3>Annonces de ${seller.name}</h3><div class="listings-grid">${sellerListings.map(l => createCardHTML(l)).join('')}</div>`
         : (shouldFetchListings
             ? `<h3>Annonces de ${seller.name}</h3><div class="listings-grid">${Array.from({ length: 8 }, () => `<div class="skeleton-card"></div>`).join('')}</div>`
-            : '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="shopping-bag" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>Cet utilisateur n\\'a pas encore d\\'annonces publiées.</p></div>');
+            : '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="shopping-bag" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>Cet utilisateur n\'a pas encore d\'annonces publiées.</p></div>');
     content.innerHTML = `
         <div class="profile-header">
             <div class="cover-photo-container">
@@ -18276,7 +18276,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
                 if (!sectionEl) return;
                 sectionEl.innerHTML = rows.length > 0
                     ? `<h3>Annonces de ${seller.name}</h3><div class="listings-grid">${rows.map(l => createCardHTML(l)).join('')}</div>`
-                    : '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="shopping-bag" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>Cet utilisateur n\\'a pas encore d\\'annonces publiées.</p></div>';
+                    : '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="shopping-bag" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>Cet utilisateur n\'a pas encore d\'annonces publiées.</p></div>';
                 try {
                     const grid = sectionEl.querySelector('.listings-grid');
                     if (grid) initCarouselsInContainer(grid);
