@@ -2987,39 +2987,147 @@ html[dir="rtl"] .home-category-swipe-item {
     color: var(--primary-color);
 }
 
-.vip-verified-row .card {
-    flex: 0 0 260px;
+.vip-verified-row .card.vip-card {
+    flex: 0 0 280px;
     scroll-snap-align: start;
+    border: 2px solid var(--primary-color);
+    border-radius: 16px;
+    overflow: hidden;
 }
 
-.vip-verified-row .card-content {
-    padding: 12px;
+.vip-verified-row .card.vip-card .card-content {
+    padding: 14px;
 }
 
-.vip-verified-row .card-title {
-    font-size: 0.95rem;
-    margin-bottom: 6px;
-}
-
-.vip-verified-row .card-price {
-    font-size: 1rem;
+.vip-verified-row .card.vip-card .card-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
     margin-bottom: 10px;
 }
 
-.vip-verified-row .card-footer,
-.vip-verified-row .card-stats {
-    display: none;
+.vip-verified-row .card.vip-card .card-seller-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.vip-verified-row .card-actions {
+.vip-verified-row .card.vip-card .card-seller-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--primary-color);
+}
+
+.vip-verified-row .card.vip-card .card-seller-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.vip-verified-row .card.vip-card .card-seller-name {
+    font-weight: 700;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.vip-verified-row .card.vip-card .card-seller-tag {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.vip-verified-row .card.vip-card .verified-badge-small,
+.vip-verified-row .card.vip-card .vip-badge-small {
+    display: inline-flex;
+    align-items: center;
+}
+
+.vip-verified-row .card.vip-card .verified-badge-small i {
+    width: 14px;
+    height: 14px;
+    color: #3b82f6;
+}
+
+.vip-verified-row .card.vip-card .vip-badge-small {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 800;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.vip-verified-row .card.vip-card .card-price {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--primary-color);
+    white-space: nowrap;
+}
+
+.vip-verified-row .card.vip-card .card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.vip-verified-row .card.vip-card .card-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.vip-verified-row .card.vip-card .card-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.vip-verified-row .card.vip-card .card-meta-item i {
+    width: 12px;
+    height: 12px;
+}
+
+.vip-verified-row .card.vip-card .card-stats-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.vip-verified-row .card.vip-card .card-stat-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.vip-verified-row .card.vip-card .card-stat-item i {
+    width: 12px;
+    height: 12px;
+}
+
+.vip-verified-row .card.vip-card .card-actions {
     display: flex;
     gap: 8px;
-    margin-top: 8px;
 }
 
-.vip-verified-row .card-action-btn {
+.vip-verified-row .card.vip-card .card-action-btn {
     flex: 1;
-    padding: 8px 12px;
+    padding: 10px 12px;
     border-radius: 10px;
     font-weight: 700;
     font-size: 0.85rem;
@@ -3027,33 +3135,55 @@ html[dir="rtl"] .home-category-swipe-item {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
+    gap: 6px;
     transition: all 0.2s;
     border: none;
 }
 
-.vip-verified-row .card-action-btn.message {
+.vip-verified-row .card.vip-card .card-action-btn.message {
     background: var(--primary-color);
     color: white;
 }
 
-.vip-verified-row .card-action-btn.message:hover {
+.vip-verified-row .card.vip-card .card-action-btn.message:hover {
     filter: brightness(0.9);
+    transform: translateY(-1px);
 }
 
-.vip-verified-row .card-action-btn.call {
+.vip-verified-row .card.vip-card .card-action-btn.call {
     background: var(--light-gray);
     color: var(--text-main);
     border: 1px solid var(--border-color);
 }
 
-.vip-verified-row .card-action-btn.call:hover {
+.vip-verified-row .card.vip-card .card-action-btn.call:hover {
     background: var(--border-color);
+    transform: translateY(-1px);
 }
 
-.vip-verified-row .card-action-btn i {
+.vip-verified-row .card.vip-card .card-action-btn i {
     width: 16px;
     height: 16px;
+}
+
+.vip-verified-row .card.vip-card .card-footer,
+.vip-verified-row .card.vip-card .card-stats {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .vip-verified-row .card.vip-card {
+        flex: 0 0 240px;
+    }
+    
+    .vip-verified-row .card.vip-card .card-header-row {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .vip-verified-row .card.vip-card .card-price {
+        align-self: flex-start;
+    }
 }
 
 .vip-video-card-media {
@@ -3544,6 +3674,53 @@ body.dark-mode .listing-status-badge {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.card-action-btn {
+    flex: 1;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s;
+    border: none;
+}
+
+.card-action-btn.message {
+    background: var(--primary-color);
+    color: white;
+}
+
+.card-action-btn.message:hover {
+    filter: brightness(0.9);
+    transform: translateY(-1px);
+}
+
+.card-action-btn.call {
+    background: var(--light-gray);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+}
+
+.card-action-btn.call:hover {
+    background: var(--border-color);
+    transform: translateY(-1px);
+}
+
+.card-action-btn i {
+    width: 16px;
+    height: 16px;
 }
 
 .card-seller-strip {

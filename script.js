@@ -16360,15 +16360,42 @@ function createVipVerifiedCardHTML(item) {
     const phone = item.contact_phone || '';
     const messageClick = `event.stopPropagation(); startChatWithListing(${item.id});`;
     const callClick = phone ? `event.stopPropagation(); window.open('tel:${escapeHtml(phone)}', '_self');` : `event.stopPropagation(); showToast('Numéro non disponible', 'phone');`;
+    const seller = item?.seller || {};
+    const sellerAvatar = seller.avatar_url || DEFAULT_AVATAR_SVG;
+    const sellerName = seller.display_name || 'Utilisateur';
+    const sellerTag = seller.tag || `@user${String(item.owner_id || '').slice(0, 6)}`;
+    const verifiedBadge = seller.verified ? `<span class="verified-badge-small"><i data-lucide="badge-check"></i></span>` : '';
+    const vipBadge = seller.isVip ? `<span class="vip-badge-small">VIP</span>` : '';
+    const locationDisplay = item.location || item.city || item.wilaya || 'Non spécifié';
+    const dateDisplay = item.date || formatRelativeTime(item.created_at);
+    const viewsDisplay = Number(item.views_count) || 0;
+    const likesDisplay = Number(item.likes_count) || 0;
     const html = `
-        <div class="card" onclick="handleCardOpen(event, ${item.id})">
+        <div class="card vip-card" onclick="handleCardOpen(event, ${item.id})">
             <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
                 <i data-lucide="heart"></i>
             </button>
             ${mediaHTML}
             <div class="card-content">
-                <div class="card-price">${priceDisplay}</div>
-                <div class="card-title">${item.title}</div>
+                <div class="card-header-row">
+                    <div class="card-seller-info">
+                        <img src="${sellerAvatar}" alt="${escapeHtml(sellerName)}" class="card-seller-avatar">
+                        <div class="card-seller-details">
+                            <div class="card-seller-name">${escapeHtml(sellerName)} ${verifiedBadge}${vipBadge}</div>
+                            <div class="card-seller-tag">${escapeHtml(sellerTag)}</div>
+                        </div>
+                    </div>
+                    <div class="card-price">${priceDisplay}</div>
+                </div>
+                <div class="card-title">${escapeHtml(item.title)}</div>
+                <div class="card-meta-row">
+                    <span class="card-meta-item"><i data-lucide="map-pin"></i> ${escapeHtml(locationDisplay)}</span>
+                    <span class="card-meta-item"><i data-lucide="calendar"></i> ${escapeHtml(dateDisplay)}</span>
+                </div>
+                <div class="card-stats-row">
+                    <span class="card-stat-item"><i data-lucide="eye"></i> ${viewsDisplay}</span>
+                    <span class="card-stat-item"><i data-lucide="heart"></i> ${likesDisplay}</span>
+                </div>
                 <div class="card-actions">
                     <button class="card-action-btn message" type="button" onclick="${messageClick}">
                         <i data-lucide="message-circle"></i> Message
@@ -16397,6 +16424,9 @@ function createCardHTML(item) {
     const carouselImages = getListingImagesForCard(item).slice(0, 8);
     const videoBadge = hasListingVideo(item) ? `<span class="video-play-badge"><i data-lucide="play"></i></span>` : '';
     const sellerStrip = getPremiumSellerStripHTML(item);
+    const phone = item.contact_phone || '';
+    const messageClick = `event.stopPropagation(); startChatWithListing(${item.id});`;
+    const callClick = phone ? `event.stopPropagation(); window.open('tel:${escapeHtml(phone)}', '_self');` : `event.stopPropagation(); showToast('Numéro non disponible', 'phone');`;
     const mediaHTML = carouselImages.length > 1
         ? `<div class="card-media-wrap"><div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
                 <div class="carousel-viewport">
@@ -16419,15 +16449,14 @@ function createCardHTML(item) {
             ${mediaHTML}
             <div class="card-content">
                 <div class="card-price">${(item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`}</div>
-                <div class="card-title">${item.title}</div>
-                ${sellerStrip}
-                <div class="card-footer">
-                    <span><i data-lucide="map-pin" style="width:12px"></i> ${item.location}</span>
-                    <span>${item.date}</span>
-                </div>
-                <div class="card-stats">
-                    <span><i data-lucide="eye"></i> ${Number(item.views_count) || 0}</span>
-                    <span><i data-lucide="heart"></i> ${Number(item.likes_count) || 0}</span>
+                <div class="card-title">${escapeHtml(item.title)}</div>
+                <div class="card-actions">
+                    <button class="card-action-btn message" type="button" onclick="${messageClick}">
+                        <i data-lucide="message-circle"></i> Message
+                    </button>
+                    <button class="card-action-btn call" type="button" onclick="${callClick}">
+                        <i data-lucide="phone"></i> Appeler
+                    </button>
                 </div>
             </div>
         </div>`;
