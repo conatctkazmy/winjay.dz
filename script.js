@@ -20,6 +20,8 @@ function applyTouchDeviceClass() {
 applyTouchDeviceClass();
 window.addEventListener('orientationchange', () => setTimeout(applyTouchDeviceClass, 180));
 
+const DEFAULT_AVATAR_SVG = "data:image/svg+xml,%3Csvg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23e2e8f0'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%2394a3b8'/%3E%3Cellipse cx='20' cy='35' rx='12' ry='8' fill='%2394a3b8'/%3E%3C/svg%3E";
+
 function createEmptyUserProfile() {
     return {
         userId: null,
@@ -69,8 +71,6 @@ const FREE_LISTING_LIMIT = 4;
 const SELLER_PROFILE_LAST_TAG_STORAGE_KEY = 'winjayLastSellerProfileTagV1';
 const INITIAL_LISTINGS_FETCH_LIMIT = 24;
 const LISTINGS_FETCH_PAGE_SIZE = 24;
-
-const DEFAULT_AVATAR_SVG = "data:image/svg+xml,%3Csvg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23e2e8f0'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%2394a3b8'/%3E%3Cellipse cx='20' cy='35' rx='12' ry='8' fill='%2394a3b8'/%3E%3C/svg%3E";
 
 const SUPPORTED_LANGS = ['fr', 'ar', 'en'];
 let currentLang = 'fr';
