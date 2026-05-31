@@ -14270,6 +14270,37 @@ async function adminUploadHomeBannerFile(file) {
     return path;
 }
 
+function getImageDimensions(file) {
+    return new Promise((resolve, reject) => {
+        const f = file;
+        if (!f) {
+            reject(new Error('Missing file'));
+            return;
+        }
+        const url = URL.createObjectURL(f);
+        const img = new Image();
+        img.onload = () => {
+            const width = Number(img.naturalWidth) || 0;
+            const height = Number(img.naturalHeight) || 0;
+            try {
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                null;
+            }
+            resolve({ width, height });
+        };
+        img.onerror = () => {
+            try {
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                null;
+            }
+            reject(new Error('Invalid image'));
+        };
+        img.src = url;
+    });
+}
+
 async function adminCreateHomeBanner() {
     if (!isAdminAuthorized()) {
         showToast('Not authorized', 'alert-circle');
@@ -14278,6 +14309,7 @@ async function adminCreateHomeBanner() {
     const fileInput = document.getElementById('adminNewBannerFile');
     const linkInput = document.getElementById('adminNewBannerLink');
     const activeInput = document.getElementById('adminNewBannerActive');
+    const addBtn = document.getElementById('adminAddBannerBtn');
     const file = fileInput?.files?.[0] || null;
     if (!file) {
         showToast('Please select an image', 'alert-circle');
@@ -14291,6 +14323,16 @@ async function adminCreateHomeBanner() {
         return;
     }
     try {
+        if (addBtn) {
+            addBtn.disabled = true;
+            addBtn.dataset.prevText = addBtn.textContent || '';
+            addBtn.textContent = 'Uploading…';
+        }
+        const dims = await getImageDimensions(file);
+        if (dims.width !== 960 || dims.height !== 250) {
+            showToast(`Banner must be exactly 960×250 px (yours is ${dims.width}×${dims.height})`, 'alert-circle');
+            return;
+        }
         const imagePath = await adminUploadHomeBannerFile(file);
         const maxOrder = adminHomeBannersRows.reduce((acc, b) => Math.max(acc, Number(b.sort_order) || 0), 0);
         const nextOrder = adminHomeBannersRows.length ? maxOrder + 10 : 0;
@@ -14311,6 +14353,13 @@ async function adminCreateHomeBanner() {
         showToast('Banner added', 'check-circle');
     } catch (e) {
         showToast(String(e?.message || 'Failed to add banner'), 'alert-circle');
+    } finally {
+        if (addBtn) {
+            const prev = addBtn.dataset.prevText || '';
+            addBtn.textContent = prev || 'Add banner';
+            addBtn.disabled = false;
+            addBtn.dataset.prevText = '';
+        }
     }
 }
 
@@ -14410,6 +14459,7 @@ function adminDeleteHomeBanner(id) {
     const bannerId = Number(id) || 0;
     if (!bannerId) return;
     showConfirmModal('Delete banner', 'This will remove the banner from the slider.', async () => {
+        const y = window.scrollY || window.pageYOffset || 0;
         const client = initSupabase();
         if (!client) return;
         const { error } = await client.from(HOME_BANNERS_TABLE).delete().eq('id', bannerId);
@@ -14421,6 +14471,7 @@ function adminDeleteHomeBanner(id) {
         homeBannersCacheAt = 0;
         await renderAdminHomeBanners(true);
         void renderHomeHeroBanners({ force: true });
+        window.scrollTo(0, y);
         showToast('Deleted', 'check-circle');
     }, true, 'Delete', 'Cancel');
 }
