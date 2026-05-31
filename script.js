@@ -16389,6 +16389,7 @@ function createVipVerifiedCardHTML(item) {
     const sellerTag = String(seller.tag || '').trim() || `@user${String(item.owner_id || '').slice(0, 6)}`;
     const verifiedBadge = seller.verified ? `<span class="verified-badge-small"><i data-lucide="badge-check"></i></span>` : '';
     const vipBadge = seller.vip ? `<span class="vip-badge-small">VIP</span>` : '';
+    const badgesHTML = [verifiedBadge, vipBadge].filter(Boolean).join('');
     const locationDisplay = item.location || item.city || item.wilaya || 'Non spécifié';
     const dateDisplay = item.date || formatRelativeTime(item.created_at);
     const viewsDisplay = Number(item.views_count) || 0;
@@ -16404,7 +16405,10 @@ function createVipVerifiedCardHTML(item) {
                     <div class="card-seller-info">
                         <img src="${sellerAvatar}" alt="${escapeHtml(sellerName)}" class="card-seller-avatar">
                         <div class="card-seller-details">
-                            <div class="card-seller-name">${escapeHtml(sellerName)} ${verifiedBadge}${vipBadge}</div>
+                            <div class="card-seller-name">
+                                <span class="card-seller-name-text">${escapeHtml(sellerName)}</span>
+                                ${badgesHTML ? `<span class="card-seller-badges">${badgesHTML}</span>` : ''}
+                            </div>
                             <div class="card-seller-tag">${escapeHtml(sellerTag)}</div>
                         </div>
                     </div>
