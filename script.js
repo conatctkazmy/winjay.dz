@@ -16024,6 +16024,45 @@ function renderVipVideoSection() {
     scheduleLucideCreateIcons(row);
 }
 
+async function renderFeaturedStoresSection() {
+    const section = document.getElementById('featuredStoresSection');
+    const row = document.getElementById('featuredStoresRow');
+    if (!section || !row) return;
+    const client = initSupabase();
+    if (!client) {
+        section.style.display = 'none';
+        return;
+    }
+    try {
+        const { data, error } = await client
+            .from('profiles')
+            .select('id, display_name, tag, avatar_url, is_vip')
+            .eq('is_vip', true)
+            .limit(20);
+        if (error || !data || data.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+        const stores = data.map(p => ({
+            id: p.id,
+            name: p.display_name || 'Store',
+            tag: p.tag || `@user${p.id.slice(0, 6)}`,
+            avatar: p.avatar_url || DEFAULT_AVATAR_SVG
+        }));
+        section.style.display = '';
+        row.innerHTML = stores.map(s => `
+            <a href="#" class="featured-store-badge" onclick="event.preventDefault(); openSellerProfile('${s.tag}');">
+                <img src="${s.avatar}" alt="${s.name}" class="featured-store-avatar">
+                <span class="featured-store-name">${escapeHtml(s.name)}</span>
+                <span class="featured-store-tag">${s.tag}</span>
+            </a>
+        `).join('');
+        scheduleLucideCreateIcons(row);
+    } catch (e) {
+        section.style.display = 'none';
+    }
+}
+
 function renderListings() {
     if (getActiveSectionId() === 'home-section' && homeInitialListingsLoading && !homeInitialListingsLoaded) {
         if (listingsGrid) listingsGrid.innerHTML = getHomeListingsSkeletonHTML(12);
@@ -16034,6 +16073,7 @@ function renderListings() {
         if (pagination) pagination.innerHTML = '';
         updateLoadMoreListingsUI();
         renderVipVideoSection();
+        void renderFeaturedStoresSection();
         scheduleLucideCreateIcons();
         return;
     }
@@ -16074,6 +16114,7 @@ function renderListings() {
     updateLoadMoreListingsUI();
     initCarouselsInContainer(listingsGrid);
     renderVipVideoSection();
+    void renderFeaturedStoresSection();
     scheduleLucideCreateIcons(listingsGrid);
 }
 
