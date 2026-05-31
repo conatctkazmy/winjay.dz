@@ -16078,14 +16078,31 @@ function renderListings() {
         return;
     }
     const vipItems = getVipVideoListingsForHome();
-    const filtered = getFilteredListings().filter((l) => !hasListingVideo(l));
-    const totalItems = filtered.length;
+    const allFiltered = getFilteredListings().filter((l) => !hasListingVideo(l));
+    const vipVerifiedListings = allFiltered.filter(item => isVipOrVerifiedSeller(item));
+    const regularListings = allFiltered.filter(item => !isVipOrVerifiedSeller(item));
+    const vipVerifiedSection = document.getElementById('vipVerifiedSection');
+    const vipVerifiedRow = document.getElementById('vipVerifiedRow');
+    const regularHeader = document.getElementById('regularListingsHeader');
+    if (vipVerifiedSection && vipVerifiedRow) {
+        if (vipVerifiedListings.length > 0) {
+            vipVerifiedSection.style.display = '';
+            vipVerifiedRow.innerHTML = vipVerifiedListings.slice(0, 20).map(item => createVipVerifiedCardHTML(item)).join('');
+        } else {
+            vipVerifiedSection.style.display = 'none';
+            vipVerifiedRow.innerHTML = '';
+        }
+    }
+    if (regularHeader) {
+        regularHeader.style.display = regularListings.length > 0 ? '' : 'none';
+    }
+    const totalItems = regularListings.length;
     const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
     if (totalPages > 0 && currentPage > totalPages) currentPage = totalPages;
     if (currentPage < 1) currentPage = 1;
 
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    const pageItems = filtered.slice(start, start + ITEMS_PER_PAGE);
+    const pageItems = regularListings.slice(start, start + ITEMS_PER_PAGE);
 
     listingsGrid.innerHTML = totalItems > 0 ?
         pageItems.map(item => createCardHTML(item)).join('') :
@@ -16107,14 +16124,16 @@ function renderListings() {
         null;
     }
     const isHome = getActiveSectionId() === 'home-section';
-    const shouldShowEmpty = totalItems === 0 && vipItems.length === 0 && (!isHome || (homeInitialListingsLoaded && !homeInitialListingsLoading));
+    const shouldShowEmpty = totalItems === 0 && vipVerifiedListings.length === 0 && (!isHome || (homeInitialListingsLoaded && !homeInitialListingsLoading));
     document.getElementById('emptyState').style.display = shouldShowEmpty ? 'block' : 'none';
     document.getElementById('listingsGrid').style.display = totalItems === 0 ? 'none' : 'grid';
     renderPagination(totalPages);
     updateLoadMoreListingsUI();
+    initCarouselsInContainer(vipVerifiedRow);
     initCarouselsInContainer(listingsGrid);
     renderVipVideoSection();
     void renderFeaturedStoresSection();
+    scheduleLucideCreateIcons(vipVerifiedRow);
     scheduleLucideCreateIcons(listingsGrid);
 }
 
@@ -16312,6 +16331,55 @@ function clearCardHtmlCache() {
     } catch (e) {
         null;
     }
+}
+
+function isVipOrVerifiedSeller(item) {
+    const seller = item?.seller;
+    return !!(seller && (seller.isVip || seller.verified));
+}
+
+function createVipVerifiedCardHTML(item) {
+    const isFavorite = favorites.includes(item.id);
+    const pulse = pendingHeartPulses.has(item.id) && isFavorite;
+    const carouselImages = getListingImagesForCard(item).slice(0, 8);
+    const videoBadge = hasListingVideo(item) ? `<span class="video-play-badge"><i data-lucide="play"></i></span>` : '';
+    const mediaHTML = carouselImages.length > 1
+        ? `<div class="card-media-wrap"><div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
+                <div class="carousel-viewport">
+                    <div class="carousel-track">
+                        ${carouselImages.map((u) => `<div class="carousel-slide"><img src="${u}" data-src="${u}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low" draggable="false"></div>`).join('')}
+                    </div>
+                </div>
+                ${videoBadge}
+                <div class="carousel-dots">
+                    ${carouselImages.map((_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
+                </div>
+            </div></div>`
+        : `<div class="card-media-wrap">${videoBadge}<img src="${item.cardImage || item.image}" data-src="${item.cardImage || item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
+    const priceDisplay = (item.price_type === 'Free' || Number(item.price) === 0) ? 'Free' : `${new Intl.NumberFormat('fr-DZ').format(item.price)} DZD`;
+    const phone = item.contact_phone || '';
+    const messageClick = `event.stopPropagation(); startChatWithListing(${item.id});`;
+    const callClick = phone ? `event.stopPropagation(); window.open('tel:${escapeHtml(phone)}', '_self');` : `event.stopPropagation(); showToast('Numéro non disponible', 'phone');`;
+    const html = `
+        <div class="card" onclick="handleCardOpen(event, ${item.id})">
+            <button class="favorite-btn ${isFavorite ? 'active' : ''} ${pulse ? 'pulse' : ''}" onclick="toggleFavorite(event, ${item.id})">
+                <i data-lucide="heart"></i>
+            </button>
+            ${mediaHTML}
+            <div class="card-content">
+                <div class="card-price">${priceDisplay}</div>
+                <div class="card-title">${item.title}</div>
+                <div class="card-actions">
+                    <button class="card-action-btn message" type="button" onclick="${messageClick}">
+                        <i data-lucide="message-circle"></i> Message
+                    </button>
+                    <button class="card-action-btn call" type="button" onclick="${callClick}">
+                        <i data-lucide="phone"></i> Appeler
+                    </button>
+                </div>
+            </div>
+        </div>`;
+    return html;
 }
 
 function createCardHTML(item) {
