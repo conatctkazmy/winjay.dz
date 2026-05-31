@@ -8430,6 +8430,32 @@ footer {
         gap: 10px;
     }
 
+    .sidebar {
+        transform: translateX(-100%);
+        top: 0;
+        bottom: 0;
+        height: 100vh;
+        height: 100dvh;
+    }
+
+    .sidebar.collapsed {
+        transform: translateX(-100%);
+        width: 250px;
+    }
+
+    html[dir="rtl"] .sidebar.collapsed {
+        transform: translateX(100%);
+    }
+
+    .sidebar.active {
+        transform: translateX(0);
+    }
+
+    .sidebar-mobile-header {
+        display: flex;
+        height: 46px;
+    }
+
     main {
         margin-left: 0 !important;
         padding: 15px;
@@ -8462,8 +8488,17 @@ footer {
         height: 100dvh;
     }
 
+    .sidebar.collapsed {
+        transform: translateX(-100%);
+        width: 250px;
+    }
+
     .sidebar.active {
         transform: translateX(0);
+    }
+
+    html[dir="rtl"] .sidebar.collapsed {
+        transform: translateX(100%);
     }
 
     .sidebar-mobile-header {
