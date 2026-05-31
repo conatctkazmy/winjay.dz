@@ -16335,7 +16335,7 @@ function clearCardHtmlCache() {
 
 function isVipOrVerifiedSeller(item) {
     const seller = item?.seller;
-    return !!(seller && (seller.isVip || seller.verified));
+    return !!(seller && (seller.vip || seller.verified));
 }
 
 function createVipVerifiedCardHTML(item) {
@@ -16361,11 +16361,11 @@ function createVipVerifiedCardHTML(item) {
     const messageClick = `event.stopPropagation(); startChatWithListing(${item.id});`;
     const callClick = phone ? `event.stopPropagation(); window.open('tel:${escapeHtml(phone)}', '_self');` : `event.stopPropagation(); showToast('Numéro non disponible', 'phone');`;
     const seller = item?.seller || {};
-    const sellerAvatar = seller.avatar_url || DEFAULT_AVATAR_SVG;
-    const sellerName = seller.display_name || 'Utilisateur';
-    const sellerTag = seller.tag || `@user${String(item.owner_id || '').slice(0, 6)}`;
+    const sellerAvatar = escapeHtml(String(seller.pic || seller.profilePic || seller.avatar_url || DEFAULT_AVATAR_SVG));
+    const sellerName = String(seller.name || seller.display_name || seller.displayName || '').trim() || 'Utilisateur';
+    const sellerTag = String(seller.tag || '').trim() || `@user${String(item.owner_id || '').slice(0, 6)}`;
     const verifiedBadge = seller.verified ? `<span class="verified-badge-small"><i data-lucide="badge-check"></i></span>` : '';
-    const vipBadge = seller.isVip ? `<span class="vip-badge-small">VIP</span>` : '';
+    const vipBadge = seller.vip ? `<span class="vip-badge-small">VIP</span>` : '';
     const locationDisplay = item.location || item.city || item.wilaya || 'Non spécifié';
     const dateDisplay = item.date || formatRelativeTime(item.created_at);
     const viewsDisplay = Number(item.views_count) || 0;
