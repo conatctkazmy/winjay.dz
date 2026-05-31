@@ -1128,6 +1128,7 @@ function applyAuthSessionToLocalState(session) {
     hasLoadedSupabaseProfile = false;
     hasLoadedIdentityStatus = false;
     myIdentityStatus = null;
+    myProfileListingsLoaded = false;
     const meta = user.user_metadata || {};
     const fullName = meta.full_name || meta.name || meta.fullName || '';
     const tag = meta.tag || meta.username || meta.handle || '';
@@ -12619,6 +12620,32 @@ function renderMyListings() {
     scheduleLucideCreateIcons();
 }
 
+let myProfileListingsLoaded = false;
+
+async function ensureMyProfileListingsLoaded() {
+    if (myProfileListingsLoaded) return true;
+    if (!currentSupabaseUserId) return false;
+    try {
+        const client = initSupabase();
+        if (!client) return false;
+        const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
+        const { data, error } = await client
+            .from('listings')
+            .select(baseSelect)
+            .eq('owner_id', currentSupabaseUserId)
+            .order('created_at', { ascending: false })
+            .limit(100);
+        if (error) return false;
+        const mapped = (data || []).map((row) => mapSupabaseListingRow(row, {}));
+        myListings = mapped;
+        syncMyListingsFromListings();
+        myProfileListingsLoaded = true;
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
 function renderMyProfileReviews() {
     const list = document.getElementById('myProfileReviewsList');
     if (!list) return;
@@ -14554,7 +14581,7 @@ function adminDeleteListing(listingId) {
     );
 }
 
-function showSection(sectionId) {
+async function showSection(sectionId) {
     if (sectionId === 'profile-section' && !isLoggedIn()) {
         setPendingSectionAfterAuth('profile-section');
         openModal('authGateModal');
@@ -14646,6 +14673,12 @@ function showSection(sectionId) {
         renderFavorites();
     } else if (sectionId === 'profile-section') {
         clearSellerProfileRouteTag();
+        myListingsGrid.innerHTML = '<div class="empty-state"><i data-lucide="loader" style="animation: spin 1s linear infinite;"></i><h3>Chargement...</h3></div>';
+        scheduleLucideCreateIcons(myListingsGrid);
+        const loaded = await ensureMyProfileListingsLoaded();
+        if (!loaded) {
+            showToast('Failed to load your listings', 'alert-circle');
+        }
         renderMyListings();
         renderMyProfileReviews();
         try {
@@ -18502,6 +18535,7 @@ function wipeWinjayStorage() {
 function resetLocalAppStateToFresh() {
     userProfile = createEmptyUserProfile();
     myListings = [];
+    myProfileListingsLoaded = false;
     favorites = [];
     searchHistory = [];
     editingListingId = null;
