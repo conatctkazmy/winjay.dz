@@ -2660,8 +2660,8 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: 8px;
+    margin-bottom: 10px;
 }
 
 .home-category-swipe-title {
@@ -2686,7 +2686,7 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 
 .home-category-swipe-list {
     display: flex;
-    gap: 10px;
+    gap: 6px;
     overflow-x: auto;
     overflow-y: hidden;
     padding: 0 0 6px;
@@ -2703,7 +2703,7 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 }
 
 .home-category-carousel .carousel-slide {
-    padding: 0 6px;
+    padding: 0 4px;
     box-sizing: border-box;
 }
 
@@ -2718,12 +2718,12 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 .home-category-swipe-item {
     flex: 0 0 auto;
     width: auto;
-    min-width: 160px;
+    min-width: 128px;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 12px;
-    border-radius: 16px;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 14px;
     border: 1px solid transparent;
     background: var(--bg-main);
     color: var(--text-main);
