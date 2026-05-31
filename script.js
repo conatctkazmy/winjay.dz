@@ -14276,6 +14276,7 @@ async function adminCreateHomeBanner() {
         return;
     }
     const fileInput = document.getElementById('adminNewBannerFile');
+    const slotInput = document.getElementById('adminNewBannerSlot');
     const linkInput = document.getElementById('adminNewBannerLink');
     const activeInput = document.getElementById('adminNewBannerActive');
     const addBtn = document.getElementById('adminAddBannerBtn');
@@ -14286,6 +14287,7 @@ async function adminCreateHomeBanner() {
     }
     const link = safeExternalHttpUrl(linkInput?.value || '');
     const isActive = !!activeInput?.checked;
+    const slot = String(slotInput?.value || 'main').trim().toLowerCase() === 'secondary' ? 'secondary' : 'main';
     const client = initSupabase();
     if (!client) {
         showToast('Supabase is not configured', 'alert-circle');
@@ -14302,12 +14304,13 @@ async function adminCreateHomeBanner() {
         const nextOrder = adminHomeBannersRows.length ? maxOrder + 10 : 0;
         const { error } = await client
             .from(HOME_BANNERS_TABLE)
-            .insert([{ image_path: imagePath, link_url: link || null, is_active: isActive, sort_order: nextOrder }]);
+            .insert([{ image_path: imagePath, link_url: link || null, is_active: isActive, sort_order: nextOrder, slot }]);
         if (error) {
             showToast(error.message || 'Failed to add banner', 'alert-circle');
             return;
         }
         if (fileInput) fileInput.value = '';
+        if (slotInput) slotInput.value = 'main';
         if (linkInput) linkInput.value = '';
         if (activeInput) activeInput.checked = true;
         homeBannersCache = null;
@@ -16210,6 +16213,13 @@ function homeBannerIsActive(banner, now = new Date()) {
     return true;
 }
 
+function normalizeHomeBannerSlot(banner) {
+    const b = banner && typeof banner === 'object' ? banner : {};
+    const raw = String(b.slot || b.placement || b.position || b.kind || '').trim().toLowerCase();
+    if (raw === 'secondary' || raw === 'side' || raw === 'mpu' || raw === 'right') return 'secondary';
+    return 'main';
+}
+
 async function fetchHomeBannersRaw({ force = false } = {}) {
     const client = initSupabase();
     if (!client) return { rows: [], error: new Error('Supabase is not configured') };
@@ -16296,8 +16306,8 @@ async function renderHomeHeroBanners({ force = false } = {}) {
         scheduleLucideCreateIcons();
         return;
     }
-    const sideRow = activeRows.length > 1 ? activeRows[1] : null;
-    const carouselRows = sideRow ? activeRows.filter((_, idx) => idx !== 1) : activeRows;
+    const sideRow = activeRows.find((b) => normalizeHomeBannerSlot(b) === 'secondary') || null;
+    const carouselRows = activeRows.filter((b) => normalizeHomeBannerSlot(b) !== 'secondary');
     const slidesHTML = carouselRows
         .map((b) => {
             const url = getHomeBannerPublicUrl(b.image_path);

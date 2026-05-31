@@ -8180,10 +8180,43 @@ footer {
 
 .admin-banner-create {
     display: grid;
-    grid-template-columns: 1fr 1.4fr auto auto;
+    grid-template-columns: 1fr 180px 1.4fr auto auto;
     gap: 10px;
     align-items: center;
     margin-bottom: 12px;
+}
+
+#adminNewBannerFile {
+    width: 100%;
+    max-width: 100%;
+}
+
+#adminNewBannerFile::file-selector-button {
+    appearance: none;
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    color: var(--text-main);
+    border-radius: 12px;
+    padding: 8px 12px;
+    font-weight: 800;
+    cursor: pointer;
+    margin-right: 10px;
+}
+
+#adminNewBannerFile::file-selector-button:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+#adminNewBannerSlot {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    color: var(--text-main);
+    border-radius: 12px;
+    padding: 9px 10px;
+    font-weight: 700;
+    outline: none;
 }
 
 .admin-banners-list {
