@@ -1015,6 +1015,7 @@ function loadMarketplaceListingsFromStorage() {
             .filter((x) => x && typeof x === 'object')
             .map((x) => ({
                 id: x.id,
+                owner_id: x.owner_id || null,
                 title: String(x.title || ''),
                 price: Number.isFinite(Number(x.price)) ? Number(x.price) : 0,
                 category: normalizeListingCategory(String(x.category || ''), String(x.subcategory || '')),
@@ -12112,6 +12113,24 @@ function scheduleListingsSearchCommit(searchTerm, delayMs = 200) {
     }, Math.max(0, Number(delayMs) || 0));
 }
 
+function handleSearchTyping(inputId = 'mainSearchInput') {
+    const input = document.getElementById(inputId) || document.getElementById('mainSearchInput');
+    const searchTerm = (input?.value || '').toLowerCase().trim();
+    currentFilters.search = searchTerm;
+
+    const mainInput = document.getElementById('mainSearchInput');
+    const mobileExpandInput = document.getElementById('mobileSearchExpandInput');
+    if (mainInput && inputId !== 'mainSearchInput') mainInput.value = searchTerm;
+    if (mobileExpandInput && inputId !== 'mobileSearchExpandInput') mobileExpandInput.value = searchTerm;
+
+    scheduleProfileSearch(searchTerm);
+    try {
+        clearTimeout(listingsSearchCommitTimer);
+    } catch (e) {
+        null;
+    }
+}
+
 function handleSearch(inputId = 'mainSearchInput', opts = {}) {
     const input = document.getElementById(inputId) || document.getElementById('mainSearchInput');
     const searchTerm = (input?.value || '').toLowerCase().trim();
@@ -18062,6 +18081,38 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
     scheduleLucideCreateIcons(content);
 }
 
+const sellerProfileListingsCache = new Map();
+
+async function fetchSellerProfileListingsFromSupabase(ownerId, profileRow, { limit = 80 } = {}) {
+    const id = String(ownerId || '').trim();
+    if (!id) return [];
+    try {
+        const cached = sellerProfileListingsCache.get(id);
+        if (Array.isArray(cached)) return cached;
+    } catch (e) {
+        null;
+    }
+    if (DEMO_MODE) {
+        sellerProfileListingsCache.set(id, []);
+        return [];
+    }
+    const client = initSupabase();
+    if (!client) return [];
+    const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
+    const safeLimit = Math.max(1, Math.min(200, Number(limit) || 80));
+    const { data, error } = await client
+        .from('listings')
+        .select(baseSelect)
+        .eq('owner_id', id)
+        .order('created_at', { ascending: false })
+        .limit(safeLimit);
+    if (error) return [];
+    const profilesById = profileRow?.id ? { [id]: profileRow } : {};
+    const mapped = (Array.isArray(data) ? data : []).map((row) => mapSupabaseListingRow(row, profilesById));
+    sellerProfileListingsCache.set(id, mapped);
+    return mapped;
+}
+
 async function openSellerProfile(tag, section = 'listings', { pushState = true } = {}) {
     currentSellerProfileTag = tag;
     if (tag === userProfile.tag) {
@@ -18102,7 +18153,23 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         seller.reviews = 0;
     }
     if (!content) return;
-    const sellerListings = listings.filter((l) => l?.owner_id && l.owner_id === profileRow.id);
+    const ownerId = String(profileRow.id || '').trim();
+    let sellerListings = [];
+    try {
+        const cached = sellerProfileListingsCache.get(ownerId);
+        if (Array.isArray(cached) && cached.length) sellerListings = cached;
+    } catch (e) {
+        null;
+    }
+    if (!sellerListings.length) {
+        sellerListings = listings.filter((l) => l?.owner_id && String(l.owner_id) === ownerId);
+    }
+    const shouldFetchListings = !DEMO_MODE && !!ownerId && !sellerProfileListingsCache.has(ownerId);
+    const listingsBlock = sellerListings.length > 0
+        ? `<h3>Annonces de ${seller.name}</h3><div class="listings-grid">${sellerListings.map(l => createCardHTML(l)).join('')}</div>`
+        : (shouldFetchListings
+            ? `<h3>Annonces de ${seller.name}</h3><div class="listings-grid">${Array.from({ length: 8 }, () => `<div class="skeleton-card"></div>`).join('')}</div>`
+            : '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="shopping-bag" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>Cet utilisateur n\\'a pas encore d\\'annonces publiées.</p></div>');
     content.innerHTML = `
         <div class="profile-header">
             <div class="cover-photo-container">
@@ -18158,7 +18225,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
                 </button>
             </div>
             <div id="sellerListingsSection" class="profile-section-panel active">
-                ${sellerListings.length > 0 ? `<h3>Annonces de ${seller.name}</h3><div class="listings-grid">${sellerListings.map(l => createCardHTML(l)).join('')}</div>` : '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="shopping-bag" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>Cet utilisateur n\'a pas encore d\'annonces publiées.</p></div>'}
+                ${listingsBlock}
             </div>
             <div id="sellerCoursesSection" class="profile-section-panel">
                 <h3>Cours de ${seller.name}</h3>
@@ -18201,6 +18268,25 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         scheduleLucideCreateIcons(el || document.getElementById('seller-profile-section') || document.body);
     });
     scheduleLucideCreateIcons(content);
+    if (shouldFetchListings) {
+        fetchSellerProfileListingsFromSupabase(ownerId, profileRow)
+            .then((rows) => {
+                if (String(currentSellerProfileOwnerId || '') !== ownerId) return;
+                const sectionEl = document.getElementById('sellerListingsSection');
+                if (!sectionEl) return;
+                sectionEl.innerHTML = rows.length > 0
+                    ? `<h3>Annonces de ${seller.name}</h3><div class="listings-grid">${rows.map(l => createCardHTML(l)).join('')}</div>`
+                    : '<div style="text-align: center; padding: 40px; color: var(--text-muted);"><i data-lucide="shopping-bag" style="width: 48px; height: 48px; margin-bottom: 15px; opacity: 0.5;"></i><p>Cet utilisateur n\\'a pas encore d\\'annonces publiées.</p></div>';
+                try {
+                    const grid = sectionEl.querySelector('.listings-grid');
+                    if (grid) initCarouselsInContainer(grid);
+                } catch (e) {
+                    null;
+                }
+                scheduleLucideCreateIcons(sectionEl);
+            })
+            .catch(() => null);
+    }
 }
 
 function openLightbox(imageSrc) {

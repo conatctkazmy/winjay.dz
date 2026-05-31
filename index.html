@@ -86,7 +86,7 @@
             <div class="nav-center">
                 <div class="search-container" style="position: relative;">
                     <i data-lucide="search"></i>
-                    <input type="text" id="mainSearchInput" placeholder="Search listings..." data-i18n-placeholder="search_placeholder" onkeyup="handleSearch()" onfocus="showSearchHistory()" onkeydown="handleSearchKeydown(event,'mainSearchInput')">
+                    <input type="text" id="mainSearchInput" placeholder="Search listings..." data-i18n-placeholder="search_placeholder" oninput="handleSearchTyping()" onfocus="showSearchHistory()" onkeydown="handleSearchKeydown(event,'mainSearchInput')">
                     <div class="search-history-dropdown" id="searchHistoryDropdown">
                         <div class="search-history-header">Recent searches</div>
                         <div id="searchHistoryList"></div>
@@ -158,7 +158,7 @@
             <button class="icon-btn mobile-search-submit" type="button" onclick="submitMobileSearch()" title="Search">
                 <i data-lucide="search"></i>
             </button>
-            <input type="text" id="mobileSearchExpandInput" placeholder="Search listings..." data-i18n-placeholder="search_placeholder" onkeyup="handleSearch('mobileSearchExpandInput')" onfocus="showSearchHistory('mobileSearchExpandInput','mobileSearchHistoryDropdown','mobileSearchHistoryList')" onkeydown="handleSearchKeydown(event,'mobileSearchExpandInput')">
+            <input type="text" id="mobileSearchExpandInput" placeholder="Search listings..." data-i18n-placeholder="search_placeholder" oninput="handleSearchTyping('mobileSearchExpandInput')" onfocus="showSearchHistory('mobileSearchExpandInput','mobileSearchHistoryDropdown','mobileSearchHistoryList')" onkeydown="handleSearchKeydown(event,'mobileSearchExpandInput')">
             <button class="icon-btn mobile-search-close" onclick="closeMobileSearchExpand()" title="Close search" type="button">
                 <i data-lucide="x"></i>
             </button>
