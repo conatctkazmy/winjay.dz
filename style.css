@@ -1846,10 +1846,27 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 }
 
 #profile-section,
-#seller-profile-section {
-    max-width: 980px;
+#seller-profile-section,
+#settings-section,
+#favorites-section,
+#messages-section {
+    max-width: var(--desktop-shell-max-width);
     margin-left: auto;
     margin-right: auto;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+#about-section,
+#terms-section,
+#privacy-section,
+#admin-dashboard-section,
+#course-section {
+    max-width: var(--desktop-shell-max-width);
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 12px;
+    padding-right: 12px;
 }
 
 .page-card {
@@ -1868,7 +1885,7 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 }
 
 .ambassadors-card {
-    max-width: 1040px;
+    max-width: var(--desktop-shell-max-width);
     margin-left: auto;
     margin-right: auto;
 }
@@ -2046,9 +2063,8 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     color: var(--text-muted);
 }
 
-#create-listing-section,
-#listing-detail-section {
-    max-width: 920px;
+#create-listing-section {
+    max-width: var(--desktop-shell-max-width);
     margin-left: auto;
     margin-right: auto;
 }
