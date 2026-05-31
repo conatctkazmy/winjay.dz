@@ -1187,15 +1187,20 @@ html.sidebar-open {
     background-color: var(--sidebar-bg);
     border-right: 1px solid var(--border-color);
     position: fixed;
-    top: 60px;
-    height: calc(100vh - 60px);
-    height: calc(100dvh - 60px);
+    top: 0;
+    height: 100vh;
+    height: 100dvh;
     transition: width 0.25s ease, transform 0.3s ease;
     z-index: 9000;
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
     touch-action: pan-y;
+    transform: translateX(-100%);
+}
+
+.sidebar.active {
+    transform: translateX(0);
 }
 
 html.admin-dashboard-view .sidebar {
@@ -1232,6 +1237,11 @@ html[dir="rtl"] .sidebar {
     left: auto;
     border-right: 0;
     border-left: 1px solid var(--border-color);
+    transform: translateX(100%);
+}
+
+html[dir="rtl"] .sidebar.active {
+    transform: translateX(0);
 }
 
 .sidebar-mobile-header {
@@ -1473,23 +1483,12 @@ html.admin-dashboard-view .sidebar-overlay {
 }
 
 .sidebar.collapsed {
-    width: 72px;
-    transform: none;
+    width: 250px;
+    transform: translateX(-100%);
 }
 
-@media (min-width: 1000px) {
-    .sidebar {
-        transform: translateX(0);
-    }
-
-    .sidebar.collapsed {
-        width: 250px;
-        transform: translateX(-100%);
-    }
-
-    html[dir="rtl"] .sidebar.collapsed {
-        transform: translateX(100%);
-    }
+html[dir="rtl"] .sidebar.collapsed {
+    transform: translateX(100%);
 }
 
 @media (min-width: 769px) {

@@ -9657,6 +9657,8 @@ document.getElementById('listingImageSlotInput')?.addEventListener('change', (e)
 });
 
 function setSidebarMobileOpen(isOpen) {
+    if (isOpen) sidebar.classList.remove('collapsed');
+    else sidebar.classList.add('collapsed');
     sidebar.classList.toggle('active', !!isOpen);
     const overlay = document.getElementById('sidebarOverlay');
     overlay?.classList?.toggle('active', !!isOpen);
@@ -9671,31 +9673,11 @@ function setSidebarMobileOpen(isOpen) {
 }
 
 function closeSidebarOverlay() {
-    if (window.innerWidth <= 768) {
-        setSidebarMobileOpen(false);
-        return;
-    }
-    sidebar.classList.add('collapsed');
-    contentArea.classList.add('expanded');
-    try {
-        document.documentElement.classList.add('sidebar-collapsed');
-    } catch (e) {
-        null;
-    }
+    setSidebarMobileOpen(false);
 }
 
 sidebarToggle.addEventListener('click', () => {
-    if (window.innerWidth <= 768) {
-        setSidebarMobileOpen(!sidebar.classList.contains('active'));
-    } else {
-        sidebar.classList.toggle('collapsed');
-        contentArea.classList.toggle('expanded');
-        try {
-            document.documentElement.classList.toggle('sidebar-collapsed', sidebar.classList.contains('collapsed'));
-        } catch (e) {
-            null;
-        }
-    }
+    setSidebarMobileOpen(!sidebar.classList.contains('active'));
 });
 
 if (!window.__winjaySidebarTouchLocked) {
@@ -14671,9 +14653,7 @@ async function showSection(sectionId) {
         null;
     }
     endBootUI();
-    if (window.innerWidth <= 768) {
-        setSidebarMobileOpen(false);
-    }
+    setSidebarMobileOpen(false);
     const lockChatScroll = sectionId === 'messages-section' && window.innerWidth <= 900;
     window.scrollTo({ top: 0, behavior: lockChatScroll ? 'auto' : 'smooth' });
     syncMessagesScrollLock();
