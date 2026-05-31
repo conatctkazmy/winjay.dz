@@ -5009,6 +5009,18 @@ async function startChatWithSellerByOwnerId(ownerId, listingId = null) {
     await switchChat(chatKey);
 }
 
+function startChatWithListing(listingId) {
+    const lid = Number(listingId) || 0;
+    if (!lid) return;
+    const item = listings.find((l) => Number(l?.id) === lid) || null;
+    const ownerId = item?.owner_id || item?.ownerId || item?.seller?.id || '';
+    if (!ownerId) {
+        showToast('Seller not available', 'alert-circle');
+        return;
+    }
+    return startChatWithSellerByOwnerId(String(ownerId), lid);
+}
+
 async function refreshUnreadMessageCount() {
     const client = initSupabase();
     if (!client || !currentSupabaseUserId) {
