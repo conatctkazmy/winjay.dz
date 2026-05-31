@@ -2390,27 +2390,27 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
 .listings-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
+    gap: 10px;
 }
 
 @media (min-width: 520px) {
     .listings-grid {
         grid-template-columns: repeat(3, 1fr);
-        gap: 18px;
+        gap: 12px;
     }
 }
 
 @media (min-width: 900px) {
     .listings-grid {
         grid-template-columns: repeat(4, 1fr);
-        gap: 20px;
+        gap: 14px;
     }
 }
 
 @media (min-width: 1200px) {
     .listings-grid {
         grid-template-columns: repeat(6, 1fr);
-        gap: 22px;
+        gap: 16px;
     }
 }
 
@@ -2805,7 +2805,7 @@ html[dir="rtl"] .home-category-swipe-item {
 
 .vip-video-row {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     overflow-x: auto;
     padding-bottom: 6px;
     scroll-snap-type: x mandatory;
@@ -2849,7 +2849,7 @@ html[dir="rtl"] .home-category-swipe-item {
 
 .featured-stores-row {
     display: flex;
-    gap: 14px;
+    gap: 10px;
     overflow-x: auto;
     padding-bottom: 6px;
     scroll-snap-type: x mandatory;
@@ -2979,7 +2979,7 @@ html[dir="rtl"] .home-category-swipe-item {
 
 .vip-verified-row {
     display: flex;
-    gap: 14px;
+    gap: 10px;
     overflow-x: auto;
     padding-bottom: 6px;
     scroll-snap-type: x mandatory;
