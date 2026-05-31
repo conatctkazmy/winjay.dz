@@ -2209,7 +2209,7 @@ const reviewers = DEMO_MODE ? [
 ] : [];
 
 const comments = [
-    "Excellent service, je recommande vivement !", "Produit conforme à la description, très satisfait.", "Livraison un peu lente mais le vendeur est sérieux.", "Prix très compétitifs par rapport au marché.", "Super communication, transaction fluide.", "C'est ma troisième commande chez ce vendeur, toujours top.", "Un peu déçu par l'emballage mais l'article est nickel.", "Honnête et professionnel. Allez-y les yeux fermés.", "Meilleur rapport qualité-prix sur Winjay.", "Vendeur très réactif aux messages."
+    "Excellent service, je recommande vivement !", "Produit conforme à la description, très satisfait.", "Livraison un peu lente mais le vendeur est sérieux.", "Prix très compétitifs par rapport au marché.", "Super communication, transaction fluide.", "C'est ma troisième commande chez ce vendeur, toujours top.", "Un peu déçu par l'emballage mais l'article est nickel.", "Honnête et professionnel. Allez-y les yeux fermés.", "Meilleur rapport qualité-prix sur endinar.com.", "Vendeur très réactif aux messages."
 ];
 const replies = [
     "Merci pour votre confiance !", "Ravi que le produit vous plaise.", "Merci pour votre retour, nous ferons mieux pour la livraison la prochaine fois.", "Toujours un plaisir de vous servir.", "Merci beaucoup pour votre recommandation !"
@@ -2514,8 +2514,8 @@ function unescapeHtml(str) {
         .replaceAll('&amp;', '&');
 }
 
-const WINJAY_LOGO_FILENAME = 'new official winjay dz logo.png';
-const WINJAY_LOGO_FILENAME_ENCODED = 'new%20official%20winjay%20dz%20logo.png';
+const WINJAY_LOGO_FILENAME = 'endinar.com';
+const WINJAY_LOGO_FILENAME_ENCODED = 'endinar.com';
 const winjayTransparentLogoCache = new Map();
 const winjayTransparentLogoPromiseCache = new Map();
 
@@ -3772,20 +3772,20 @@ async function renderNotificationsModal() {
             else if (r.type === 'profile_review_reply') text = 'replied to a review on your profile';
             else if (r.type === 'message_received') text = 'sent you a message';
             else if (r.type === 'identity_approved') {
-                seller = { name: 'Winjay', tag: '', pic: DEFAULT_AVATAR_SVG };
+                seller = { name: 'Endinar', tag: '', pic: DEFAULT_AVATAR_SVG };
                 text = 'approved your identity verification';
             }
             else if (r.type === 'identity_rejected') {
-                seller = { name: 'Winjay', tag: '', pic: DEFAULT_AVATAR_SVG };
+                seller = { name: 'Endinar', tag: '', pic: DEFAULT_AVATAR_SVG };
                 text = 'rejected your identity verification';
             }
             else if (r.type === 'verified_granted') {
-                seller = { name: 'Winjay', tag: '', pic: DEFAULT_AVATAR_SVG };
+                seller = { name: 'Endinar', tag: '', pic: DEFAULT_AVATAR_SVG };
                 text = 'your account is now Verified';
             }
             else if (r.type === 'listing_view_milestone') {
                 const milestone = Number(meta.milestone) || Number(meta.views) || 0;
-                seller = { name: 'Winjay', tag: '', pic: DEFAULT_AVATAR_SVG };
+                seller = { name: 'Endinar', tag: '', pic: DEFAULT_AVATAR_SVG };
                 text = `Your listing reached ${milestone || ''} views${listingTitle ? `: ${escapeHtml(listingTitle)}` : ''}`.trim();
             }
             else text = escapeHtml(String(r.type || 'notification'));
@@ -12992,7 +12992,7 @@ function adminDownloadUsersPdf() {
     }
 
     const now = new Date();
-    const title = `winjay.dz - Users Export`;
+    const title = `endinar.com - Users Export`;
     const subtitle = `Generated: ${now.toLocaleString('fr-FR')}`;
     const rows = lastAdminUsers
         .map((u) => {
@@ -17629,7 +17629,7 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     }
     const content = document.getElementById('listingDetailPage');
     if (!content) return;
-    const seller = item.seller || { name: "Utilisateur Winjay", tag: "@user", pic: DEFAULT_AVATAR_SVG, verified: false, rating: 0, reviews: 0, reviewsData: [] };
+    const seller = item.seller || { name: "Utilisateur Endinar", tag: "@user", pic: DEFAULT_AVATAR_SVG, verified: false, rating: 0, reviews: 0, reviewsData: [] };
     const isLiked = favorites.includes(listingId);
     const pulse = pendingHeartPulses.has(listingId) && isLiked;
     const detailImages = getListingImagesForDetail(item);
@@ -17971,7 +17971,7 @@ function shareListing(platform, id) {
     const item = listings.find(l => l.id === id);
     if (!item) return;
     const url = window.location.href;
-    const text = `Regardez cette annonce sur Winjay.dz : ${item.title}`;
+    const text = `Regardez cette annonce sur endinar.com : ${item.title}`;
     if (platform === 'whatsapp') {
         window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + url)}`);
         if (currentSupabaseUserId && item.owner_id) createNotificationFromClient({ recipientId: item.owner_id, type: 'listing_share', listingId: item.id, meta: { platform: 'whatsapp' } });
@@ -17993,10 +17993,10 @@ async function shareMyProfile() {
     }
     const tag = userProfile.tag || '';
     const url = `${window.location.origin}${window.location.pathname}?profile=${encodeURIComponent(tag)}`;
-    const text = `Check my profile on winjay.dz: ${userProfile.name} (${tag})`;
+    const text = `Check my profile on endinar.com: ${userProfile.name} (${tag})`;
     try {
         if (navigator.share) {
-            await navigator.share({ title: 'winjay.dz', text, url });
+            await navigator.share({ title: 'endinar.com', text, url });
             return;
         }
     } catch (e) {
@@ -18014,11 +18014,11 @@ async function shareSellerProfile(ownerId, tag, name) {
     const safeTag = String(tag || '').trim();
     const label = String(name || '').trim() || safeTag || 'profile';
     const url = `${window.location.origin}${window.location.pathname}?profile=${encodeURIComponent(safeTag)}`;
-    const text = `Check this profile on winjay.dz: ${label} (${safeTag})`;
+    const text = `Check this profile on endinar.com: ${label} (${safeTag})`;
     let shared = false;
     try {
         if (navigator.share) {
-            await navigator.share({ title: 'winjay.dz', text, url });
+            await navigator.share({ title: 'endinar.com', text, url });
             shared = true;
         }
     } catch (e) {
