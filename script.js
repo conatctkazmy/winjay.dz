@@ -19381,10 +19381,6 @@ async function saveCourseLessonFromModal() {
     await renderCourseSection();
 }
 
-async function createCourseLessonFromModal() {
-    return saveCourseLessonFromModal();
-}
-
 async function inviteCourseStudentFromModal() {
     if (!requireAuthOrPrompt()) return;
     const client = initSupabase();
