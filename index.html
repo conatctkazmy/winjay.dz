@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>endinar.com - Marché Moderne</title>
+    <meta name="description" content="endinar.com: a modern marketplace to buy and sell listings, chat with sellers, and discover verified and VIP stores.">
     <link rel="stylesheet" href="style.css?v=20260601_01">
     <link rel="preconnect" href="https://rxlpesdvskyytbfoufvp.supabase.co" crossorigin>
     <link rel="preload" as="script" href="https://unpkg.com/lucide@0.383.0/dist/umd/lucide.min.js" crossorigin>
@@ -20,6 +21,7 @@
             const hasEdit = !!params.get('edit');
             const hasNew = params.has('new');
             const hasCourse = !!params.get('course');
+            const sectionParam = String(params.get('section') || '').trim();
             const sections = new Set([
                 'home-section',
                 'ambassadors-section',
@@ -61,9 +63,12 @@
             else if (hasProfile) initialSection = 'seller-profile-section';
             else if (hasNew || hasEdit) initialSection = 'create-listing-section';
             else if (hasListing) initialSection = 'listing-detail-section';
+            else if (sectionParam && sections.has(sectionParam)) initialSection = sectionParam;
             else if (!hasAuthToken && blocked.has(initialSection)) initialSection = 'home-section';
 
             document.documentElement.dataset.initialSection = initialSection;
+            const modalParam = String(params.get('modal') || '').trim();
+            if (modalParam) document.documentElement.dataset.initialModal = modalParam;
         } catch (e) {}
         try {
             const theme = localStorage.getItem('winjayThemeV1') || '';
@@ -1565,10 +1570,10 @@
             </div>
             <p>&copy; 2026 endinar.com. Tous droits réservés.</p>
             <div class="footer-links">
-                <a href="javascript:void(0)" onclick="showSection('about-section')">À propos</a>
-                <a href="javascript:void(0)" onclick="showSection('terms-section')">Conditions</a>
-                <a href="javascript:void(0)" onclick="showSection('privacy-section')">Confidentialité</a>
-                <a href="javascript:void(0)" onclick="openModal('contactModal')">Contactez-nous</a>
+                <a href="/?section=about-section" onclick="return handleCrawlableSectionLink(event,'about-section')">À propos</a>
+                <a href="/?section=terms-section" onclick="return handleCrawlableSectionLink(event,'terms-section')">Conditions</a>
+                <a href="/?section=privacy-section" onclick="return handleCrawlableSectionLink(event,'privacy-section')">Confidentialité</a>
+                <a href="/?modal=contact" onclick="return handleCrawlableModalLink(event,'contactModal','contact')">Contactez-nous</a>
             </div>
         </div>
     </footer>

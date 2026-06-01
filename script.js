@@ -6595,6 +6595,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const editParam = params.get('edit');
     const newListingParam = params.get('new');
     const courseParam = params.get('course');
+    const sectionParam = String(params.get('section') || '').trim();
+    const modalParam = String(params.get('modal') || '').trim();
     const listingIdFromUrl = Number(listingParam) || 0;
     const editIdFromUrl = Number(editParam) || 0;
     const courseIdFromUrl = String(courseParam || '').trim();
@@ -6696,10 +6698,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showSection('home-section');
                 endBootUI();
             }
+        } else if (sectionParam && crawlableStaticSections.has(sectionParam)) {
+            showSection(sectionParam);
+            endBootUI();
         } else {
             showSection(lastSection);
             endBootUI();
         }
+    }
+
+    if (modalParam === 'contact') {
+        openModal('contactModal');
+        scheduleLucideCreateIcons(document.getElementById('contactModal'));
     }
 
     if (DEMO_MODE) renderListings();
@@ -9634,6 +9644,16 @@ function openModal(modalId) {
 function closeModal(modalId) {
     const el = document.getElementById(modalId);
     if (el) el.classList.remove('active');
+    if (modalId === 'contactModal') {
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('modal');
+            const next = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '');
+            history.replaceState(history.state || null, '', next);
+        } catch (e) {
+            null;
+        }
+    }
     if (modalId === 'confirmModal') {
         confirmCallback = null;
     }
@@ -14492,6 +14512,19 @@ async function showSection(sectionId) {
     if (sectionId !== 'listing-detail-section' && sectionId !== 'create-listing-section') {
         localStorage.setItem('winjayLastSection', sectionId);
     }
+    try {
+        const url = new URL(window.location.href);
+        if (crawlableStaticSections.has(sectionId)) {
+            url.searchParams.set('section', sectionId);
+        } else {
+            url.searchParams.delete('section');
+        }
+        url.searchParams.delete('modal');
+        const next = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '');
+        history.replaceState(history.state || null, '', next);
+    } catch (e) {
+        null;
+    }
     updateLivePresence();
     if (sectionId === 'home-section') {
         trackAnalyticsEvent('home_view', { dedupeKey: `home_view:${getAnalyticsSessionId()}` });
@@ -14562,6 +14595,61 @@ function clearListingRouteParams({ replace = true } = {}) {
     } else {
         history.pushState(history.state || null, '', url.pathname + url.search);
     }
+}
+
+const crawlableStaticSections = new Set(['about-section', 'terms-section', 'privacy-section']);
+
+function setCrawlableSectionRouteParam(sectionId, { replace = false } = {}) {
+    const id = String(sectionId || '').trim();
+    const url = new URL(window.location.href);
+    url.searchParams.delete('profile');
+    url.searchParams.delete('listing');
+    url.searchParams.delete('new');
+    url.searchParams.delete('edit');
+    url.searchParams.delete('course');
+    url.searchParams.delete('chat');
+    url.searchParams.delete('modal');
+    if (crawlableStaticSections.has(id)) url.searchParams.set('section', id);
+    else url.searchParams.delete('section');
+    const next = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '');
+    if (replace) history.replaceState(history.state || null, '', next);
+    else history.pushState(history.state || null, '', next);
+}
+
+function setCrawlableModalRouteParam(modalKey, { replace = false } = {}) {
+    const key = String(modalKey || '').trim();
+    const url = new URL(window.location.href);
+    url.searchParams.set('modal', key);
+    const next = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '');
+    if (replace) history.replaceState(history.state || null, '', next);
+    else history.pushState(history.state || null, '', next);
+}
+
+function handleCrawlableSectionLink(event, sectionId) {
+    const e = event || null;
+    if (e && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1)) return true;
+    try {
+        e?.preventDefault?.();
+    } catch (err) {
+        null;
+    }
+    setCrawlableSectionRouteParam(sectionId, { replace: false });
+    showSection(sectionId);
+    return false;
+}
+
+function handleCrawlableModalLink(event, modalId, modalKey) {
+    const e = event || null;
+    if (e && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1)) return true;
+    try {
+        e?.preventDefault?.();
+    } catch (err) {
+        null;
+    }
+    setCrawlableModalRouteParam(modalKey, { replace: false });
+    openModal(modalId);
+    scheduleLucideCreateIcons(document.getElementById(modalId));
+    return false;
 }
 
 function navigateBackFromSellerProfileFlow() {
@@ -14906,6 +14994,15 @@ function handleListingRoutesFromUrl() {
         openCreateListingPage({ pushState: false });
         return;
     }
+    const sectionParam = String(params.get('section') || '').trim();
+    if (sectionParam && crawlableStaticSections.has(sectionParam)) {
+        showSection(sectionParam);
+        if (String(params.get('modal') || '').trim() === 'contact') {
+            openModal('contactModal');
+            scheduleLucideCreateIcons(document.getElementById('contactModal'));
+        }
+        return;
+    }
     const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
     const blocked = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section'];
     const safeLast =
@@ -14914,6 +15011,10 @@ function handleListingRoutesFromUrl() {
             : lastSectionRaw;
     const lastSection = (blocked.includes(safeLast) && !isLoggedIn()) ? 'home-section' : safeLast;
     showSection(lastSection);
+    if (String(params.get('modal') || '').trim() === 'contact') {
+        openModal('contactModal');
+        scheduleLucideCreateIcons(document.getElementById('contactModal'));
+    }
 }
 
 let syncMessagesHeightTimer = null;
