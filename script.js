@@ -19005,38 +19005,6 @@ async function courseAuthedFetch(path, payload) {
     }
 }
 
-async function uploadFileToSignedUrl(signedUrl, file) {
-    const f = file || null;
-    const url = String(signedUrl || '').trim();
-    if (!f || !url) return { error: 'Missing upload url' };
-    return await new Promise((resolve) => {
-        let finished = false;
-        const done = (payload) => {
-            if (finished) return;
-            finished = true;
-            resolve(payload);
-        };
-        const xhr = new XMLHttpRequest();
-        xhr.onerror = () => done({ error: 'Upload failed (network)' });
-        xhr.onabort = () => done({ error: 'Upload canceled' });
-        xhr.onload = () => {
-            const ok = xhr.status >= 200 && xhr.status < 300;
-            if (!ok) {
-                done({ error: String(xhr.responseText || `Upload failed (${xhr.status})`) });
-                return;
-            }
-            done({ ok: true });
-        };
-        try {
-            xhr.open('PUT', url, true);
-            xhr.setRequestHeader('content-type', String(f.type || 'application/octet-stream'));
-            xhr.send(f);
-        } catch (e) {
-            done({ error: 'Upload failed' });
-        }
-    });
-}
-
 async function saveCourseFromModal() {
     const client = initSupabase();
     if (!client) return;
