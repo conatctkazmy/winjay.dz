@@ -2734,27 +2734,6 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     -webkit-overflow-scrolling: touch;
 }
 
-.home-category-carousel {
-    width: 100%;
-}
-
-.home-category-carousel .carousel-viewport {
-    touch-action: pan-y;
-}
-
-.home-category-carousel .carousel-slide {
-    padding: 0 4px;
-    box-sizing: border-box;
-}
-
-.home-category-carousel[data-columns="2"] .carousel-slide {
-    flex: 0 0 50%;
-}
-
-.home-category-carousel[data-columns="3"] .carousel-slide {
-    flex: 0 0 33.3333%;
-}
-
 .home-category-swipe-item {
     flex: 0 0 auto;
     width: auto;
@@ -3529,34 +3508,6 @@ html[dir="rtl"] .home-category-swipe-item {
     pointer-events: none;
 }
 
-.listing-video-wrap {
-    margin: 14px 0 12px;
-    position: relative;
-    border-radius: 18px;
-    overflow: hidden;
-    border: 1px solid var(--border-color);
-    background: var(--bg-main);
-    aspect-ratio: 1 / 1;
-}
-
-.listing-video-wrap video {
-    width: 100%;
-    height: 100%;
-    display: block;
-    background: #000;
-    object-fit: cover;
-    opacity: 0;
-    transition: opacity 160ms ease;
-}
-
-.listing-video-wrap[data-video-ready="1"] video {
-    opacity: 1;
-}
-
-.listing-video-wrap[data-video-ready="1"] .vip-video-loader {
-    opacity: 0;
-}
-
 .detail-carousel[data-video-ready="1"] .vip-video-loader {
     opacity: 0;
 }
@@ -3604,11 +3555,6 @@ html[dir="rtl"] .home-category-swipe-item {
     font-weight: 700;
     font-size: 0.95rem;
     white-space: nowrap;
-}
-
-.listing-video-wrap[data-sound-gate="1"] .listing-video-sound-gate {
-    opacity: 1;
-    pointer-events: auto;
 }
 
 .listing-video-sound-gate:hover {
@@ -4880,20 +4826,6 @@ body.dark-mode .listing-status-badge {
     opacity: 0.8;
 }
 
-.chat-status {
-    font-weight: 800;
-    opacity: 0.95;
-}
-
-.chat-status.sending,
-.chat-status.uploading {
-    opacity: 0.9;
-}
-
-.chat-status.failed {
-    opacity: 1;
-}
-
 .chat-indicator {
     display: inline-flex;
     align-items: center;
@@ -5157,8 +5089,6 @@ body.dark-mode .listing-status-badge {
 }
 
 .chat-input .chat-plus-btn,
-.chat-input .chat-attach-btn,
-.chat-input .chat-file-btn,
 .chat-input .chat-mic-btn {
     background-color: var(--light-gray);
     color: var(--text-main);
@@ -5171,8 +5101,6 @@ body.dark-mode .listing-status-badge {
     color: white;
 }
 
-.chat-input .chat-attach-btn:hover,
-.chat-input .chat-file-btn:hover,
 .chat-input .chat-mic-btn:hover {
     background-color: var(--border-color);
 }
@@ -5183,7 +5111,7 @@ body.dark-mode .listing-status-badge {
     color: white;
 }
 
-.chat-input button:not(.chat-plus-btn):not(.chat-attach-btn):not(.chat-file-btn):not(.chat-mic-btn):hover {
+.chat-input button:not(.chat-plus-btn):not(.chat-mic-btn):hover {
     background-color: var(--primary-hover);
 }
 
