@@ -6585,6 +6585,28 @@ body.dark-mode .listing-status-badge {
     overflow-wrap: anywhere;
 }
 
+.hotel-facilities {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px 16px;
+}
+
+.hotel-facility-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.hotel-facility-item svg {
+    width: 18px;
+    height: 18px;
+    color: var(--primary-color);
+    flex: 0 0 auto;
+}
+
 .kv-value-actions {
     display: flex;
     justify-content: flex-end;
@@ -6639,6 +6661,10 @@ body.dark-mode .listing-status-badge {
     }
 
     .kv-value-actions {
+        justify-content: flex-start;
+    }
+
+    .hotel-facilities {
         justify-content: flex-start;
     }
 }

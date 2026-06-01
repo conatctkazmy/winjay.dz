@@ -8549,6 +8549,53 @@ function renderListingDynamicDetailRows(item) {
     return rows;
 }
 
+const HOTEL_SERVICE_META = {
+    wifi: { icon: 'wifi', label: { fr: 'WiFi', en: 'WiFi', ar: 'واي فاي' } },
+    pool: { icon: 'waves', label: { fr: 'Piscine', en: 'Swimming pool', ar: 'مسبح' } },
+    parking: { icon: 'parking-square', label: { fr: 'Parking', en: 'Parking', ar: 'موقف سيارات' } },
+    restaurant: { icon: 'utensils', label: { fr: 'Restaurant', en: 'Restaurant', ar: 'مطعم' } },
+    spa: { icon: 'flower', label: { fr: 'Spa', en: 'Spa', ar: 'سبا' } },
+    gym: { icon: 'dumbbell', label: { fr: 'Gym', en: 'Gym', ar: 'نادي رياضي' } },
+    ac: { icon: 'snowflake', label: { fr: 'Climatisation', en: 'Air conditioning', ar: 'مكيف' } },
+    heating: { icon: 'flame', label: { fr: 'Chauffage', en: 'Heating', ar: 'تدفئة' } },
+    room_service: { icon: 'concierge-bell', label: { fr: 'Room service', en: 'Room service', ar: 'خدمة الغرف' } },
+    laundry: { icon: 'shirt', label: { fr: 'Blanchisserie', en: 'Laundry', ar: 'غسيل' } },
+    airport_shuttle: { icon: 'bus', label: { fr: 'Navette aéroport', en: 'Airport shuttle', ar: 'حافلة المطار' } },
+    security: { icon: 'shield', label: { fr: 'Sécurité 24/7', en: 'Security', ar: 'أمن' } },
+    cctv: { icon: 'video', label: { fr: 'Vidéosurveillance', en: 'CCTV', ar: 'كاميرات مراقبة' } },
+    elevator: { icon: 'arrow-up-down', label: { fr: 'Ascenseur', en: 'Elevator', ar: 'مصعد' } },
+    accessible: { icon: 'accessibility', label: { fr: 'Accès handicapé', en: 'Accessible', ar: 'مهيأ لذوي الإعاقة' } },
+    breakfast: { icon: 'coffee', label: { fr: 'Petit-déjeuner', en: 'Breakfast', ar: 'فطور' } },
+    safe: { icon: 'lock', label: { fr: 'Coffre-fort', en: 'Safe', ar: 'خزنة' } },
+    minibar: { icon: 'wine', label: { fr: 'Mini-bar', en: 'Minibar', ar: 'ميني بار' } },
+    tv: { icon: 'tv', label: { fr: 'TV', en: 'TV', ar: 'تلفاز' } },
+    balcony: { icon: 'sun', label: { fr: 'Balcon', en: 'Balcony', ar: 'شرفة' } }
+};
+
+function getHotelServiceDisplay(key) {
+    const k = String(key || '').trim();
+    if (!k) return null;
+    const meta = HOTEL_SERVICE_META[k] || null;
+    if (!meta) return { icon: 'check', label: k };
+    const label = meta.label?.[currentLang] || meta.label?.fr || meta.label?.en || k;
+    return { icon: meta.icon || 'check', label };
+}
+
+function renderHotelServicesFacilitiesHTML(services) {
+    const list = Array.isArray(services) ? services.filter(Boolean) : [];
+    if (!list.length) return '';
+    const items = list
+        .map((k) => getHotelServiceDisplay(k))
+        .filter(Boolean)
+        .map((entry) => {
+            const icon = escapeHtml(String(entry.icon || 'check'));
+            const label = escapeHtml(String(entry.label || ''));
+            return `<span class="hotel-facility-item"><i data-lucide="${icon}"></i><span>${label}</span></span>`;
+        })
+        .join('');
+    return `<div class="hotel-facilities">${items}</div>`;
+}
+
 function renderHotelDetailRows(item) {
     const category = normalizeListingCategory(String(item?.category || '').trim(), String(item?.subcategory || '').trim());
     if (category !== 'Hébergement') return '';
@@ -8567,16 +8614,28 @@ function renderHotelDetailRows(item) {
         hotel.check_out ? { label: 'Check-out', value: String(hotel.check_out) } : null,
         rooms.length ? { label: 'Chambres', value: String(rooms.length) } : null,
         from ? { label: 'À partir de / nuit', value: `${new Intl.NumberFormat('fr-DZ').format(from)} DZD` } : null,
-        services.length ? { label: 'Services', value: services.join(', ') } : null,
         payments.length ? { label: 'Paiement', value: payments.join(', ') } : null
     ].filter(Boolean);
 
-    return parts.map((p) => `
-        <div class="kv-row">
-            <div class="kv-label">${escapeHtml(p.label)}</div>
-            <div class="kv-value">${escapeHtml(p.value)}</div>
-        </div>
-    `).join('');
+    const rows = parts
+        .map((p) => `
+            <div class="kv-row">
+                <div class="kv-label">${escapeHtml(p.label)}</div>
+                <div class="kv-value">${escapeHtml(p.value)}</div>
+            </div>
+        `)
+        .join('');
+
+    const servicesRow = services.length
+        ? `
+            <div class="kv-row">
+                <div class="kv-label">${escapeHtml('Services')}</div>
+                <div class="kv-value">${renderHotelServicesFacilitiesHTML(services)}</div>
+            </div>
+        `
+        : '';
+
+    return rows + servicesRow;
 }
 
 function renderListingDetailsCardRows(item) {
