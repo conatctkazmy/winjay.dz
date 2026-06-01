@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.dbg/
+supabase/.temp/
+.DS_Store
+Thumbs.db
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
