@@ -1805,7 +1805,13 @@ html.app-booting .app-boot-skeleton {
     display: block;
 }
 
-html.app-booting .content-section {
+html.section-loading .app-boot-skeleton {
+    display: block;
+    pointer-events: auto;
+}
+
+html.app-booting .content-section,
+html.section-loading .content-section {
     display: none !important;
 }
 
@@ -1831,16 +1837,58 @@ html.app-booting .content-section {
     min-width: 0;
 }
 
+.boot-skeleton-messages [style*="grid-template-columns: 380px 1fr"] {
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr) !important;
+}
+
+.boot-skeleton-messages [style*="grid-template-columns: 380px 1fr"] > * {
+    min-width: 0;
+}
+
+@media (max-width: 900px) {
+    .boot-skeleton-messages [style*="grid-template-columns: 380px 1fr"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    .boot-skeleton-admin [style*="grid-template-columns: repeat(4"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 520px) {
+    .boot-skeleton-admin [style*="grid-template-columns: repeat(4"] {
+        grid-template-columns: 1fr !important;
+    }
+}
+
 html[data-initial-section="seller-profile-section"] .boot-skeleton-profile,
-html[data-initial-section="profile-section"] .boot-skeleton-profile {
+html[data-initial-section="profile-section"] .boot-skeleton-profile,
+html[data-skeleton-view="seller-profile-section"] .boot-skeleton-profile,
+html[data-skeleton-view="profile-section"] .boot-skeleton-profile {
     display: block;
 }
 
-html[data-initial-section="course-section"] .boot-skeleton-course {
+html[data-initial-section="course-section"] .boot-skeleton-course,
+html[data-skeleton-view="course-section"] .boot-skeleton-course {
     display: block;
 }
 
-html:not([data-initial-section="seller-profile-section"]):not([data-initial-section="profile-section"]):not([data-initial-section="course-section"]) .boot-skeleton-home {
+html[data-initial-section="messages-section"] .boot-skeleton-messages,
+html[data-skeleton-view="messages-section"] .boot-skeleton-messages {
+    display: block;
+}
+
+html[data-initial-section="admin-dashboard-section"] .boot-skeleton-admin,
+html[data-skeleton-view="admin-dashboard-section"] .boot-skeleton-admin {
+    display: block;
+}
+
+html[data-initial-section="ambassadors-section"] .boot-skeleton-ambassadors,
+html[data-skeleton-view="ambassadors-section"] .boot-skeleton-ambassadors {
+    display: block;
+}
+
+html:not([data-initial-section="seller-profile-section"]):not([data-initial-section="profile-section"]):not([data-initial-section="course-section"]):not([data-initial-section="messages-section"]):not([data-initial-section="admin-dashboard-section"]):not([data-initial-section="ambassadors-section"]):not([data-skeleton-view="seller-profile-section"]):not([data-skeleton-view="profile-section"]):not([data-skeleton-view="course-section"]):not([data-skeleton-view="messages-section"]):not([data-skeleton-view="admin-dashboard-section"]):not([data-skeleton-view="ambassadors-section"]) .boot-skeleton-home {
     display: block;
 }
 

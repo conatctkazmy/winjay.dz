@@ -658,6 +658,29 @@ function endBootUI() {
     }
 }
 
+function startSectionLoadingSkeleton(sectionId) {
+    const id = String(sectionId || '').trim() || 'home-section';
+    try {
+        document.documentElement.classList.add('section-loading');
+        document.documentElement.dataset.skeletonView = id;
+    } catch (e) {
+        null;
+    }
+}
+
+function stopSectionLoadingSkeleton() {
+    try {
+        document.documentElement.classList.remove('section-loading');
+    } catch (e) {
+        null;
+    }
+    try {
+        delete document.documentElement.dataset.skeletonView;
+    } catch (e) {
+        null;
+    }
+}
+
 function setInnerHTMLIfEmpty(el, html) {
     if (!el) return;
     const current = String(el.innerHTML || '').trim();
@@ -14542,19 +14565,24 @@ async function showSection(sectionId) {
         renderFavorites();
     } else if (sectionId === 'profile-section') {
         clearSellerProfileRouteTag();
-        myListingsGrid.innerHTML = '<div class="empty-state"><i data-lucide="loader" style="animation: spin 1s linear infinite;"></i><h3>Chargement...</h3></div>';
-        scheduleLucideCreateIcons(myListingsGrid);
-        const loaded = await ensureMyProfileListingsLoaded();
-        if (!loaded) {
-            showToast('Failed to load your listings', 'alert-circle');
-        }
-        renderMyListings();
-        renderMyProfileReviews();
+        startSectionLoadingSkeleton('profile-section');
         try {
-            const savedTab = (localStorage.getItem(MY_PROFILE_LAST_TAB_STORAGE_KEY) || '').trim().toLowerCase();
-            if (savedTab) void switchMyProfileSection(savedTab);
-        } catch (e) {
-            null;
+            myListingsGrid.innerHTML = '<div class="empty-state"><i data-lucide="loader" style="animation: spin 1s linear infinite;"></i><h3>Chargement...</h3></div>';
+            scheduleLucideCreateIcons(myListingsGrid);
+            const loaded = await ensureMyProfileListingsLoaded();
+            if (!loaded) {
+                showToast('Failed to load your listings', 'alert-circle');
+            }
+            renderMyListings();
+            renderMyProfileReviews();
+            try {
+                const savedTab = (localStorage.getItem(MY_PROFILE_LAST_TAB_STORAGE_KEY) || '').trim().toLowerCase();
+                if (savedTab) void switchMyProfileSection(savedTab);
+            } catch (e) {
+                null;
+            }
+        } finally {
+            stopSectionLoadingSkeleton();
         }
     } else if (sectionId === 'messages-section') {
         clearSellerProfileRouteTag();
@@ -14563,18 +14591,38 @@ async function showSection(sectionId) {
             renderMessagesList();
             renderEmptyChat();
         } else {
-            bootstrapMessages();
+            startSectionLoadingSkeleton('messages-section');
+            try {
+                await bootstrapMessages();
+            } finally {
+                stopSectionLoadingSkeleton();
+            }
         }
         scheduleSyncMessagesContainerHeight();
     } else if (sectionId === 'ambassadors-section') {
         clearSellerProfileRouteTag();
-        refreshAmbassadorsSection(false);
+        startSectionLoadingSkeleton('ambassadors-section');
+        try {
+            await refreshAmbassadorsSection(false);
+        } finally {
+            stopSectionLoadingSkeleton();
+        }
     } else if (sectionId === 'admin-dashboard-section') {
         clearSellerProfileRouteTag();
-        renderAdminDashboard();
+        startSectionLoadingSkeleton('admin-dashboard-section');
+        try {
+            await renderAdminDashboard();
+        } finally {
+            stopSectionLoadingSkeleton();
+        }
     } else if (sectionId === 'course-section') {
         clearSellerProfileRouteTag();
-        renderCourseSection();
+        startSectionLoadingSkeleton('course-section');
+        try {
+            await renderCourseSection();
+        } finally {
+            stopSectionLoadingSkeleton();
+        }
     }
 }
 
