@@ -1005,33 +1005,6 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
     scheduleMarketplaceRenders({ listings: true, loadMoreUI: true, iconsRoot: document.getElementById('home-section') });
 }
 
-function loadMarketplaceListingsFromStorage() {
-    try {
-        const raw = localStorage.getItem(MARKETPLACE_LISTINGS_STORAGE_KEY);
-        if (!raw) return;
-        const saved = JSON.parse(raw);
-        if (!Array.isArray(saved)) return;
-        const cleaned = saved
-            .filter((x) => x && typeof x === 'object')
-            .map((x) => ({
-                id: x.id,
-                owner_id: x.owner_id || null,
-                title: String(x.title || ''),
-                price: Number.isFinite(Number(x.price)) ? Number(x.price) : 0,
-                category: normalizeListingCategory(String(x.category || ''), String(x.subcategory || '')),
-                image: String(x.image || ''),
-                location: String(x.location || ''),
-                date: String(x.date || ''),
-                seller: x.seller && typeof x.seller === 'object' ? x.seller : null,
-                reviewsData: Array.isArray(x.reviewsData) ? x.reviewsData : []
-            }))
-            .filter((x) => x.title && x.category && x.location);
-        listings = cleaned;
-    } catch (e) {
-        return;
-    }
-}
-
 function flushMarketplaceListingsSave() {
     marketplaceListingsSaveTimer = null;
     marketplaceListingsSaveQueued = false;
@@ -2721,13 +2694,6 @@ function removePendingChatMessage(tag, id) {
     else delete pendingChatMessagesByTag[key];
 }
 
-function findMessageInChat(tag, id) {
-    const key = String(tag || '');
-    const chat = key ? mockChats?.[key] : null;
-    const arr = Array.isArray(chat?.messages) ? chat.messages : [];
-    return arr.find((m) => String(m?.id || '') === String(id || '')) || null;
-}
-
 function findPendingMessageTagById(id) {
     const target = String(id || '');
     if (!target) return '';
@@ -3394,14 +3360,6 @@ async function handleChatFiles(e) {
     }
 }
 
-function toggleVoiceRecording() {
-    if (voiceRecorder && voiceRecorder.state === 'recording') {
-        stopVoiceRecording(true);
-        return;
-    }
-    startVoiceRecording();
-}
-
 function setupChatFeatures() {
     const fileInput = document.getElementById('chatFileInput');
     if (fileInput) fileInput.addEventListener('change', handleChatFiles);
@@ -3560,11 +3518,6 @@ function isListingReviewsBackendMissing(error) {
 function isListingLikesBackendMissing(error) {
     const msg = String(error?.message || '');
     return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('listing_likes');
-}
-
-function isPublicProfilesBackendMissing(error) {
-    const msg = String(error?.message || '');
-    return msg.toLowerCase().includes('relation') && msg.toLowerCase().includes('public_profiles');
 }
 
 function isProfileReviewsBackendMissing(error) {
@@ -4791,39 +4744,6 @@ async function recordListingView(listingId) {
     await refreshListingCountsFromSupabase(id);
 }
 
-function renderListingReviewsListHTML(reviewsData) {
-    const rows = Array.isArray(reviewsData) ? reviewsData : [];
-    if (!rows.length) return '<p style="color: var(--text-muted);">Aucun avis pour le moment.</p>';
-    return rows
-        .map((r) => {
-            const rating = Math.max(0, Math.min(5, Number(r.rating) || 0));
-            const tag = String(r.tag || '@user');
-            const user = escapeHtml(r.user || 'User');
-            const date = escapeHtml(r.date || '');
-            const pic = String(r.pic || DEFAULT_AVATAR_SVG);
-            const comment = String(r.comment || '');
-            return `
-            <div class="review-item">
-                <img src="${pic}" class="review-avatar clickable" alt="${user}" onclick="openSellerProfile('${tag}')">
-                <div class="review-content-wrapper">
-                    <div class="review-header">
-                        <span class="review-user clickable" onclick="openSellerProfile('${tag}')">${user}</span>
-                        <span class="review-date">${date}</span>
-                    </div>
-                    <div class="stars" style="margin-bottom: 8px;">
-                        ${Array(5)
-                            .fill(0)
-                            .map((_, i) => `<i data-lucide="star" style="${i < rating ? 'fill: #ffb400;' : ''} width: 12px; height: 12px;"></i>`)
-                            .join('')}
-                    </div>
-                    <div class="review-comment">${comment}</div>
-                </div>
-            </div>
-        `;
-        })
-        .join('');
-}
-
 async function refreshListingReviewsForListingDetail(listingId, sellerName) {
     if (DEMO_MODE) return;
     const id = Number(listingId);
@@ -5263,11 +5183,6 @@ function getAnonVisitorId() {
     } catch (e) {
         return `anon_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     }
-}
-
-function getViewTrackingKey() {
-    if (currentSupabaseUserId) return String(currentSupabaseUserId);
-    return `anon:${getAnonVisitorId()}`;
 }
 
 function getCurrentSectionId() {
@@ -9561,18 +9476,6 @@ function renderListingImagesSlots() {
     scheduleLucideCreateIcons(container);
 }
 
-function openListingImagesModal() {
-    openModal('listingImagesModal');
-    renderListingImagesSlots();
-    updateListingImagesMiniPreview();
-    scheduleLucideCreateIcons(document.getElementById('listingImagesModal'));
-}
-
-function closeListingImagesModal() {
-    closeModal('listingImagesModal');
-    updateListingImagesMiniPreview();
-}
-
 function lockDocumentScrollForSidebar() {
     if (sidebarScrollLocked) return;
     if (document.body.classList.contains('modal-open')) return;
@@ -10090,22 +9993,6 @@ function persistProfileImageState(type, croppedDataUrl) {
     }
 }
 
-function applyImageChangesTemporary() {
-    const exported = exportCroppedEditorImage(currentImageType);
-    if (!exported) return;
-
-    if (currentImageType === 'cover') {
-        userProfile.coverPic = exported;
-    } else {
-        userProfile.profilePic = exported;
-    }
-
-    updateProfileUI();
-    persistTemporaryProfileImageState(currentImageType, exported);
-    closeModal('imageEditorModal');
-    showToast('Temporary photo applied', 'clock');
-}
-
 function persistTemporaryProfileImageState(type, croppedDataUrl) {
     try {
         const raw = sessionStorage.getItem(PROFILE_IMAGES_TEMP_STORAGE_KEY);
@@ -10523,10 +10410,6 @@ function openVerifiedUpgradeModal() {
     scheduleLucideCreateIcons(document.getElementById('verifiedUpgradeModal'));
 }
 
-function selectVipPlan(plan) {
-    openVipCodModalForSelection('pro', plan);
-}
-
 function selectVipOffer(offer) {
     openVipCodModalForSelection(offer, vipBilling);
 }
@@ -10579,10 +10462,6 @@ async function submitVipSubscription() {
     showToast('Abonnement VIP confirmé ! Un agent vous contactera.', 'check-circle');
 }
 
-function selectVerifiedPlan(plan) {
-    openVerifiedCodModalForSelection('pro', plan);
-}
-
 function selectVerifiedOffer(offer) {
     openVerifiedCodModalForSelection(offer, verifiedBilling);
 }
@@ -10622,10 +10501,6 @@ async function submitVerifiedSubscription() {
     }
     closeModal('verifiedCodModal');
     showToast('Demande Vérifié envoyée ! Un agent vous contactera.', 'check-circle');
-}
-
-function openReportModal() {
-    openModal('reportModal');
 }
 
 function submitReport() {
@@ -10770,17 +10645,6 @@ function bindCreateListingStepFlow() {
     }
 
     if (changeBtn) changeBtn.style.display = 'none';
-}
-
-function openShareModal(listingId) {
-    const listing = listings.find(l => l.id === listingId);
-    if (!listing) return;
-    const urlObj = new URL(window.location.href);
-    urlObj.searchParams.delete('new');
-    urlObj.searchParams.set('listing', String(listingId));
-    const url = encodeURIComponent(urlObj.toString());
-    const shareText = encodeURIComponent(`Découvrez cette annonce: ${listing.title} - ${listing.price} DZD`);
-    window.open(`https://t.me/share/url?url=${url}&text=${shareText}`, '_blank');
 }
 
 //#region debug-point vip-video-upload-failed
@@ -12427,62 +12291,6 @@ function createMyListingCardHTML(item) {
                 </div>
             </div>
         </div>`;
-}
-
-function openEditListingModal(event, id) {
-    event.stopPropagation();
-    editingListingId = id;
-    const item = listings.find(l => l.id === id);
-    if (!item) return;
-    const catSelect = document.getElementById('editListingCategory');
-    const wilayaSelect = document.getElementById('editListingWilaya');
-    if (catSelect.options.length <= 1) {
-        categories.forEach(cat => {
-            if (cat.special !== 'other') {
-                const option = document.createElement('option');
-                option.value = cat.name;
-                option.textContent = cat.name;
-                catSelect.appendChild(option);
-            }
-        });
-    }
-    if (wilayaSelect.options.length <= 1) {
-        wilayas.forEach(wilaya => {
-            const option = document.createElement('option');
-            option.value = wilaya;
-            option.textContent = wilaya;
-            wilayaSelect.appendChild(option);
-        });
-    }
-    document.getElementById('editListingTitle').value = item.title;
-    const descEl = document.getElementById('editListingDescription');
-    if (descEl) descEl.value = item.description || '';
-    const conditionEl = document.getElementById('editListingCondition');
-    if (conditionEl) conditionEl.value = item.condition || '';
-    const priceTypeEl = document.getElementById('editListingPriceType');
-    if (priceTypeEl) priceTypeEl.value = item.price_type || '';
-    document.getElementById('editListingPrice').value = item.price;
-    document.getElementById('editListingCategory').value = item.category;
-    const subSelect = document.getElementById('editListingSubcategory');
-    populateListingSubcategorySelect(subSelect, item.category, item.subcategory || '');
-    document.getElementById('editListingWilaya').value = item.wilaya || '';
-    const cityEl = document.getElementById('editListingCity');
-    populateCitySelect(cityEl, item.wilaya || '', item.city || '');
-    const deliveryEl = document.getElementById('editListingDelivery');
-    if (deliveryEl) deliveryEl.value = item.delivery || '';
-    const phoneEl = document.getElementById('editListingContactPhone');
-    if (phoneEl) phoneEl.value = item.contact_phone || '';
-    const availEl = document.getElementById('editListingAvailability');
-    if (availEl) availEl.value = item.availability || 'Available';
-    const tagsEl = document.getElementById('editListingTags');
-    if (tagsEl) tagsEl.value = Array.isArray(item.tags) ? item.tags.join(', ') : '';
-    openModal('editListingModal');
-    try {
-        setupSelectPickers();
-    } catch (e) {
-        null;
-    }
-    scheduleLucideCreateIcons(document.getElementById('editListingModal'));
 }
 
 async function saveEditedListing() {
@@ -15640,12 +15448,6 @@ function initCarouselElement(carouselEl) {
 function initCarouselsInContainer(container) {
     if (!container) return;
     container.querySelectorAll('.js-carousel').forEach((el) => initCarouselElement(el));
-}
-
-function scrollVipVideoRowIntoView() {
-    const section = document.getElementById('vipVideoSection');
-    if (!section) return;
-    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function getVipVideoListingsForHome() {
@@ -19577,14 +19379,6 @@ async function saveCourseLessonFromModal() {
     showToast(editingId ? 'Lesson updated' : 'Lesson added', 'check-circle');
     activeCourseEditLessonId = null;
     await renderCourseSection();
-}
-
-async function createCourseFromModal() {
-    return saveCourseFromModal();
-}
-
-async function createCourseModuleFromModal() {
-    return saveCourseModuleFromModal();
 }
 
 async function createCourseLessonFromModal() {
