@@ -9460,29 +9460,42 @@ footer {
 @media (max-width: 420px) {
     .logo {
         gap: 0 !important;
+        min-width: 0;
+        flex: 0 1 auto;
+    }
+
+    .logo .text-xl {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .navbar {
-        padding: 0 10px;
+        padding: 0;
     }
 
     .navbar-inner {
-        padding: 0 10px;
+        padding-left: calc(6px + env(safe-area-inset-left));
+        padding-right: calc(8px + env(safe-area-inset-right));
         gap: 10px;
     }
 
-    .nav-right {
-        gap: 6px;
+    #sidebarToggle {
+        margin-left: -4px;
     }
 
-    .notification-btn {
-        display: none;
+    .icon-btn {
+        padding: 6px;
+    }
+
+    .nav-right {
+        gap: 5px;
     }
 
     .add-listing-btn,
     .profile-btn {
-        width: 36px;
-        height: 36px;
+        width: 34px;
+        height: 34px;
     }
 
     .chat-header {
@@ -9607,12 +9620,17 @@ footer {
 
 @media (max-width: 360px) {
     .navbar {
-        padding: 0 8px;
+        padding: 0;
     }
 
     .navbar-inner {
-        padding: 0 8px;
+        padding-left: calc(4px + env(safe-area-inset-left));
+        padding-right: calc(6px + env(safe-area-inset-right));
         gap: 8px;
+    }
+
+    #sidebarToggle {
+        margin-left: -4px;
     }
 
     .icon-btn {
@@ -9628,7 +9646,6 @@ footer {
         gap: 4px;
     }
 
-    .notification-btn,
     .messages-btn {
         display: none;
     }
