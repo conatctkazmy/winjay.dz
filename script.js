@@ -17145,31 +17145,6 @@ function getListingDetailCarouselColumns(slidesCount) {
     return 1;
 }
 
-function setListingDetailImage(listingId, index) {
-    const item = listings.find((l) => l.id === listingId);
-    if (!item) return;
-    const urls = getListingImagesForDetail(item);
-    const hasVideo = hasListingVideo(item);
-    const slidesCount = (hasVideo ? 1 : 0) + urls.length;
-    const columns = getListingDetailCarouselColumns(slidesCount);
-    const maxIdx = Math.max(0, slidesCount - columns);
-    const idx = Math.max(0, Math.min(maxIdx, Number(index) || 0));
-    listingDetailImageIndex[listingId] = idx;
-    const carousel = document.querySelector(`.js-carousel[data-carousel="detail"][data-listing-id="${Number(listingId) || 0}"]`);
-    if (carousel) {
-        setCarouselIndex(carousel, idx, { animate: true });
-        return;
-    }
-    if (!hasVideo) {
-        const main = document.getElementById('detailMainImage');
-        if (main && urls[idx]) {
-            main.src = urls[idx];
-            main.setAttribute('data-src', urls[idx]);
-            main.onclick = () => openLightbox(urls[idx]);
-        }
-    }
-}
-
 function openListingDetail(listingId, { pushState = true } = {}) {
     const item = listings.find(l => l.id === listingId);
     if (!item) return;
@@ -19723,14 +19698,6 @@ async function renderCourseSection() {
         : '<div class="muted">No achievements yet.</div>';
 
     scheduleLucideCreateIcons(achievementsList);
-}
-
-function findNextCourseLessonToContinue(lessons, progressByLesson) {
-    const list = Array.isArray(lessons) ? lessons.slice() : [];
-    if (!list.length) return null;
-    const firstIncomplete = list.find((l) => !progressByLesson[String(l.id)]?.completed);
-    if (firstIncomplete) return firstIncomplete;
-    return list[0] || null;
 }
 
 function toggleCourseModule(moduleId) {
