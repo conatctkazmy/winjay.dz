@@ -9458,10 +9458,6 @@ footer {
 }
 
 @media (max-width: 420px) {
-    .logo img {
-        display: none;
-    }
-
     .logo {
         gap: 0 !important;
     }
@@ -9470,8 +9466,23 @@ footer {
         padding: 0 10px;
     }
 
+    .navbar-inner {
+        padding: 0 10px;
+        gap: 10px;
+    }
+
     .nav-right {
         gap: 6px;
+    }
+
+    .notification-btn {
+        display: none;
+    }
+
+    .add-listing-btn,
+    .profile-btn {
+        width: 36px;
+        height: 36px;
     }
 
     .chat-header {
@@ -9597,6 +9608,11 @@ footer {
 @media (max-width: 360px) {
     .navbar {
         padding: 0 8px;
+    }
+
+    .navbar-inner {
+        padding: 0 8px;
+        gap: 8px;
     }
 
     .icon-btn {
