@@ -12891,7 +12891,7 @@ function handleCardOpen(e, listingId) {
 function createMyListingCardHTML(item) {
     const isFavorite = favorites.includes(item.id);
     const pulse = pendingHeartPulses.has(item.id) && isFavorite;
-    const carouselImages = getListingImagesForDetail(item).slice(0, 8);
+    const carouselImages = getListingImagesForCard(item).slice(0, 8);
     const mediaHTML = carouselImages.length > 1
         ? `<div class="card-media-wrap"><div class="card-carousel js-carousel" data-carousel="card" data-listing-id="${item.id}" data-index="0">
                 <div class="carousel-viewport">
@@ -12903,7 +12903,7 @@ function createMyListingCardHTML(item) {
                     ${carouselImages.map((_, i) => `<button type="button" class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot-index="${i}"></button>`).join('')}
                 </div>
             </div></div>`
-        : `<div class="card-media-wrap"><img src="${item.image}" data-src="${item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
+        : `<div class="card-media-wrap"><img src="${item.cardImage || item.image}" data-src="${item.cardImage || item.image}" alt="${escapeHtml(item.title)}" class="card-img" loading="lazy" decoding="async" fetchpriority="low"></div>`;
     return `
         <div class="card my-listing-card" onclick="handleCardOpen(event, ${item.id})">
             <div class="listing-actions">
