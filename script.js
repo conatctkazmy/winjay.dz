@@ -2858,6 +2858,7 @@ let currentSellerProfileName = '';
 const listingReviewPanelState = {};
 const listingDetailImageIndex = {};
 const listingReviewsCache = new Map();
+const listingSimilarCache = new Map();
 const profileRatingSummaryCache = new Map();
 const profileFollowCountsCache = new Map();
 const profileFollowStateCache = new Map();
@@ -18051,6 +18052,88 @@ async function openListingDetailFromSupabase(listingId, { pushState = true } = {
     openListingDetail(id, { pushState: false });
 }
 
+async function fetchSimilarListingsFromSupabase(seedItem, { includeProfiles = true, limit = 8 } = {}) {
+    const client = initSupabase();
+    if (!client) return [];
+    const seed = seedItem && typeof seedItem === 'object' ? seedItem : null;
+    const seedId = Number(seed?.id) || 0;
+    if (!seedId) return [];
+    const safeLimit = Math.max(1, Math.min(16, Number(limit) || 8));
+    const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
+    const embeddedSelect = `${baseSelect}, profiles(id, display_name, tag, avatar_url, verified, is_vip)`;
+
+    const applyCriteria = (q) => {
+        q = applyActiveListingsOnly(q);
+        q = q.neq('id', seedId);
+        if (seed?.subcategory) {
+            q = q.eq('subcategory', String(seed.subcategory));
+        } else if (seed?.category) {
+            const rawCats = getRawCategoriesForNormalizedCategory(String(seed.category));
+            if (rawCats.length === 1) q = q.eq('category', rawCats[0]);
+            else if (rawCats.length > 1) q = q.in('category', rawCats);
+            else q = q.eq('category', String(seed.category));
+        }
+        if (seed?.wilaya) q = q.eq('wilaya', String(seed.wilaya));
+        q = q.order('created_at', { ascending: false });
+        q = q.order('id', { ascending: false });
+        q = q.limit(safeLimit);
+        return q;
+    };
+
+    let data = null;
+    let error = null;
+    let profilesById = {};
+    {
+        const q = applyCriteria(client.from('listings').select(includeProfiles ? embeddedSelect : baseSelect));
+        const res = await q;
+        data = res.data;
+        error = res.error;
+    }
+    if (error && includeProfiles) {
+        const q = applyCriteria(client.from('listings').select(baseSelect));
+        const res = await q;
+        data = res.data;
+        error = res.error;
+        const ownerIds = Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean)));
+        profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
+    }
+    if (error) return [];
+    return (data || []).map((row) => mapSupabaseListingRow(row, profilesById)).slice(0, safeLimit);
+}
+
+async function hydrateSimilarListingsForListingDetail(listingId) {
+    if (DEMO_MODE) return;
+    const id = Number(listingId) || 0;
+    if (!id) return;
+    const wrap = document.getElementById('similarListingsWrap');
+    const grid = document.getElementById('similarListingsGrid');
+    if (!wrap || !grid) return;
+    const item = listings.find((l) => l?.id === id) || null;
+    if (!item) return;
+    if (currentListingDetailId !== id) return;
+    const cached = listingSimilarCache.get(id) || null;
+    if (Array.isArray(cached)) {
+        if (!cached.length) {
+            wrap.style.display = 'none';
+            return;
+        }
+        wrap.style.display = 'block';
+        grid.innerHTML = cached.map((x) => createCardHTML(x)).join('');
+        scheduleLucideCreateIcons(grid);
+        return;
+    }
+    const fetched = await fetchSimilarListingsFromSupabase(item, { includeProfiles: true, limit: 8 });
+    listingSimilarCache.set(id, fetched);
+    if (currentListingDetailId !== id) return;
+    if (!fetched.length) {
+        wrap.style.display = 'none';
+        return;
+    }
+    wrap.style.display = 'block';
+    grid.innerHTML = fetched.map((x) => createCardHTML(x)).join('');
+    scheduleLucideCreateIcons(grid);
+}
+
 function openListingDetail(listingId, { pushState = true } = {}) {
     const item = listings.find(l => l.id === listingId);
     if (!item) {
@@ -18126,16 +18209,22 @@ function openListingDetail(listingId, { pushState = true } = {}) {
                 </div>
             </div>`;
     const bestListingReview = item.reviewsData.length > 0 ? item.reviewsData[0] : null;
-    const similarListings = getSimilarListings(item);
+    const similarListings = DEMO_MODE ? getSimilarListings(item) : [];
     const reviewsCount = item.reviewsData.length;
     const reviewsExpanded = !!listingReviewPanelState[listingId];
-    const similarHTML = similarListings.length > 0 ? `
+    const similarHTML = DEMO_MODE
+        ? (similarListings.length > 0 ? `
         <div class="similar-listings">
             <h3>Annonces similaires</h3>
             <div class="listings-grid">
                 ${similarListings.map((s) => createCardHTML(s)).join('')}
             </div>
-        </div>` : '';
+        </div>` : '')
+        : `
+        <div class="similar-listings" id="similarListingsWrap">
+            <h3>Annonces similaires</h3>
+            <div class="listings-grid" id="similarListingsGrid">${getHomeListingsSkeletonHTML(8)}</div>
+        </div>`;
     const phoneDigits = item.contact_phone ? String(item.contact_phone).replace(/[^0-9]/g, '') : '';
     content.innerHTML = `
         <div class="detail-container">
@@ -18363,6 +18452,9 @@ function openListingDetail(listingId, { pushState = true } = {}) {
     initCarouselsInContainer(content);
     scheduleLucideCreateIcons();
     refreshListingReviewsForListingDetail(listingId, seller?.name || 'Vendeur');
+    if (!DEMO_MODE) {
+        void hydrateSimilarListingsForListingDetail(listingId);
+    }
     if (!listingDetailViewRecorded || listingDetailViewRecordedListingId !== listingId) {
         listingDetailViewRecordedListingId = listingId;
         listingDetailViewRecorded = true;
