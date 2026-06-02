@@ -6103,6 +6103,7 @@ const listingSubcategoriesByCategory = {
     "Loisirs & Divertissements": ["Livres", "Jeux & jouets", "Musique & instruments", "Billetterie", "Art & collection", "Animaux"],
     "Sport": ["Matériel sport", "Vélos", "Fitness", "Sport collectif", "Sports de combat"],
     "Emploi": ["Offres d’emploi", "Recherche d’emploi", "Stages", "Intérim"],
+    "Hébergement": ["Hôtel", "Auberge", "Maison d'hôtes", "Résidence", "Appartement", "Villa de vacances", "Autre"],
     "Matériaux & Équipement": ["Construction/BTP", "Industrie", "Agriculture", "Restauration (café/hôtel)", "Matériel bureau", "Énergie", "Transport & Logistique"],
     "Alimentaires": ["Fruits & légumes", "Viandes & poissons", "Pâtisserie", "Boissons", "Produits maison", "Autres alimentaires"],
     "Voyages": ["Agences & packs", "Omra & Hadj", "Billets & transport", "Hôtels", "Excursions", "Location saisonnière"],
