@@ -2994,10 +2994,10 @@ html[dir="rtl"] .home-category-swipe-item {
 
 .vip-verified-section {
     margin: 10px 0 16px;
-    padding: 10px;
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    background: var(--bg-main);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
 }
 
 .vip-verified-head {
