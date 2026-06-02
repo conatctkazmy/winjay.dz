@@ -16020,6 +16020,34 @@ function getSellerProfileSkeletonHTML() {
     `;
 }
 
+function getListingDetailSkeletonHTML() {
+    return `
+        <div class="profile-skeleton">
+            <div class="profile-header profile-skeleton-header">
+                <div class="cover-photo-container profile-skeleton-cover">
+                    <div class="skeleton-block"></div>
+                </div>
+                <div class="profile-info-container">
+                    <div class="profile-details" style="width: 100%;">
+                        <div class="profile-skeleton-lines">
+                            <div class="skeleton-block" style="height: 26px; width: 240px;"></div>
+                            <div class="skeleton-block" style="height: 18px; width: 160px;"></div>
+                            <div class="skeleton-block" style="height: 18px; width: 200px;"></div>
+                        </div>
+                        <div class="profile-actions-row profile-skeleton-actions-row">
+                            <div class="skeleton-block"></div>
+                            <div class="skeleton-block"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="profile-content">
+                ${getHomeListingsSkeletonHTML(6)}
+            </div>
+        </div>
+    `;
+}
+
 function setCarouselIndex(carouselEl, index, { animate = true, persist = false } = {}) {
     if (!carouselEl) return;
     const track = carouselEl.querySelector('.carousel-track');
@@ -17956,9 +17984,81 @@ function getListingDetailCarouselColumns(slidesCount) {
     return 1;
 }
 
+async function fetchListingDetailFromSupabase(listingId, { includeProfiles = true } = {}) {
+    const client = initSupabase();
+    if (!client) return null;
+    const id = Number(listingId) || 0;
+    if (!id) return null;
+    const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
+    const embeddedSelect = `${baseSelect}, profiles(id, display_name, tag, avatar_url, verified, is_vip)`;
+    let data = null;
+    let error = null;
+    let profilesById = {};
+
+    {
+        const q = client
+            .from('listings')
+            .select(includeProfiles ? embeddedSelect : baseSelect)
+            .eq('id', id)
+            .maybeSingle();
+        const res = await q;
+        data = res.data;
+        error = res.error;
+    }
+
+    if (error && includeProfiles) {
+        const q = client
+            .from('listings')
+            .select(baseSelect)
+            .eq('id', id)
+            .maybeSingle();
+        const res = await q;
+        data = res.data;
+        error = res.error;
+        const ownerId = data?.owner_id || null;
+        profilesById = ownerId ? await fetchProfilesByIds([ownerId]) : {};
+    }
+
+    if (error || !data) return null;
+    return mapSupabaseListingRow(data, profilesById);
+}
+
+async function openListingDetailFromSupabase(listingId, { pushState = true } = {}) {
+    const id = Number(listingId) || 0;
+    if (!id) return;
+    currentListingDetailId = id;
+    if (pushState) {
+        const from = getActiveSectionId();
+        const url = new URL(window.location.href);
+        url.searchParams.delete('new');
+        url.searchParams.set('listing', String(id));
+        history.pushState({ __winjay: true, view: 'listing', listingId: id, from }, '', url.pathname + url.search);
+    }
+    showSection('listing-detail-section');
+    const content = document.getElementById('listingDetailPage');
+    if (content) content.innerHTML = getListingDetailSkeletonHTML();
+    const fetched = await fetchListingDetailFromSupabase(id, { includeProfiles: true });
+    if (!fetched) {
+        showToast('Listing not found', 'alert-circle');
+        return;
+    }
+    if (currentListingDetailId !== id) return;
+    const byId = new Map((listings || []).map((x) => [x.id, x]));
+    const existing = byId.get(id) || null;
+    if (existing?.reviewsData) fetched.reviewsData = existing.reviewsData;
+    byId.set(id, fetched);
+    listings = Array.from(byId.values());
+    openListingDetail(id, { pushState: false });
+}
+
 function openListingDetail(listingId, { pushState = true } = {}) {
     const item = listings.find(l => l.id === listingId);
-    if (!item) return;
+    if (!item) {
+        if (!DEMO_MODE) {
+            void openListingDetailFromSupabase(listingId, { pushState });
+        }
+        return;
+    }
     currentListingDetailId = listingId;
     trackAnalyticsEvent('listing_open', {
         listingId,
