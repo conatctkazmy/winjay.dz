@@ -1427,11 +1427,10 @@ function loadMoreVipVerifiedListingsPage() {
     });
 }
 
-async function fetchListingsFromSupabase({ silent = false, includeProfiles = true, limit = undefined, offset = 0, append = false, filters = null, cursor = null } = {}) {
+async function fetchListingsFromSupabase({ silent = false, includeProfiles = true, limit = undefined, append = false, filters = null, cursor = null } = {}) {
     const client = initSupabase();
     if (!client) return;
-    const safeOffset = Math.max(0, Number(offset) || 0);
-    const initialLoad = !append && safeOffset === 0 && !silent && !homeInitialListingsLoaded;
+    const initialLoad = !append && !silent && !homeInitialListingsLoaded;
     if (initialLoad) {
         homeInitialListingsLoading = true;
         homeInitialListingsLoaded = false;
@@ -1448,15 +1447,7 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
         q = applyActiveListingsOnly(q);
         q = applyServerFiltersToListingsQuery(q, safeFilters);
         q = applyKeysetCursorToListingsQuery(q, safeCursor, safeFilters);
-        if (safeLimit > 0) {
-            if (safeCursor) {
-                q = q.limit(safeLimit);
-            } else if (safeOffset > 0) {
-                q = q.range(safeOffset, safeOffset + safeLimit - 1);
-            } else {
-                q = q.limit(safeLimit);
-            }
-        }
+        if (safeLimit > 0) q = q.limit(safeLimit);
         return q;
     };
     const safeLimitRaw = Number(limit);
@@ -1500,7 +1491,6 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
         listings = mapped;
         sortListingsInPlace(listings, safeFilters);
     }
-    if (!append) currentPage = 1;
     const fetched = Array.isArray(data) ? data.length : 0;
     if (!append) listingsLoadedCount = 0;
     listingsLoadedCount += fetched;
@@ -1541,7 +1531,6 @@ async function refetchListingsForCurrentFilters({ silent = false } = {}) {
         silent,
         includeProfiles: true,
         limit: INITIAL_LISTINGS_FETCH_LIMIT,
-        offset: 0,
         append: false,
         filters: currentFilters
     });
@@ -6595,9 +6584,6 @@ let currentFilters = {
     priceMax: '',
     sort: 'newest'
 };
-let currentPage = 1;
-const ITEMS_PER_PAGE = 12;
-const MAX_PAGE_BUTTONS = 9;
 
 const wilayas = [
     "01 Adrar", "02 Chlef", "03 Laghouat", "04 Oum El Bouaghi", "05 Batna", "06 Béjaïa", "07 Biskra", "08 Béchar",
@@ -6812,7 +6798,6 @@ function setupHomeCategorySwipe() {
             homeCategorySwipeMode = 'main';
             currentFilters.subcategory = '';
             updateActiveFilters();
-            currentPage = 1;
             renderListings();
             renderHomeCategorySwipe();
         });
@@ -7215,7 +7200,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         silent: false,
                         includeProfiles: true,
                         limit: LISTINGS_FETCH_PAGE_SIZE,
-                        offset: 0,
                         append: true,
                         filters: currentFilters,
                         cursor: listingsNextCursor
@@ -7236,7 +7220,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupInfiniteListingsLoad();
     homeInitialListingsLoading = true;
     homeInitialListingsLoaded = false;
-    const listingsPromise = fetchListingsFromSupabase({ silent: false, includeProfiles: true, limit: INITIAL_LISTINGS_FETCH_LIMIT, offset: 0, append: false });
+    const listingsPromise = fetchListingsFromSupabase({ silent: false, includeProfiles: true, limit: INITIAL_LISTINGS_FETCH_LIMIT, append: false });
 
     if (profileParam) {
         const tag = profileParam.startsWith('@') ? profileParam : '@' + profileParam;
@@ -15806,7 +15790,6 @@ function applyFilters() {
     currentFilters.priceMax = document.getElementById('priceMax').value;
     currentFilters.sort = document.getElementById('sortSelect').value;
     updateActiveFilters();
-    currentPage = 1;
     triggerListingsRefetch();
     syncHomeCategorySwipeFromFilters();
 }
@@ -15821,7 +15804,6 @@ function clearFilters() {
     document.getElementById('sortSelect').value = 'newest';
     document.getElementById('filterPanel').classList.remove('active');
     updateActiveFilters();
-    currentPage = 1;
     triggerListingsRefetch({ immediate: true });
     syncHomeCategorySwipeFromFilters();
 }
@@ -15861,7 +15843,6 @@ function removeFilter(type) {
         document.getElementById('priceMax').value = '';
     }
     updateActiveFilters();
-    currentPage = 1;
     triggerListingsRefetch({ immediate: true });
 }
 
@@ -15874,7 +15855,6 @@ function clearAllFilters() {
     document.getElementById('sortSelect').value = 'newest';
     document.getElementById('mainSearchInput').value = '';
     updateActiveFilters();
-    currentPage = 1;
     triggerListingsRefetch({ immediate: true });
     syncHomeCategorySwipeFromFilters();
     showToast('Filtres effacés', 'filter');
@@ -15882,7 +15862,6 @@ function clearAllFilters() {
 
 function handleSort() {
     currentFilters.sort = document.getElementById('sortSelect').value;
-    currentPage = 1;
     triggerListingsRefetch({ immediate: true });
 }
 
@@ -15935,41 +15914,6 @@ function getFilteredListings() {
         filtered.sort((a, b) => b.price - a.price);
     }
     return filtered;
-}
-
-function goToPage(page) {
-    currentPage = page;
-    renderListings();
-    const grid = document.getElementById('listingsGrid');
-    if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function renderPagination(totalPages) {
-    if (!pagination) return;
-    if (totalPages <= 1) {
-        pagination.innerHTML = '';
-        return;
-    }
-
-    const clamped = Math.max(1, Math.min(currentPage, totalPages));
-    currentPage = clamped;
-
-    const windowSize = Math.min(MAX_PAGE_BUTTONS, totalPages);
-    let start = Math.max(1, currentPage - Math.floor(windowSize / 2));
-    let end = start + windowSize - 1;
-    if (end > totalPages) {
-        end = totalPages;
-        start = Math.max(1, end - windowSize + 1);
-    }
-
-    let html = '';
-    html += `<button class="page-btn nav" ${currentPage === 1 ? 'disabled' : ''} onclick="goToPage(${currentPage - 1})"><i data-lucide="chevron-left"></i></button>`;
-    for (let p = start; p <= end; p++) {
-        html += `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goToPage(${p})">${p}</button>`;
-    }
-    html += `<button class="page-btn nav" ${currentPage === totalPages ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})"><i data-lucide="chevron-right"></i></button>`;
-
-    pagination.innerHTML = html;
 }
 
 function getHomeListingsSkeletonHTML(count = 12) {
@@ -16752,18 +16696,7 @@ function renderListings() {
         pagination.style.display = DEMO_MODE ? '' : 'none';
     }
     const totalItems = regularListings.length;
-    if (DEMO_MODE) {
-        const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
-        if (totalPages > 0 && currentPage > totalPages) currentPage = totalPages;
-        if (currentPage < 1) currentPage = 1;
-        const start = (currentPage - 1) * ITEMS_PER_PAGE;
-        const pageItems = regularListings.slice(start, start + ITEMS_PER_PAGE);
-        listingsGrid.innerHTML = totalItems > 0 ? pageItems.map(item => createCardHTML(item)).join('') : '';
-        renderPagination(totalPages);
-    } else {
-        currentPage = 1;
-        listingsGrid.innerHTML = totalItems > 0 ? regularListings.map(item => createCardHTML(item)).join('') : '';
-    }
+    listingsGrid.innerHTML = totalItems > 0 ? regularListings.map(item => createCardHTML(item)).join('') : '';
     try {
         const imgs = Array.from(listingsGrid.querySelectorAll('img.card-img'));
         imgs.forEach((img, idx) => {
