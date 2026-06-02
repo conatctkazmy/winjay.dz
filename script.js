@@ -1169,6 +1169,10 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
     const safeFiltersRaw = filters && typeof filters === 'object' ? filters : (typeof currentFilters === 'object' ? currentFilters : {});
     const safeFilters = { ...safeFiltersRaw, sort: 'newest' };
     const nextKey = buildVipVideoListingsFiltersKey(safeFilters);
+    // #region debug-point A:vip-video-start
+    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"A",location:"script.js:fetchVipVideoListingsFromSupabase:start",msg:"[DEBUG] vipVideo fetch start",data:{activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null,key:nextKey,filters:safeFilters,limit},ts:Date.now()})}).catch(()=>{});
+    try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"A:start",key:nextKey,filters:safeFilters,limit,activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
+    // #endregion
     if (nextKey === vipVideoListingsActiveKey && Array.isArray(vipVideoListings) && vipVideoListings.length > 0) {
         renderVipVideoSection();
         return;
@@ -1187,6 +1191,10 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
     const data = res.data;
     const error = res.error;
     vipVideoListingsLoading = false;
+    // #region debug-point A:vip-video-primary-result
+    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"A",location:"script.js:fetchVipVideoListingsFromSupabase:primary",msg:"[DEBUG] vipVideo primary query result",data:{error:error?String(error.message||error):null,dataLen:Array.isArray(data)?data.length:null,key:nextKey},ts:Date.now()})}).catch(()=>{});
+    try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"A:primary",key:nextKey,error:error?String(error.message||error):null,dataLen:Array.isArray(data)?data.length:null});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
+    // #endregion
     if (error) {
         if (!silent) showToast(error.message || 'Failed to load VIP videos', 'alert-circle');
         vipVideoListings = [];
@@ -1197,6 +1205,10 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
     const mapped = (data || []).map((row) => mapSupabaseListingRow(row, {}));
     const hardCap = Math.max(1, Math.min(12, Number(limit) || 4));
     let picked = mapped.filter((x) => hasListingVideo(x));
+    // #region debug-point B:vip-video-picked-after-map
+    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"B",location:"script.js:fetchVipVideoListingsFromSupabase:mapped",msg:"[DEBUG] vipVideo mapped/picked",data:{mappedLen:mapped.length,pickedLen:picked.length,sample:(picked.slice(0,3)).map(x=>({id:x.id,hasVideo:hasListingVideo(x),videoMeta:getListingVideoMeta(x)}))},ts:Date.now()})}).catch(()=>{});
+    try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"B:mapped",mappedLen:mapped.length,pickedLen:picked.length,sample:(picked.slice(0,3)).map(x=>({id:x.id,hasVideo:hasListingVideo(x),videoMeta:getListingVideoMeta(x)}))});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
+    // #endregion
     if (picked.length === 0) {
         let fallbackQ = client
             .from('listings')
@@ -1206,15 +1218,27 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
         const fallbackRes = await fallbackQ;
         const fallbackData = fallbackRes.data;
         const fallbackError = fallbackRes.error;
+        // #region debug-point D:vip-video-fallback-result
+        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"D",location:"script.js:fetchVipVideoListingsFromSupabase:fallback",msg:"[DEBUG] vipVideo fallback query result",data:{error:fallbackError?String(fallbackError.message||fallbackError):null,dataLen:Array.isArray(fallbackData)?fallbackData.length:null},ts:Date.now()})}).catch(()=>{});
+        try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"D:fallback",error:fallbackError?String(fallbackError.message||fallbackError):null,dataLen:Array.isArray(fallbackData)?fallbackData.length:null});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
+        // #endregion
         if (fallbackError) {
             if (!silent) showToast(fallbackError.message || 'Failed to load VIP videos', 'alert-circle');
         } else {
             const fallbackMapped = (fallbackData || []).map((row) => mapSupabaseListingRow(row, {}));
             picked = fallbackMapped.filter((x) => hasListingVideo(x));
+            // #region debug-point B:vip-video-fallback-picked
+            fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"B",location:"script.js:fetchVipVideoListingsFromSupabase:fallback-picked",msg:"[DEBUG] vipVideo fallback picked",data:{mappedLen:fallbackMapped.length,pickedLen:picked.length,sample:(picked.slice(0,3)).map(x=>({id:x.id,hasVideo:hasListingVideo(x),videoMeta:getListingVideoMeta(x)}))},ts:Date.now()})}).catch(()=>{});
+            try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"B:fallback-picked",mappedLen:fallbackMapped.length,pickedLen:picked.length,sample:(picked.slice(0,3)).map(x=>({id:x.id,hasVideo:hasListingVideo(x),videoMeta:getListingVideoMeta(x)}))});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
+            // #endregion
         }
     }
     vipVideoListings = picked.slice(0, hardCap);
     vipVideoListingsActiveKey = nextKey;
+    // #region debug-point E:vip-video-final
+    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"E",location:"script.js:fetchVipVideoListingsFromSupabase:final",msg:"[DEBUG] vipVideo final list",data:{finalLen:vipVideoListings.length,finalIds:vipVideoListings.map(x=>x.id),key:nextKey},ts:Date.now()})}).catch(()=>{});
+    try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"E:final",finalLen:vipVideoListings.length,finalIds:vipVideoListings.map(x=>x.id),key:nextKey});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
+    // #endregion
     renderVipVideoSection();
 }
 
@@ -1298,6 +1322,9 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
     listingsActiveServerFiltersKey = buildListingsServerFiltersKey(safeFilters);
     listingsNextCursor = fetched > 0 ? buildListingsNextCursorFromRow((data || [])[fetched - 1], safeFilters) : listingsNextCursor;
     if (!append && getActiveSectionId() === 'home-section') {
+        // #region debug-point D:vip-video-triggered
+        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"D",location:"script.js:fetchListingsFromSupabase:trigger-vip-video",msg:"[DEBUG] triggering vipVideo fetch",data:{append,activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null,filters:safeFilters,listingsLen:Array.isArray(listings)?listings.length:null},ts:Date.now()})}).catch(()=>{});
+        // #endregion
         void fetchVipVideoListingsFromSupabase({ silent: true, includeProfiles: true, limit: 4, filters: safeFilters });
     }
     if (initialLoad) {
@@ -16382,12 +16409,20 @@ function renderVipVideoSection() {
     const row = document.getElementById('vipVideoRow');
     if (!section || !row) return;
     if (homeInitialListingsLoading && !homeInitialListingsLoaded) {
+        // #region debug-point C:vip-video-hidden-initial-load
+        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"C",location:"script.js:renderVipVideoSection:initial-load",msg:"[DEBUG] vipVideo hidden due to initial load",data:{homeInitialListingsLoading,homeInitialListingsLoaded,activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null},ts:Date.now()})}).catch(()=>{});
+        try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"C:hidden-initial",homeInitialListingsLoading,homeInitialListingsLoaded,activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
+        // #endregion
         section.style.display = 'none';
         row.innerHTML = '';
         stopVipVideoAutoplayObserver();
         return;
     }
     const items = DEMO_MODE ? getVipVideoListingsForHome() : (Array.isArray(vipVideoListings) ? vipVideoListings.slice() : []);
+    // #region debug-point C:vip-video-render-state
+    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"C",location:"script.js:renderVipVideoSection:state",msg:"[DEBUG] vipVideo render state",data:{activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null,itemsLen:items.length,loading:vipVideoListingsLoading,key:vipVideoListingsActiveKey,filters:typeof currentFilters==="object"?currentFilters:null},ts:Date.now()})}).catch(()=>{});
+    try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"C:render-state",activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null,itemsLen:items.length,loading:vipVideoListingsLoading,key:vipVideoListingsActiveKey,filters:typeof currentFilters==="object"?currentFilters:null});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
+    // #endregion
     if (!items.length) {
         section.style.display = 'none';
         row.innerHTML = '';
