@@ -696,6 +696,34 @@ function updateLoadMoreListingsUI() {
     wrap.style.display = show ? 'flex' : 'none';
 }
 
+let listingsInfiniteObserver = null;
+let listingsLoadMoreInFlight = false;
+let listingsInfiniteLastTriggerAt = 0;
+
+function setupInfiniteListingsLoad() {
+    if (listingsInfiniteObserver) return;
+    const wrap = document.getElementById('loadMoreListingsWrap');
+    if (!wrap) return;
+    try {
+        listingsInfiniteObserver = new IntersectionObserver((entries) => {
+            const entry = entries && entries[0];
+            if (!entry || !entry.isIntersecting) return;
+            const show = !DEMO_MODE && !!listingsHasMore && getActiveSectionId() === 'home-section' && homeInitialListingsLoaded && listingsLoadedCount > 0;
+            if (!show) return;
+            if (listingsLoadMoreInFlight) return;
+            const btn = document.getElementById('loadMoreListingsBtn');
+            if (!btn || btn.disabled) return;
+            const now = Date.now();
+            if (now - listingsInfiniteLastTriggerAt < 900) return;
+            listingsInfiniteLastTriggerAt = now;
+            btn.click();
+        }, { root: null, rootMargin: '650px 0px', threshold: 0 });
+        listingsInfiniteObserver.observe(wrap);
+    } catch (e) {
+        listingsInfiniteObserver = null;
+    }
+}
+
 function isLoggedIn() {
     return !!currentSupabaseUserId;
 }
@@ -6796,6 +6824,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (DEMO_MODE) return;
                 if (!listingsHasMore) return;
                 const wrap = document.getElementById('loadMoreListingsWrap');
+                listingsLoadMoreInFlight = true;
                 try {
                     btn.disabled = true;
                     btn.textContent = 'Loading...';
@@ -6813,6 +6842,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         filters: currentFilters
                     });
                 } finally {
+                    listingsLoadMoreInFlight = false;
                     try {
                         btn.disabled = false;
                         btn.textContent = 'Load more';
@@ -6824,6 +6854,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
     }
+    setupInfiniteListingsLoad();
     homeInitialListingsLoading = true;
     homeInitialListingsLoaded = false;
     const listingsPromise = fetchListingsFromSupabase({ silent: false, includeProfiles: true, limit: INITIAL_LISTINGS_FETCH_LIMIT, offset: 0, append: false });
