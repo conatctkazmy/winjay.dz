@@ -1031,9 +1031,7 @@ let vipVerifiedPageLoading = false;
 let vipVerifiedPageHasMore = false;
 let vipVerifiedPageNextCursor = null;
 let vipVerifiedPageKey = '';
-let vipVerifiedOwnerIdsCache = null;
-let vipVerifiedOwnerIdsCacheAt = 0;
-const VIP_VERIFIED_OWNER_IDS_CACHE_TTL_MS = 5 * 60 * 1000;
+const VIP_VERIFIED_VIEW = 'listings_with_seller_flags';
 
 function buildListingsServerFiltersKey(filters) {
     const f = filters && typeof filters === 'object' ? filters : {};
@@ -1182,23 +1180,31 @@ function buildVipVerifiedFiltersKey(filters) {
     });
 }
 
-async function fetchVipVerifiedOwnerIds({ force = false } = {}) {
-    const client = initSupabase();
-    if (!client) return { ids: [], truncated: false };
-    const now = Date.now();
-    if (!force && Array.isArray(vipVerifiedOwnerIdsCache) && now - vipVerifiedOwnerIdsCacheAt < VIP_VERIFIED_OWNER_IDS_CACHE_TTL_MS) {
-        return { ids: vipVerifiedOwnerIdsCache.slice(), truncated: false };
-    }
+async function fetchListingImagesMetaByListingIds(client, listingIds) {
+    if (!client) return {};
+    const ids = Array.isArray(listingIds) ? listingIds.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0) : [];
+    const unique = Array.from(new Set(ids));
+    if (!unique.length) return {};
     const { data, error } = await client
-        .from('profiles')
-        .select('id')
-        .or('is_vip.eq.true,verified.eq.true')
-        .limit(5000);
-    if (error) return { ids: [], truncated: false };
-    const ids = (data || []).map((r) => r?.id).filter(Boolean);
-    vipVerifiedOwnerIdsCache = ids;
-    vipVerifiedOwnerIdsCacheAt = now;
-    return { ids, truncated: (data || []).length >= 5000 };
+        .from('listing_images')
+        .select('listing_id, url, thumbnail_url, sort_order')
+        .in('listing_id', unique);
+    if (error) return {};
+    const byId = {};
+    (data || []).forEach((r) => {
+        const lid = Number(r?.listing_id) || 0;
+        if (!lid) return;
+        if (!byId[lid]) byId[lid] = [];
+        byId[lid].push({
+            url: r?.url || '',
+            thumbnail_url: r?.thumbnail_url || '',
+            sort_order: Number(r?.sort_order) || 0
+        });
+    });
+    Object.values(byId).forEach((arr) => {
+        arr.sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
+    });
+    return byId;
 }
 
 async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfiles = true, limit = 4, filters = null } = {}) {
@@ -1304,41 +1310,21 @@ async function fetchVipVerifiedHomeFromSupabase({ silent = true, includeProfiles
     vipVerifiedHomeHasMore = false;
     vipVerifiedHomeKey = nextKey;
 
-    const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
-    const embeddedSelect = `${baseSelect}, profiles(id, display_name, tag, avatar_url, verified, is_vip)`;
     const hardCap = Math.max(1, Math.min(12, Number(limit) || 4));
     const fetchLimit = Math.max(20, Math.min(80, hardCap * 20));
-
-    const { ids, truncated } = await fetchVipVerifiedOwnerIds();
-
-    const buildQuery = (selectStr, ownerIds) => {
-        let q = client
-            .from('listings')
-            .select(selectStr);
-        q = applyServerFiltersToListingsQuery(q, safeFilters);
-        if (Array.isArray(ownerIds) && ownerIds.length > 0) q = q.in('owner_id', ownerIds);
-        q = q.limit(fetchLimit);
-        return q;
-    };
 
     let data = null;
     let error = null;
     {
-        const q = buildQuery(includeProfiles ? embeddedSelect : baseSelect, truncated ? [] : ids);
+        let q = client
+            .from(VIP_VERIFIED_VIEW)
+            .select('id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, seller_is_vip, seller_verified');
+        q = applyServerFiltersToListingsQuery(q, safeFilters);
+        q = q.or('seller_is_vip.eq.true,seller_verified.eq.true');
+        q = q.limit(fetchLimit);
         const res = await q;
         data = res.data;
         error = res.error;
-    }
-    let profilesById = {};
-    if (error && includeProfiles) {
-        {
-            const q = buildQuery(baseSelect, truncated ? [] : ids);
-            const res = await q;
-            data = res.data;
-            error = res.error;
-        }
-        const ownerIds = Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean)));
-        profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
     }
     vipVerifiedHomeLoading = false;
     if (error) {
@@ -1348,7 +1334,11 @@ async function fetchVipVerifiedHomeFromSupabase({ silent = true, includeProfiles
         renderListings();
         return;
     }
-    const mapped = (data || []).map((row) => mapSupabaseListingRow(row, profilesById));
+    const listingIds = (data || []).map((r) => Number(r?.id) || 0).filter((x) => x > 0);
+    const imagesByListingId = await fetchListingImagesMetaByListingIds(client, listingIds);
+    const ownerIds = Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean)));
+    const profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
+    const mapped = (data || []).map((row) => mapSupabaseListingRow({ ...row, listing_images: imagesByListingId[Number(row?.id) || 0] || [] }, profilesById));
     const picked = mapped
         .filter((x) => !hasListingVideo(x))
         .filter((x) => isVipOrVerifiedSeller(x));
@@ -1375,38 +1365,19 @@ async function fetchVipVerifiedPageFromSupabase({ silent = true, includeProfiles
     }
     if (!reset && vipVerifiedPageLoading) return;
     vipVerifiedPageLoading = true;
-
-    const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
-    const embeddedSelect = `${baseSelect}, profiles(id, display_name, tag, avatar_url, verified, is_vip)`;
-    const { ids, truncated } = await fetchVipVerifiedOwnerIds();
-    const buildQuery = (selectStr, ownerIds) => {
-        let q = client
-            .from('listings')
-            .select(selectStr);
-        q = applyServerFiltersToListingsQuery(q, safeFilters);
-        q = applyKeysetCursorToListingsQuery(q, cursor, safeFilters);
-        if (Array.isArray(ownerIds) && ownerIds.length > 0) q = q.in('owner_id', ownerIds);
-        q = q.limit(hardLimit);
-        return q;
-    };
     let data = null;
     let error = null;
     {
-        const q = buildQuery(includeProfiles ? embeddedSelect : baseSelect, truncated ? [] : ids);
+        let q = client
+            .from(VIP_VERIFIED_VIEW)
+            .select('id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, seller_is_vip, seller_verified');
+        q = applyServerFiltersToListingsQuery(q, safeFilters);
+        q = applyKeysetCursorToListingsQuery(q, cursor, safeFilters);
+        q = q.or('seller_is_vip.eq.true,seller_verified.eq.true');
+        q = q.limit(hardLimit);
         const res = await q;
         data = res.data;
         error = res.error;
-    }
-    let profilesById = {};
-    if (error && includeProfiles) {
-        {
-            const q = buildQuery(baseSelect, truncated ? [] : ids);
-            const res = await q;
-            data = res.data;
-            error = res.error;
-        }
-        const ownerIds = Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean)));
-        profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
     }
     vipVerifiedPageLoading = false;
     if (error) {
@@ -1416,7 +1387,11 @@ async function fetchVipVerifiedPageFromSupabase({ silent = true, includeProfiles
         return;
     }
     const fetched = Array.isArray(data) ? data.length : 0;
-    const mapped = (data || []).map((row) => mapSupabaseListingRow(row, profilesById));
+    const listingIds = (data || []).map((r) => Number(r?.id) || 0).filter((x) => x > 0);
+    const imagesByListingId = await fetchListingImagesMetaByListingIds(client, listingIds);
+    const ownerIds = Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean)));
+    const profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
+    const mapped = (data || []).map((row) => mapSupabaseListingRow({ ...row, listing_images: imagesByListingId[Number(row?.id) || 0] || [] }, profilesById));
     const picked = mapped
         .filter((x) => !hasListingVideo(x))
         .filter((x) => isVipOrVerifiedSeller(x));
