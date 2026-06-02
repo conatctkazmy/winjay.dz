@@ -1119,6 +1119,14 @@ function buildListingsNextCursorFromRow(row, filters) {
     return cursor;
 }
 
+function applyActiveListingsOnly(q) {
+    try {
+        return q.eq('status', 'active');
+    } catch (e) {
+        return q;
+    }
+}
+
 function sortListingsInPlace(items, filters) {
     if (!Array.isArray(items)) return items;
     const sort = String(filters?.sort || 'newest');
@@ -1232,6 +1240,7 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
         let q = client
             .from('listings')
             .select(selectStr);
+        q = applyActiveListingsOnly(q);
         q = applyServerFiltersToListingsQuery(q, safeFilters);
         q = q.or('details->>video_url.not.is.null,details->>video_path.not.is.null');
         q = q.limit(safeLimit);
@@ -1271,6 +1280,7 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
         let fallbackQ = client
             .from('listings')
             .select(includeProfiles ? embeddedSelect : baseSelect);
+        fallbackQ = applyActiveListingsOnly(fallbackQ);
         fallbackQ = applyServerFiltersToListingsQuery(fallbackQ, safeFilters);
         fallbackQ = fallbackQ.limit(Math.max(20, Math.min(80, hardCap * 20)));
         const fallbackRes = await fallbackQ;
@@ -1319,6 +1329,7 @@ async function fetchVipVerifiedHomeFromSupabase({ silent = true, includeProfiles
         let q = client
             .from(VIP_VERIFIED_VIEW)
             .select('id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, seller_is_vip, seller_verified');
+        q = applyActiveListingsOnly(q);
         q = applyServerFiltersToListingsQuery(q, safeFilters);
         q = q.or('seller_is_vip.eq.true,seller_verified.eq.true');
         q = q.limit(fetchLimit);
@@ -1371,6 +1382,7 @@ async function fetchVipVerifiedPageFromSupabase({ silent = true, includeProfiles
         let q = client
             .from(VIP_VERIFIED_VIEW)
             .select('id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, seller_is_vip, seller_verified');
+        q = applyActiveListingsOnly(q);
         q = applyServerFiltersToListingsQuery(q, safeFilters);
         q = applyKeysetCursorToListingsQuery(q, cursor, safeFilters);
         q = q.or('seller_is_vip.eq.true,seller_verified.eq.true');
@@ -1433,6 +1445,7 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
         let q = client
             .from('listings')
             .select(selectStr);
+        q = applyActiveListingsOnly(q);
         q = applyServerFiltersToListingsQuery(q, safeFilters);
         q = applyKeysetCursorToListingsQuery(q, safeCursor, safeFilters);
         if (safeLimit > 0) {
@@ -11792,6 +11805,8 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 details = Object.keys(mergedDetails).length ? mergedDetails : null;
                 listingVideoTmpMeta = null;
             }
+            const prevStatus = String(existingListing?.status || 'active');
+            const shouldRestoreActive = prevStatus === 'active';
             const updatePayload = {
                 title,
                 description: description || null,
@@ -11806,7 +11821,8 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 city: city || null,
                 contact_phone: contactPhone || null,
                 tags: tags.length ? tags : null,
-                details
+                details,
+                ...(shouldRestoreActive ? { status: 'draft' } : {})
             };
             const { error: updateErr } = await withTimeout(
                 client
@@ -11848,6 +11864,18 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 showToast(msg.includes('row-level security') ? 'Listing images: permission denied (RLS)' : msg, 'alert-circle');
                 return;
             }
+            if (shouldRestoreActive) {
+                const { error: restoreErr } = await withTimeout(
+                    client.from('listings').update({ status: 'active' }).eq('id', listingId).eq('owner_id', userId),
+                    12000,
+                    'Activating listing timed out'
+                );
+                if (restoreErr) {
+                    const msg = restoreErr?.message || 'Failed to activate listing';
+                    showToast(msg.includes('row-level security') ? 'Listings: permission denied (RLS)' : msg, 'alert-circle');
+                    return;
+                }
+            }
             showToast("Annonce mise à jour !", 'check-circle');
             editingListingId = null;
             listingVideoTmpMeta = null;
@@ -11878,7 +11906,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                     contact_phone: contactPhone || null,
                     tags: tags.length ? tags : null,
                     details,
-                    status: 'active'
+                    status: 'draft'
                 })
                 .select('id')
                 .single(),
@@ -11956,6 +11984,9 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
             'Saving images timed out'
         );
         if (imgErr) {
+            try { await client.storage.from(LISTING_IMAGES_BUCKET).remove(objectPaths); } catch (e) { null; }
+            await client.from('listing_images').delete().eq('listing_id', listingId);
+            await client.from('listings').delete().eq('id', listingId).eq('owner_id', userId);
             const msg = imgErr?.message || 'Failed to save listing images';
             showToast(msg.includes('row-level security') ? 'Listing images: permission denied (RLS)' : msg, 'alert-circle');
             return;
@@ -11992,6 +12023,17 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
                 return;
             }
             listingVideoTmpMeta = null;
+        }
+
+        const { error: activateErr } = await withTimeout(
+            client.from('listings').update({ status: 'active' }).eq('id', listingId).eq('owner_id', userId),
+            12000,
+            'Activating listing timed out'
+        );
+        if (activateErr) {
+            const msg = activateErr?.message || 'Failed to activate listing';
+            showToast(msg.includes('row-level security') ? 'Listings: permission denied (RLS)' : msg, 'alert-circle');
+            return;
         }
 
         showToast('Listing posted!', 'check-circle');
