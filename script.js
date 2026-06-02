@@ -1019,6 +1019,9 @@ function mapSupabaseListingRow(row, profilesById = {}) {
 let listingsActiveServerFiltersKey = '';
 let listingsRefetchTimer = null;
 let listingsNextCursor = null;
+let vipVideoListings = [];
+let vipVideoListingsLoading = false;
+let vipVideoListingsActiveKey = '';
 
 function buildListingsServerFiltersKey(filters) {
     const f = filters && typeof filters === 'object' ? filters : {};
@@ -1142,6 +1145,61 @@ function sortListingsInPlace(items, filters) {
     return items;
 }
 
+function buildVipVideoListingsFiltersKey(filters) {
+    const f = filters && typeof filters === 'object' ? filters : {};
+    return JSON.stringify({
+        search: String(f.search || '').trim().toLowerCase(),
+        category: String(f.category || '').trim(),
+        subcategory: String(f.subcategory || '').trim(),
+        wilaya: String(f.wilaya || '').trim(),
+        priceMin: String(f.priceMin || '').trim(),
+        priceMax: String(f.priceMax || '').trim()
+    });
+}
+
+async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfiles = true, limit = 4, filters = null } = {}) {
+    if (DEMO_MODE) {
+        vipVideoListings = getVipVideoListingsForHome();
+        vipVideoListingsLoading = false;
+        renderVipVideoSection();
+        return;
+    }
+    const client = initSupabase();
+    if (!client) return;
+    const safeFiltersRaw = filters && typeof filters === 'object' ? filters : (typeof currentFilters === 'object' ? currentFilters : {});
+    const safeFilters = { ...safeFiltersRaw, sort: 'newest' };
+    const nextKey = buildVipVideoListingsFiltersKey(safeFilters);
+    if (nextKey === vipVideoListingsActiveKey && Array.isArray(vipVideoListings) && vipVideoListings.length > 0) {
+        renderVipVideoSection();
+        return;
+    }
+    vipVideoListingsLoading = true;
+    renderVipVideoSection();
+    const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
+    const embeddedSelect = `${baseSelect}, profiles(id, display_name, tag, avatar_url, verified, is_vip)`;
+    let q = client
+        .from('listings')
+        .select(includeProfiles ? embeddedSelect : baseSelect);
+    q = applyServerFiltersToListingsQuery(q, safeFilters);
+    q = q.or('details->>video_url.not.is.null,details->>video_path.not.is.null');
+    q = q.limit(Math.max(1, Math.min(12, Number(limit) || 4)));
+    const res = await q;
+    const data = res.data;
+    const error = res.error;
+    vipVideoListingsLoading = false;
+    if (error) {
+        if (!silent) showToast(error.message || 'Failed to load VIP videos', 'alert-circle');
+        vipVideoListings = [];
+        vipVideoListingsActiveKey = nextKey;
+        renderVipVideoSection();
+        return;
+    }
+    const mapped = (data || []).map((row) => mapSupabaseListingRow(row, {}));
+    vipVideoListings = mapped.filter((x) => hasListingVideo(x)).slice(0, 4);
+    vipVideoListingsActiveKey = nextKey;
+    renderVipVideoSection();
+}
+
 async function fetchListingsFromSupabase({ silent = false, includeProfiles = true, limit = undefined, offset = 0, append = false, filters = null, cursor = null } = {}) {
     const client = initSupabase();
     if (!client) return;
@@ -1221,6 +1279,9 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
     listingsHasMore = safeLimit > 0 ? fetched >= safeLimit : false;
     listingsActiveServerFiltersKey = buildListingsServerFiltersKey(safeFilters);
     listingsNextCursor = fetched > 0 ? buildListingsNextCursorFromRow((data || [])[fetched - 1], safeFilters) : listingsNextCursor;
+    if (!append && getActiveSectionId() === 'home-section') {
+        void fetchVipVideoListingsFromSupabase({ silent: true, includeProfiles: true, limit: 4, filters: safeFilters });
+    }
     if (initialLoad) {
         homeInitialListingsLoading = false;
         homeInitialListingsLoaded = true;
@@ -15939,7 +16000,7 @@ function getVipVideoListingsForHome() {
         const tb = new Date(b?.created_at || 0).getTime();
         return tb - ta;
     });
-    return items.slice(0, 10);
+    return items.slice(0, 4);
 }
 
 let vipVideoAutoplayObserver = null;
@@ -16308,7 +16369,7 @@ function renderVipVideoSection() {
         stopVipVideoAutoplayObserver();
         return;
     }
-    const items = getVipVideoListingsForHome();
+    const items = DEMO_MODE ? getVipVideoListingsForHome() : (Array.isArray(vipVideoListings) ? vipVideoListings.slice() : []);
     if (!items.length) {
         section.style.display = 'none';
         row.innerHTML = '';
