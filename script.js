@@ -1018,6 +1018,7 @@ function mapSupabaseListingRow(row, profilesById = {}) {
 
 let listingsActiveServerFiltersKey = '';
 let listingsRefetchTimer = null;
+let listingsNextCursor = null;
 
 function buildListingsServerFiltersKey(filters) {
     const f = filters && typeof filters === 'object' ? filters : {};
@@ -1060,16 +1061,88 @@ function applyServerFiltersToListingsQuery(q, filters) {
     if (sort === 'price-asc') {
         q = q.order('price', { ascending: true, nullsFirst: false });
         q = q.order('created_at', { ascending: false });
+        q = q.order('id', { ascending: false });
     } else if (sort === 'price-desc') {
         q = q.order('price', { ascending: false, nullsFirst: false });
         q = q.order('created_at', { ascending: false });
+        q = q.order('id', { ascending: false });
     } else {
         q = q.order('created_at', { ascending: false });
+        q = q.order('id', { ascending: false });
     }
     return q;
 }
 
-async function fetchListingsFromSupabase({ silent = false, includeProfiles = true, limit = undefined, offset = 0, append = false, filters = null } = {}) {
+function applyKeysetCursorToListingsQuery(q, cursor, filters) {
+    const c = cursor && typeof cursor === 'object' ? cursor : null;
+    if (!c) return q;
+    const sort = String(filters?.sort || 'newest');
+    const createdAt = String(c.created_at || '').trim();
+    const id = Number(c.id);
+    const price = Number(c.price);
+    if (!createdAt || !Number.isFinite(id)) return q;
+    if (sort === 'price-asc' && Number.isFinite(price)) {
+        return q.or(
+            `price.gt.${price},and(price.eq.${price},created_at.lt.${createdAt}),and(price.eq.${price},created_at.eq.${createdAt},id.lt.${id})`
+        );
+    }
+    if (sort === 'price-desc' && Number.isFinite(price)) {
+        return q.or(
+            `price.lt.${price},and(price.eq.${price},created_at.lt.${createdAt}),and(price.eq.${price},created_at.eq.${createdAt},id.lt.${id})`
+        );
+    }
+    return q.or(`created_at.lt.${createdAt},and(created_at.eq.${createdAt},id.lt.${id})`);
+}
+
+function buildListingsNextCursorFromRow(row, filters) {
+    const r = row && typeof row === 'object' ? row : null;
+    if (!r) return null;
+    const id = Number(r.id);
+    const createdAt = String(r.created_at || '').trim();
+    if (!createdAt || !Number.isFinite(id)) return null;
+    const cursor = { id, created_at: createdAt };
+    const sort = String(filters?.sort || 'newest');
+    if (sort === 'price-asc' || sort === 'price-desc') cursor.price = Number(r.price) || 0;
+    return cursor;
+}
+
+function sortListingsInPlace(items, filters) {
+    if (!Array.isArray(items)) return items;
+    const sort = String(filters?.sort || 'newest');
+    if (sort === 'price-asc') {
+        items.sort((a, b) => {
+            const pa = Number(a?.price) || 0;
+            const pb = Number(b?.price) || 0;
+            if (pa !== pb) return pa - pb;
+            const ta = new Date(a?.created_at || 0).getTime();
+            const tb = new Date(b?.created_at || 0).getTime();
+            if (tb !== ta) return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+            return (Number(b?.id) || 0) - (Number(a?.id) || 0);
+        });
+        return items;
+    }
+    if (sort === 'price-desc') {
+        items.sort((a, b) => {
+            const pa = Number(a?.price) || 0;
+            const pb = Number(b?.price) || 0;
+            if (pa !== pb) return pb - pa;
+            const ta = new Date(a?.created_at || 0).getTime();
+            const tb = new Date(b?.created_at || 0).getTime();
+            if (tb !== ta) return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+            return (Number(b?.id) || 0) - (Number(a?.id) || 0);
+        });
+        return items;
+    }
+    items.sort((a, b) => {
+        const ta = new Date(a?.created_at || 0).getTime();
+        const tb = new Date(b?.created_at || 0).getTime();
+        if (tb !== ta) return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+        return (Number(b?.id) || 0) - (Number(a?.id) || 0);
+    });
+    return items;
+}
+
+async function fetchListingsFromSupabase({ silent = false, includeProfiles = true, limit = undefined, offset = 0, append = false, filters = null, cursor = null } = {}) {
     const client = initSupabase();
     if (!client) return;
     const safeOffset = Math.max(0, Number(offset) || 0);
@@ -1078,15 +1151,26 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
         homeInitialListingsLoading = true;
         homeInitialListingsLoaded = false;
     }
+    if (!append) listingsNextCursor = null;
     const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
     const embeddedSelect = `${baseSelect}, profiles(id, display_name, tag, avatar_url, verified, is_vip)`;
     const safeFilters = filters && typeof filters === 'object' ? filters : (typeof currentFilters === 'object' ? currentFilters : {});
+    const safeCursor = cursor && typeof cursor === 'object' ? cursor : null;
     const buildQuery = (selectStr) => {
         let q = client
             .from('listings')
             .select(selectStr);
         q = applyServerFiltersToListingsQuery(q, safeFilters);
-        if (safeLimit > 0) q = q.range(safeOffset, safeOffset + safeLimit - 1);
+        q = applyKeysetCursorToListingsQuery(q, safeCursor, safeFilters);
+        if (safeLimit > 0) {
+            if (safeCursor) {
+                q = q.limit(safeLimit);
+            } else if (safeOffset > 0) {
+                q = q.range(safeOffset, safeOffset + safeLimit - 1);
+            } else {
+                q = q.limit(safeLimit);
+            }
+        }
         return q;
     };
     const safeLimitRaw = Number(limit);
@@ -1124,16 +1208,19 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
     if (append) {
         const byId = new Map((listings || []).map((x) => [x.id, x]));
         mapped.forEach((x) => byId.set(x.id, x));
-        listings = Array.from(byId.values()).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+        listings = Array.from(byId.values());
+        sortListingsInPlace(listings, safeFilters);
     } else {
         listings = mapped;
+        sortListingsInPlace(listings, safeFilters);
     }
     if (!append) currentPage = 1;
     const fetched = Array.isArray(data) ? data.length : 0;
     if (!append) listingsLoadedCount = 0;
-    listingsLoadedCount = Math.max(listingsLoadedCount, safeOffset + fetched);
+    listingsLoadedCount += fetched;
     listingsHasMore = safeLimit > 0 ? fetched >= safeLimit : false;
     listingsActiveServerFiltersKey = buildListingsServerFiltersKey(safeFilters);
+    listingsNextCursor = fetched > 0 ? buildListingsNextCursorFromRow((data || [])[fetched - 1], safeFilters) : listingsNextCursor;
     if (initialLoad) {
         homeInitialListingsLoading = false;
         homeInitialListingsLoaded = true;
@@ -6837,9 +6924,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                         silent: false,
                         includeProfiles: true,
                         limit: LISTINGS_FETCH_PAGE_SIZE,
-                        offset: listingsLoadedCount,
+                        offset: 0,
                         append: true,
-                        filters: currentFilters
+                        filters: currentFilters,
+                        cursor: listingsNextCursor
                     });
                 } finally {
                     listingsLoadMoreInFlight = false;
@@ -16309,17 +16397,23 @@ function renderListings() {
     if (regularHeader) {
         regularHeader.style.display = regularListings.length > 0 ? '' : 'none';
     }
+    if (pagination) {
+        pagination.innerHTML = '';
+        pagination.style.display = DEMO_MODE ? '' : 'none';
+    }
     const totalItems = regularListings.length;
-    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
-    if (totalPages > 0 && currentPage > totalPages) currentPage = totalPages;
-    if (currentPage < 1) currentPage = 1;
-
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    const pageItems = regularListings.slice(start, start + ITEMS_PER_PAGE);
-
-    listingsGrid.innerHTML = totalItems > 0 ?
-        pageItems.map(item => createCardHTML(item)).join('') :
-        '';
+    if (DEMO_MODE) {
+        const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+        if (totalPages > 0 && currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        const pageItems = regularListings.slice(start, start + ITEMS_PER_PAGE);
+        listingsGrid.innerHTML = totalItems > 0 ? pageItems.map(item => createCardHTML(item)).join('') : '';
+        renderPagination(totalPages);
+    } else {
+        currentPage = 1;
+        listingsGrid.innerHTML = totalItems > 0 ? regularListings.map(item => createCardHTML(item)).join('') : '';
+    }
     try {
         const imgs = Array.from(listingsGrid.querySelectorAll('img.card-img'));
         imgs.forEach((img, idx) => {
@@ -16340,7 +16434,6 @@ function renderListings() {
     const shouldShowEmpty = totalItems === 0 && vipVerifiedListings.length === 0 && (!isHome || (homeInitialListingsLoaded && !homeInitialListingsLoading));
     document.getElementById('emptyState').style.display = shouldShowEmpty ? 'block' : 'none';
     document.getElementById('listingsGrid').style.display = totalItems === 0 ? 'none' : 'grid';
-    renderPagination(totalPages);
     updateLoadMoreListingsUI();
     initCarouselsInContainer(vipVerifiedRow);
     initCarouselsInContainer(listingsGrid);
