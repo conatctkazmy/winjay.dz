@@ -1182,7 +1182,7 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
         .select(includeProfiles ? embeddedSelect : baseSelect);
     q = applyServerFiltersToListingsQuery(q, safeFilters);
     q = q.or('details->>video_url.not.is.null,details->>video_path.not.is.null');
-    q = q.limit(Math.max(1, Math.min(12, Number(limit) || 4)));
+    q = q.limit(Math.max(1, Math.min(40, Math.max(10, (Number(limit) || 4) * 10))));
     const res = await q;
     const data = res.data;
     const error = res.error;
@@ -1195,7 +1195,25 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
         return;
     }
     const mapped = (data || []).map((row) => mapSupabaseListingRow(row, {}));
-    vipVideoListings = mapped.filter((x) => hasListingVideo(x)).slice(0, 4);
+    const hardCap = Math.max(1, Math.min(12, Number(limit) || 4));
+    let picked = mapped.filter((x) => hasListingVideo(x));
+    if (picked.length === 0) {
+        let fallbackQ = client
+            .from('listings')
+            .select(includeProfiles ? embeddedSelect : baseSelect);
+        fallbackQ = applyServerFiltersToListingsQuery(fallbackQ, safeFilters);
+        fallbackQ = fallbackQ.limit(Math.max(20, Math.min(80, hardCap * 20)));
+        const fallbackRes = await fallbackQ;
+        const fallbackData = fallbackRes.data;
+        const fallbackError = fallbackRes.error;
+        if (fallbackError) {
+            if (!silent) showToast(fallbackError.message || 'Failed to load VIP videos', 'alert-circle');
+        } else {
+            const fallbackMapped = (fallbackData || []).map((row) => mapSupabaseListingRow(row, {}));
+            picked = fallbackMapped.filter((x) => hasListingVideo(x));
+        }
+    }
+    vipVideoListings = picked.slice(0, hardCap);
     vipVideoListingsActiveKey = nextKey;
     renderVipVideoSection();
 }
