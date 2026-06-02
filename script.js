@@ -1022,6 +1022,18 @@ let listingsNextCursor = null;
 let vipVideoListings = [];
 let vipVideoListingsLoading = false;
 let vipVideoListingsActiveKey = '';
+let vipVerifiedHomeListings = [];
+let vipVerifiedHomeLoading = false;
+let vipVerifiedHomeHasMore = false;
+let vipVerifiedHomeKey = '';
+let vipVerifiedPageListings = [];
+let vipVerifiedPageLoading = false;
+let vipVerifiedPageHasMore = false;
+let vipVerifiedPageNextCursor = null;
+let vipVerifiedPageKey = '';
+let vipVerifiedOwnerIdsCache = null;
+let vipVerifiedOwnerIdsCacheAt = 0;
+const VIP_VERIFIED_OWNER_IDS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function buildListingsServerFiltersKey(filters) {
     const f = filters && typeof filters === 'object' ? filters : {};
@@ -1157,6 +1169,38 @@ function buildVipVideoListingsFiltersKey(filters) {
     });
 }
 
+function buildVipVerifiedFiltersKey(filters) {
+    const f = filters && typeof filters === 'object' ? filters : {};
+    return JSON.stringify({
+        search: String(f.search || '').trim().toLowerCase(),
+        category: String(f.category || '').trim(),
+        subcategory: String(f.subcategory || '').trim(),
+        wilaya: String(f.wilaya || '').trim(),
+        priceMin: String(f.priceMin || '').trim(),
+        priceMax: String(f.priceMax || '').trim(),
+        sort: String(f.sort || 'newest').trim()
+    });
+}
+
+async function fetchVipVerifiedOwnerIds({ force = false } = {}) {
+    const client = initSupabase();
+    if (!client) return { ids: [], truncated: false };
+    const now = Date.now();
+    if (!force && Array.isArray(vipVerifiedOwnerIdsCache) && now - vipVerifiedOwnerIdsCacheAt < VIP_VERIFIED_OWNER_IDS_CACHE_TTL_MS) {
+        return { ids: vipVerifiedOwnerIdsCache.slice(), truncated: false };
+    }
+    const { data, error } = await client
+        .from('profiles')
+        .select('id')
+        .or('is_vip.eq.true,verified.eq.true')
+        .limit(5000);
+    if (error) return { ids: [], truncated: false };
+    const ids = (data || []).map((r) => r?.id).filter(Boolean);
+    vipVerifiedOwnerIdsCache = ids;
+    vipVerifiedOwnerIdsCacheAt = now;
+    return { ids, truncated: (data || []).length >= 5000 };
+}
+
 async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfiles = true, limit = 4, filters = null } = {}) {
     if (DEMO_MODE) {
         vipVideoListings = getVipVideoListingsForHome();
@@ -1169,10 +1213,6 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
     const safeFiltersRaw = filters && typeof filters === 'object' ? filters : (typeof currentFilters === 'object' ? currentFilters : {});
     const safeFilters = { ...safeFiltersRaw, sort: 'newest' };
     const nextKey = buildVipVideoListingsFiltersKey(safeFilters);
-    // #region debug-point A:vip-video-start
-    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"A",location:"script.js:fetchVipVideoListingsFromSupabase:start",msg:"[DEBUG] vipVideo fetch start",data:{activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null,key:nextKey,filters:safeFilters,limit},ts:Date.now()})}).catch(()=>{});
-    try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"A:start",key:nextKey,filters:safeFilters,limit,activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
-    // #endregion
     if (nextKey === vipVideoListingsActiveKey && Array.isArray(vipVideoListings) && vipVideoListings.length > 0) {
         renderVipVideoSection();
         return;
@@ -1211,10 +1251,6 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
         profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
     }
     vipVideoListingsLoading = false;
-    // #region debug-point A:vip-video-primary-result
-    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"A",location:"script.js:fetchVipVideoListingsFromSupabase:primary",msg:"[DEBUG] vipVideo primary query result",data:{error:error?String(error.message||error):null,dataLen:Array.isArray(data)?data.length:null,key:nextKey},ts:Date.now()})}).catch(()=>{});
-    try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"A:primary",key:nextKey,error:error?String(error.message||error):null,dataLen:Array.isArray(data)?data.length:null});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
-    // #endregion
     if (error) {
         if (!silent) showToast(error.message || 'Failed to load VIP videos', 'alert-circle');
         vipVideoListings = [];
@@ -1225,10 +1261,6 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
     const mapped = (data || []).map((row) => mapSupabaseListingRow(row, profilesById));
     const hardCap = Math.max(1, Math.min(12, Number(limit) || 4));
     let picked = mapped.filter((x) => hasListingVideo(x));
-    // #region debug-point B:vip-video-picked-after-map
-    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"B",location:"script.js:fetchVipVideoListingsFromSupabase:mapped",msg:"[DEBUG] vipVideo mapped/picked",data:{mappedLen:mapped.length,pickedLen:picked.length,sample:(picked.slice(0,3)).map(x=>({id:x.id,hasVideo:hasListingVideo(x),videoMeta:getListingVideoMeta(x)}))},ts:Date.now()})}).catch(()=>{});
-    try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"B:mapped",mappedLen:mapped.length,pickedLen:picked.length,sample:(picked.slice(0,3)).map(x=>({id:x.id,hasVideo:hasListingVideo(x),videoMeta:getListingVideoMeta(x)}))});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
-    // #endregion
     if (picked.length === 0) {
         let fallbackQ = client
             .from('listings')
@@ -1238,28 +1270,174 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
         const fallbackRes = await fallbackQ;
         const fallbackData = fallbackRes.data;
         const fallbackError = fallbackRes.error;
-        // #region debug-point D:vip-video-fallback-result
-        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"D",location:"script.js:fetchVipVideoListingsFromSupabase:fallback",msg:"[DEBUG] vipVideo fallback query result",data:{error:fallbackError?String(fallbackError.message||fallbackError):null,dataLen:Array.isArray(fallbackData)?fallbackData.length:null},ts:Date.now()})}).catch(()=>{});
-        try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"D:fallback",error:fallbackError?String(fallbackError.message||fallbackError):null,dataLen:Array.isArray(fallbackData)?fallbackData.length:null});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
-        // #endregion
         if (fallbackError) {
             if (!silent) showToast(fallbackError.message || 'Failed to load VIP videos', 'alert-circle');
         } else {
             const fallbackMapped = (fallbackData || []).map((row) => mapSupabaseListingRow(row, {}));
             picked = fallbackMapped.filter((x) => hasListingVideo(x));
-            // #region debug-point B:vip-video-fallback-picked
-            fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"B",location:"script.js:fetchVipVideoListingsFromSupabase:fallback-picked",msg:"[DEBUG] vipVideo fallback picked",data:{mappedLen:fallbackMapped.length,pickedLen:picked.length,sample:(picked.slice(0,3)).map(x=>({id:x.id,hasVideo:hasListingVideo(x),videoMeta:getListingVideoMeta(x)}))},ts:Date.now()})}).catch(()=>{});
-            try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"B:fallback-picked",mappedLen:fallbackMapped.length,pickedLen:picked.length,sample:(picked.slice(0,3)).map(x=>({id:x.id,hasVideo:hasListingVideo(x),videoMeta:getListingVideoMeta(x)}))});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
-            // #endregion
         }
     }
     vipVideoListings = picked.slice(0, hardCap);
     vipVideoListingsActiveKey = nextKey;
-    // #region debug-point E:vip-video-final
-    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"E",location:"script.js:fetchVipVideoListingsFromSupabase:final",msg:"[DEBUG] vipVideo final list",data:{finalLen:vipVideoListings.length,finalIds:vipVideoListings.map(x=>x.id),key:nextKey},ts:Date.now()})}).catch(()=>{});
-    try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"E:final",finalLen:vipVideoListings.length,finalIds:vipVideoListings.map(x=>x.id),key:nextKey});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
-    // #endregion
     renderVipVideoSection();
+}
+
+async function fetchVipVerifiedHomeFromSupabase({ silent = true, includeProfiles = true, limit = 4, filters = null } = {}) {
+    if (DEMO_MODE) {
+        const allFiltered = getFilteredListings().filter((l) => !hasListingVideo(l));
+        const items = allFiltered.filter((l) => isVipOrVerifiedSeller(l));
+        vipVerifiedHomeListings = items.slice(0, 4);
+        vipVerifiedHomeHasMore = items.length > 4;
+        vipVerifiedHomeLoading = false;
+        renderListings();
+        return;
+    }
+    const client = initSupabase();
+    if (!client) return;
+    const safeFilters = filters && typeof filters === 'object' ? filters : (typeof currentFilters === 'object' ? currentFilters : {});
+    const nextKey = buildVipVerifiedFiltersKey(safeFilters);
+    if (nextKey === vipVerifiedHomeKey && Array.isArray(vipVerifiedHomeListings) && vipVerifiedHomeListings.length > 0) {
+        renderListings();
+        return;
+    }
+    vipVerifiedHomeLoading = true;
+    vipVerifiedHomeHasMore = false;
+    vipVerifiedHomeKey = nextKey;
+
+    const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
+    const embeddedSelect = `${baseSelect}, profiles(id, display_name, tag, avatar_url, verified, is_vip)`;
+    const hardCap = Math.max(1, Math.min(12, Number(limit) || 4));
+    const fetchLimit = Math.max(20, Math.min(80, hardCap * 20));
+
+    const { ids, truncated } = await fetchVipVerifiedOwnerIds();
+
+    const buildQuery = (selectStr, ownerIds) => {
+        let q = client
+            .from('listings')
+            .select(selectStr);
+        q = applyServerFiltersToListingsQuery(q, safeFilters);
+        if (Array.isArray(ownerIds) && ownerIds.length > 0) q = q.in('owner_id', ownerIds);
+        q = q.limit(fetchLimit);
+        return q;
+    };
+
+    let data = null;
+    let error = null;
+    {
+        const q = buildQuery(includeProfiles ? embeddedSelect : baseSelect, truncated ? [] : ids);
+        const res = await q;
+        data = res.data;
+        error = res.error;
+    }
+    let profilesById = {};
+    if (error && includeProfiles) {
+        {
+            const q = buildQuery(baseSelect, truncated ? [] : ids);
+            const res = await q;
+            data = res.data;
+            error = res.error;
+        }
+        const ownerIds = Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean)));
+        profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
+    }
+    vipVerifiedHomeLoading = false;
+    if (error) {
+        if (!silent) showToast(error.message || 'Failed to load VIP listings', 'alert-circle');
+        vipVerifiedHomeListings = [];
+        vipVerifiedHomeHasMore = false;
+        renderListings();
+        return;
+    }
+    const mapped = (data || []).map((row) => mapSupabaseListingRow(row, profilesById));
+    const picked = mapped
+        .filter((x) => !hasListingVideo(x))
+        .filter((x) => isVipOrVerifiedSeller(x));
+    vipVerifiedHomeListings = picked.slice(0, hardCap);
+    vipVerifiedHomeHasMore = picked.length > hardCap;
+    renderListings();
+}
+
+async function fetchVipVerifiedPageFromSupabase({ silent = true, includeProfiles = true, limit = 24, cursor = null, reset = false, filters = null } = {}) {
+    if (DEMO_MODE) {
+        renderVipVerifiedListingsPage();
+        return;
+    }
+    const client = initSupabase();
+    if (!client) return;
+    const safeFilters = filters && typeof filters === 'object' ? filters : (typeof currentFilters === 'object' ? currentFilters : {});
+    const nextKey = buildVipVerifiedFiltersKey(safeFilters);
+    const hardLimit = Math.max(6, Math.min(60, Number(limit) || 24));
+    if (reset || nextKey !== vipVerifiedPageKey) {
+        vipVerifiedPageKey = nextKey;
+        vipVerifiedPageListings = [];
+        vipVerifiedPageHasMore = false;
+        vipVerifiedPageNextCursor = null;
+    }
+    if (!reset && vipVerifiedPageLoading) return;
+    vipVerifiedPageLoading = true;
+
+    const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
+    const embeddedSelect = `${baseSelect}, profiles(id, display_name, tag, avatar_url, verified, is_vip)`;
+    const { ids, truncated } = await fetchVipVerifiedOwnerIds();
+    const buildQuery = (selectStr, ownerIds) => {
+        let q = client
+            .from('listings')
+            .select(selectStr);
+        q = applyServerFiltersToListingsQuery(q, safeFilters);
+        q = applyKeysetCursorToListingsQuery(q, cursor, safeFilters);
+        if (Array.isArray(ownerIds) && ownerIds.length > 0) q = q.in('owner_id', ownerIds);
+        q = q.limit(hardLimit);
+        return q;
+    };
+    let data = null;
+    let error = null;
+    {
+        const q = buildQuery(includeProfiles ? embeddedSelect : baseSelect, truncated ? [] : ids);
+        const res = await q;
+        data = res.data;
+        error = res.error;
+    }
+    let profilesById = {};
+    if (error && includeProfiles) {
+        {
+            const q = buildQuery(baseSelect, truncated ? [] : ids);
+            const res = await q;
+            data = res.data;
+            error = res.error;
+        }
+        const ownerIds = Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean)));
+        profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
+    }
+    vipVerifiedPageLoading = false;
+    if (error) {
+        if (!silent) showToast(error.message || 'Failed to load VIP listings', 'alert-circle');
+        vipVerifiedPageHasMore = false;
+        renderVipVerifiedListingsPage();
+        return;
+    }
+    const fetched = Array.isArray(data) ? data.length : 0;
+    const mapped = (data || []).map((row) => mapSupabaseListingRow(row, profilesById));
+    const picked = mapped
+        .filter((x) => !hasListingVideo(x))
+        .filter((x) => isVipOrVerifiedSeller(x));
+    const byId = new Map((vipVerifiedPageListings || []).map((x) => [x.id, x]));
+    picked.forEach((x) => byId.set(x.id, x));
+    vipVerifiedPageListings = Array.from(byId.values());
+    sortListingsInPlace(vipVerifiedPageListings, safeFilters);
+    vipVerifiedPageHasMore = fetched >= hardLimit;
+    vipVerifiedPageNextCursor = fetched > 0 ? buildListingsNextCursorFromRow((data || [])[fetched - 1], safeFilters) : vipVerifiedPageNextCursor;
+    renderVipVerifiedListingsPage();
+}
+
+function loadMoreVipVerifiedListingsPage() {
+    void fetchVipVerifiedPageFromSupabase({
+        silent: false,
+        includeProfiles: true,
+        limit: 24,
+        cursor: vipVerifiedPageNextCursor,
+        reset: false,
+        filters: currentFilters
+    });
 }
 
 async function fetchListingsFromSupabase({ silent = false, includeProfiles = true, limit = undefined, offset = 0, append = false, filters = null, cursor = null } = {}) {
@@ -1342,10 +1520,8 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
     listingsActiveServerFiltersKey = buildListingsServerFiltersKey(safeFilters);
     listingsNextCursor = fetched > 0 ? buildListingsNextCursorFromRow((data || [])[fetched - 1], safeFilters) : listingsNextCursor;
     if (!append && getActiveSectionId() === 'home-section') {
-        // #region debug-point D:vip-video-triggered
-        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"D",location:"script.js:fetchListingsFromSupabase:trigger-vip-video",msg:"[DEBUG] triggering vipVideo fetch",data:{append,activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null,filters:safeFilters,listingsLen:Array.isArray(listings)?listings.length:null},ts:Date.now()})}).catch(()=>{});
-        // #endregion
         void fetchVipVideoListingsFromSupabase({ silent: true, includeProfiles: true, limit: 4, filters: safeFilters });
+        void fetchVipVerifiedHomeFromSupabase({ silent: true, includeProfiles: true, limit: 4, filters: safeFilters });
     }
     if (initialLoad) {
         homeInitialListingsLoading = false;
@@ -16429,20 +16605,12 @@ function renderVipVideoSection() {
     const row = document.getElementById('vipVideoRow');
     if (!section || !row) return;
     if (homeInitialListingsLoading && !homeInitialListingsLoaded) {
-        // #region debug-point C:vip-video-hidden-initial-load
-        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"C",location:"script.js:renderVipVideoSection:initial-load",msg:"[DEBUG] vipVideo hidden due to initial load",data:{homeInitialListingsLoading,homeInitialListingsLoaded,activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null},ts:Date.now()})}).catch(()=>{});
-        try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"C:hidden-initial",homeInitialListingsLoading,homeInitialListingsLoaded,activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
-        // #endregion
         section.style.display = 'none';
         row.innerHTML = '';
         stopVipVideoAutoplayObserver();
         return;
     }
     const items = DEMO_MODE ? getVipVideoListingsForHome() : (Array.isArray(vipVideoListings) ? vipVideoListings.slice() : []);
-    // #region debug-point C:vip-video-render-state
-    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"C",location:"script.js:renderVipVideoSection:state",msg:"[DEBUG] vipVideo render state",data:{activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null,itemsLen:items.length,loading:vipVideoListingsLoading,key:vipVideoListingsActiveKey,filters:typeof currentFilters==="object"?currentFilters:null},ts:Date.now()})}).catch(()=>{});
-    try{window.__vipVideoDebugEvents=window.__vipVideoDebugEvents||[];window.__vipVideoDebugEvents.push({ts:Date.now(),pt:"C:render-state",activeSection:typeof getActiveSectionId==="function"?getActiveSectionId():null,itemsLen:items.length,loading:vipVideoListingsLoading,key:vipVideoListingsActiveKey,filters:typeof currentFilters==="object"?currentFilters:null});window.__vipVideoDebugLast=window.__vipVideoDebugEvents[window.__vipVideoDebugEvents.length-1]}catch(e){}
-    // #endregion
     if (!items.length) {
         section.style.display = 'none';
         row.innerHTML = '';
@@ -16511,7 +16679,9 @@ function renderListings() {
     }
     const vipItems = getVipVideoListingsForHome();
     const allFiltered = getFilteredListings().filter((l) => !hasListingVideo(l));
-    const vipVerifiedListings = allFiltered.filter(item => isVipOrVerifiedSeller(item));
+    const vipVerifiedListings = DEMO_MODE
+        ? allFiltered.filter(item => isVipOrVerifiedSeller(item))
+        : (Array.isArray(vipVerifiedHomeListings) ? vipVerifiedHomeListings.slice() : []);
     const regularListings = allFiltered.filter(item => !isVipOrVerifiedSeller(item));
     const vipVerifiedSection = document.getElementById('vipVerifiedSection');
     const vipVerifiedRow = document.getElementById('vipVerifiedRow');
@@ -16521,7 +16691,7 @@ function renderListings() {
         if (vipVerifiedListings.length > 0) {
             vipVerifiedSection.style.display = '';
             vipVerifiedRow.innerHTML = vipVerifiedListings.slice(0, 4).map(item => createVipVerifiedCardHTML(item)).join('');
-            if (vipVerifiedMoreBtn) vipVerifiedMoreBtn.style.display = vipVerifiedListings.length > 4 ? '' : 'none';
+            if (vipVerifiedMoreBtn) vipVerifiedMoreBtn.style.display = (!DEMO_MODE && vipVerifiedHomeHasMore) || (DEMO_MODE && vipVerifiedListings.length > 4) ? '' : 'none';
         } else {
             vipVerifiedSection.style.display = 'none';
             vipVerifiedRow.innerHTML = '';
@@ -16579,16 +16749,22 @@ function renderListings() {
 
 function openVipVerifiedListingsPage() {
     showSection('vip-verified-listings-section');
+    void fetchVipVerifiedPageFromSupabase({ silent: true, includeProfiles: true, limit: 24, cursor: null, reset: true, filters: currentFilters });
 }
 
 function renderVipVerifiedListingsPage() {
     const grid = document.getElementById('vipVerifiedPageGrid');
     const empty = document.getElementById('vipVerifiedPageEmpty');
     if (!grid) return;
-    const items = getFilteredListings()
-        .filter((l) => !hasListingVideo(l))
-        .filter((l) => isVipOrVerifiedSeller(l));
-    grid.innerHTML = items.length > 0 ? items.map((item) => createVipVerifiedCardHTML(item)).join('') : '';
+    const items = DEMO_MODE
+        ? getFilteredListings().filter((l) => !hasListingVideo(l)).filter((l) => isVipOrVerifiedSeller(l))
+        : (Array.isArray(vipVerifiedPageListings) ? vipVerifiedPageListings.slice() : []);
+    const loadMoreBtn = (!DEMO_MODE && vipVerifiedPageHasMore)
+        ? `<div class="load-more-wrap" style="display:flex; justify-content:center; margin-top: 16px;">
+                <button class="submit-btn load-more-btn" type="button" onclick="loadMoreVipVerifiedListingsPage()">Load more</button>
+           </div>`
+        : '';
+    grid.innerHTML = items.length > 0 ? items.map((item) => createVipVerifiedCardHTML(item)).join('') + loadMoreBtn : '';
     if (empty) empty.style.display = items.length > 0 ? 'none' : 'block';
     initCarouselsInContainer(grid);
     scheduleLucideCreateIcons(grid);
