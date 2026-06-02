@@ -910,6 +910,38 @@ function normalizeListingCategory(category, subcategory = '') {
     return CATEGORY_ALIASES[cat] || cat;
 }
 
+const NORMALIZED_CATEGORY_TO_RAW = (() => {
+    const map = {};
+    Object.entries(CATEGORY_ALIASES).forEach(([raw, normalized]) => {
+        if (!map[normalized]) map[normalized] = new Set();
+        map[normalized].add(raw);
+    });
+    return map;
+})();
+
+function getRawCategoriesForNormalizedCategory(category) {
+    const c = String(category || '').trim();
+    if (!c) return [];
+    const set = NORMALIZED_CATEGORY_TO_RAW[c];
+    const raw = set ? Array.from(set.values()) : [];
+    if (!raw.includes(c)) raw.unshift(c);
+    if (c === 'Emploi' || c === 'Services') {
+        if (!raw.includes('Emploi & Services')) raw.push('Emploi & Services');
+    }
+    return raw;
+}
+
+function sanitizePostgrestSearchTerm(term) {
+    const raw = String(term || '').toLowerCase().trim();
+    if (!raw) return '';
+    return raw
+        .replace(/[%_]/g, ' ')
+        .replace(/[(),]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 80);
+}
+
 function mapSupabaseListingRow(row, profilesById = {}) {
     const images = Array.isArray(row?.listing_images) ? row.listing_images.slice() : [];
     images.sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
@@ -956,7 +988,60 @@ function mapSupabaseListingRow(row, profilesById = {}) {
     };
 }
 
-async function fetchListingsFromSupabase({ silent = false, includeProfiles = true, limit = undefined, offset = 0, append = false } = {}) {
+let listingsActiveServerFiltersKey = '';
+let listingsRefetchTimer = null;
+
+function buildListingsServerFiltersKey(filters) {
+    const f = filters && typeof filters === 'object' ? filters : {};
+    return JSON.stringify({
+        search: String(f.search || '').trim().toLowerCase(),
+        category: String(f.category || '').trim(),
+        subcategory: String(f.subcategory || '').trim(),
+        wilaya: String(f.wilaya || '').trim(),
+        priceMin: String(f.priceMin || '').trim(),
+        priceMax: String(f.priceMax || '').trim(),
+        sort: String(f.sort || 'newest').trim()
+    });
+}
+
+function applyServerFiltersToListingsQuery(q, filters) {
+    const f = filters && typeof filters === 'object' ? filters : {};
+    const search = sanitizePostgrestSearchTerm(f.search);
+    if (search) {
+        q = q.or(`title.ilike.%${search}%,description.ilike.%${search}%,category.ilike.%${search}%`);
+    }
+    if (f.category) {
+        const rawCats = getRawCategoriesForNormalizedCategory(f.category);
+        if (rawCats.length === 1) {
+            q = q.eq('category', rawCats[0]);
+        } else if (rawCats.length > 1) {
+            q = q.in('category', rawCats);
+        }
+    }
+    if (f.subcategory) q = q.eq('subcategory', String(f.subcategory));
+    if (f.wilaya) q = q.eq('wilaya', String(f.wilaya));
+    if (f.priceMin) {
+        const min = Number.parseInt(String(f.priceMin), 10);
+        if (Number.isFinite(min)) q = q.gte('price', min);
+    }
+    if (f.priceMax) {
+        const max = Number.parseInt(String(f.priceMax), 10);
+        if (Number.isFinite(max)) q = q.lte('price', max);
+    }
+    const sort = String(f.sort || 'newest');
+    if (sort === 'price-asc') {
+        q = q.order('price', { ascending: true, nullsFirst: false });
+        q = q.order('created_at', { ascending: false });
+    } else if (sort === 'price-desc') {
+        q = q.order('price', { ascending: false, nullsFirst: false });
+        q = q.order('created_at', { ascending: false });
+    } else {
+        q = q.order('created_at', { ascending: false });
+    }
+    return q;
+}
+
+async function fetchListingsFromSupabase({ silent = false, includeProfiles = true, limit = undefined, offset = 0, append = false, filters = null } = {}) {
     const client = initSupabase();
     if (!client) return;
     const safeOffset = Math.max(0, Number(offset) || 0);
@@ -967,11 +1052,12 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
     }
     const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
     const embeddedSelect = `${baseSelect}, profiles(id, display_name, tag, avatar_url, verified, is_vip)`;
+    const safeFilters = filters && typeof filters === 'object' ? filters : (typeof currentFilters === 'object' ? currentFilters : {});
     const buildQuery = (selectStr) => {
         let q = client
             .from('listings')
-            .select(selectStr)
-            .order('created_at', { ascending: false });
+            .select(selectStr);
+        q = applyServerFiltersToListingsQuery(q, safeFilters);
         if (safeLimit > 0) q = q.range(safeOffset, safeOffset + safeLimit - 1);
         return q;
     };
@@ -1019,6 +1105,7 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
     if (!append) listingsLoadedCount = 0;
     listingsLoadedCount = Math.max(listingsLoadedCount, safeOffset + fetched);
     listingsHasMore = safeLimit > 0 ? fetched >= safeLimit : false;
+    listingsActiveServerFiltersKey = buildListingsServerFiltersKey(safeFilters);
     if (initialLoad) {
         homeInitialListingsLoading = false;
         homeInitialListingsLoaded = true;
@@ -1026,6 +1113,55 @@ async function fetchListingsFromSupabase({ silent = false, includeProfiles = tru
     clearCardHtmlCache();
     scheduleSaveMarketplaceListingsToStorage();
     scheduleMarketplaceRenders({ listings: true, loadMoreUI: true, iconsRoot: document.getElementById('home-section') });
+}
+
+async function refetchListingsForCurrentFilters({ silent = false } = {}) {
+    if (DEMO_MODE) {
+        renderListings();
+        return;
+    }
+    if (listingsGrid) {
+        homeInitialListingsLoading = true;
+        homeInitialListingsLoaded = false;
+        listingsGrid.innerHTML = getHomeListingsSkeletonHTML(12);
+        const empty = document.getElementById('emptyState');
+        if (empty) empty.style.display = 'none';
+        const gridEl = document.getElementById('listingsGrid');
+        if (gridEl) gridEl.style.display = 'grid';
+        if (pagination) pagination.innerHTML = '';
+        updateLoadMoreListingsUI();
+        renderVipVideoSection();
+    }
+    await fetchListingsFromSupabase({
+        silent,
+        includeProfiles: true,
+        limit: INITIAL_LISTINGS_FETCH_LIMIT,
+        offset: 0,
+        append: false,
+        filters: currentFilters
+    });
+}
+
+function triggerListingsRefetch({ immediate = false, silent = false } = {}) {
+    const key = buildListingsServerFiltersKey(currentFilters);
+    if (!immediate && key === listingsActiveServerFiltersKey && Array.isArray(listings) && listings.length > 0) {
+        renderListings();
+        return;
+    }
+    try {
+        clearTimeout(listingsRefetchTimer);
+    } catch (e) {
+        null;
+    }
+    const run = () => {
+        listingsRefetchTimer = null;
+        void refetchListingsForCurrentFilters({ silent });
+    };
+    if (immediate) {
+        run();
+        return;
+    }
+    listingsRefetchTimer = setTimeout(run, 250);
 }
 
 function flushMarketplaceListingsSave() {
@@ -6673,7 +6809,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         includeProfiles: true,
                         limit: LISTINGS_FETCH_PAGE_SIZE,
                         offset: listingsLoadedCount,
-                        append: true
+                        append: true,
+                        filters: currentFilters
                     });
                 } finally {
                     try {
@@ -12062,7 +12199,7 @@ function formatUsernameInput(input) {
 }
 
 function commitListingsSearch(searchTerm) {
-    applyFilters();
+    triggerListingsRefetch({ immediate: true });
     if (searchTerm && !searchHistory.includes(searchTerm)) {
         searchHistory.unshift(searchTerm);
         if (searchHistory.length > 5) searchHistory.pop();
@@ -15231,7 +15368,7 @@ function applyFilters() {
     currentFilters.sort = document.getElementById('sortSelect').value;
     updateActiveFilters();
     currentPage = 1;
-    renderListings();
+    triggerListingsRefetch();
     syncHomeCategorySwipeFromFilters();
 }
 
@@ -15246,7 +15383,7 @@ function clearFilters() {
     document.getElementById('filterPanel').classList.remove('active');
     updateActiveFilters();
     currentPage = 1;
-    renderListings();
+    triggerListingsRefetch({ immediate: true });
     syncHomeCategorySwipeFromFilters();
 }
 
@@ -15286,7 +15423,7 @@ function removeFilter(type) {
     }
     updateActiveFilters();
     currentPage = 1;
-    renderListings();
+    triggerListingsRefetch({ immediate: true });
 }
 
 function clearAllFilters() {
@@ -15299,7 +15436,7 @@ function clearAllFilters() {
     document.getElementById('mainSearchInput').value = '';
     updateActiveFilters();
     currentPage = 1;
-    renderListings();
+    triggerListingsRefetch({ immediate: true });
     syncHomeCategorySwipeFromFilters();
     showToast('Filtres effacés', 'filter');
 }
@@ -15307,10 +15444,24 @@ function clearAllFilters() {
 function handleSort() {
     currentFilters.sort = document.getElementById('sortSelect').value;
     currentPage = 1;
-    renderListings();
+    triggerListingsRefetch({ immediate: true });
 }
 
 function getFilteredListings() {
+    if (!DEMO_MODE) {
+        const copy = Array.isArray(listings) ? listings.slice() : [];
+        if (currentFilters.sort === 'newest') {
+            copy.sort((a, b) => {
+                const av = hasListingVideo(a) ? 1 : 0;
+                const bv = hasListingVideo(b) ? 1 : 0;
+                if (av !== bv) return bv - av;
+                const ta = new Date(a?.created_at || 0).getTime();
+                const tb = new Date(b?.created_at || 0).getTime();
+                return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+            });
+        }
+        return copy;
+    }
     let filtered = [...listings];
     if (currentFilters.search) {
         filtered = filtered.filter(l => l.title.toLowerCase().includes(currentFilters.search) || l.category.toLowerCase().includes(currentFilters.search));
@@ -15322,7 +15473,7 @@ function getFilteredListings() {
         filtered = filtered.filter(l => String(l.subcategory || '') === currentFilters.subcategory);
     }
     if (currentFilters.wilaya) {
-        filtered = filtered.filter(l => l.location === currentFilters.wilaya);
+        filtered = filtered.filter(l => String(l.wilaya || '') === currentFilters.wilaya);
     }
     if (currentFilters.priceMin) {
         filtered = filtered.filter(l => l.price >= parseInt(currentFilters.priceMin));
