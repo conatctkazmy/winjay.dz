@@ -1181,15 +1181,35 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
     renderVipVideoSection();
     const baseSelect = 'id, created_at, owner_id, title, description, condition, price_type, delivery, availability, city, contact_phone, tags, subcategory, price, category, wilaya, status, views_count, likes_count, details, listing_images(url, thumbnail_url, sort_order)';
     const embeddedSelect = `${baseSelect}, profiles(id, display_name, tag, avatar_url, verified, is_vip)`;
-    let q = client
-        .from('listings')
-        .select(includeProfiles ? embeddedSelect : baseSelect);
-    q = applyServerFiltersToListingsQuery(q, safeFilters);
-    q = q.or('details->>video_url.not.is.null,details->>video_path.not.is.null');
-    q = q.limit(Math.max(1, Math.min(40, Math.max(10, (Number(limit) || 4) * 10))));
-    const res = await q;
-    const data = res.data;
-    const error = res.error;
+    const safeLimit = Math.max(1, Math.min(40, Math.max(10, (Number(limit) || 4) * 10)));
+    const buildVipQuery = (selectStr) => {
+        let q = client
+            .from('listings')
+            .select(selectStr);
+        q = applyServerFiltersToListingsQuery(q, safeFilters);
+        q = q.or('details->>video_url.not.is.null,details->>video_path.not.is.null');
+        q = q.limit(safeLimit);
+        return q;
+    };
+    let data = null;
+    let error = null;
+    let profilesById = {};
+    {
+        const q = buildVipQuery(includeProfiles ? embeddedSelect : baseSelect);
+        const res = await q;
+        data = res.data;
+        error = res.error;
+    }
+    if (error && includeProfiles) {
+        {
+            const q = buildVipQuery(baseSelect);
+            const res = await q;
+            data = res.data;
+            error = res.error;
+        }
+        const ownerIds = Array.from(new Set((data || []).map((r) => r?.owner_id).filter(Boolean)));
+        profilesById = ownerIds.length ? await fetchProfilesByIds(ownerIds) : {};
+    }
     vipVideoListingsLoading = false;
     // #region debug-point A:vip-video-primary-result
     fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"vip-video-missing",runId:"pre-fix",hypothesisId:"A",location:"script.js:fetchVipVideoListingsFromSupabase:primary",msg:"[DEBUG] vipVideo primary query result",data:{error:error?String(error.message||error):null,dataLen:Array.isArray(data)?data.length:null,key:nextKey},ts:Date.now()})}).catch(()=>{});
@@ -1202,7 +1222,7 @@ async function fetchVipVideoListingsFromSupabase({ silent = true, includeProfile
         renderVipVideoSection();
         return;
     }
-    const mapped = (data || []).map((row) => mapSupabaseListingRow(row, {}));
+    const mapped = (data || []).map((row) => mapSupabaseListingRow(row, profilesById));
     const hardCap = Math.max(1, Math.min(12, Number(limit) || 4));
     let picked = mapped.filter((x) => hasListingVideo(x));
     // #region debug-point B:vip-video-picked-after-map
