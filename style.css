@@ -3060,6 +3060,17 @@ html[dir="rtl"] .home-category-swipe-item {
     scroll-snap-type: x mandatory;
 }
 
+@media (min-width: 769px) {
+    .vip-verified-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
+        overflow: visible;
+        padding-bottom: 0;
+        scroll-snap-type: none;
+    }
+}
+
 .vip-verified-row::-webkit-scrollbar {
     height: 6px;
 }
@@ -3097,6 +3108,13 @@ html[dir="rtl"] .home-category-swipe-item {
     border: 1px solid var(--primary-color);
     border-radius: 14px;
     overflow: hidden;
+}
+
+@media (min-width: 769px) {
+    .vip-verified-row .card.vip-card {
+        flex: initial;
+        width: 100%;
+    }
 }
 
 .vip-verified-row .card.vip-card .card-content {
