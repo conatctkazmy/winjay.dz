@@ -3056,8 +3056,9 @@ html[dir="rtl"] .home-category-swipe-item {
     display: flex;
     gap: 6px;
     overflow-x: auto;
-    padding-bottom: 6px;
+    padding: 0 12px 6px;
     scroll-snap-type: x mandatory;
+    scroll-padding: 0 12px;
 }
 
 @media (min-width: 769px) {
@@ -3066,8 +3067,9 @@ html[dir="rtl"] .home-category-swipe-item {
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         gap: 12px;
         overflow: visible;
-        padding-bottom: 0;
+        padding: 0;
         scroll-snap-type: none;
+        scroll-padding: 0;
     }
 }
 
