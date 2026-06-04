@@ -15162,9 +15162,13 @@ async function showSection(sectionId) {
         } else {
             url.searchParams.delete('section');
         }
+        if (sectionId !== 'vip-verified-listings-section') {
+            url.searchParams.delete('vip_verified');
+        }
         url.searchParams.delete('modal');
         const next = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '');
-        history.replaceState(history.state || null, '', next);
+        const prevState = history.state && typeof history.state === 'object' ? history.state : {};
+        history.replaceState({ ...prevState, __winjay: true, sectionId, scrollY: 0 }, '', next);
     } catch (e) {
         null;
     }
@@ -15249,6 +15253,67 @@ async function showSection(sectionId) {
 function getActiveSectionId() {
     const active = document.querySelector('.content-section.active');
     return active?.id || 'home-section';
+}
+
+function getSafeHistoryState() {
+    const state = history.state && typeof history.state === 'object' ? history.state : {};
+    return state && typeof state === 'object' ? state : {};
+}
+
+function snapshotCurrentViewToHistoryState() {
+    const state = getSafeHistoryState();
+    const sectionId = getActiveSectionId();
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    try {
+        history.replaceState({ ...state, __winjay: true, sectionId, scrollY }, '', window.location.pathname + window.location.search);
+    } catch (e) {
+        null;
+    }
+}
+
+function restoreScrollFromHistoryState({ fallback = 0 } = {}) {
+    const state = getSafeHistoryState();
+    const y = Number.isFinite(Number(state?.scrollY)) ? Number(state.scrollY) : Number(fallback) || 0;
+    if (!Number.isFinite(y) || y < 0) return;
+    const active = getActiveSectionId();
+    if (active === 'listing-detail-section' || active === 'create-listing-section') return;
+    try {
+        window.scrollTo({ top: y, behavior: 'auto' });
+    } catch (e) {
+        window.scrollTo(0, y);
+    }
+}
+
+async function navigateToSection(sectionId, { replace = false } = {}) {
+    const id = String(sectionId || '').trim();
+    if (!id) return;
+    if (getActiveSectionId() === id) return;
+    const from = getActiveSectionId();
+    snapshotCurrentViewToHistoryState();
+    await showSection(id);
+    if (getActiveSectionId() !== id) return;
+    const state = getSafeHistoryState();
+    try {
+        const nextState = { ...state, __winjay: true, view: 'section', sectionId: id, from, scrollY: 0 };
+        const nextUrl = window.location.pathname + window.location.search;
+        if (replace) history.replaceState(nextState, '', nextUrl);
+        else history.pushState(nextState, '', nextUrl);
+    } catch (e) {
+        null;
+    }
+}
+
+function navigateBackInApp(fallbackSectionId = 'home-section') {
+    const state = getSafeHistoryState();
+    if (state?.from) {
+        try {
+            history.back();
+            return;
+        } catch (e) {
+            null;
+        }
+    }
+    showSection(String(fallbackSectionId || '').trim() || 'home-section');
 }
 
 function clearListingRouteParams({ replace = true } = {}) {
@@ -15641,6 +15706,13 @@ function handleListingRoutesFromUrl() {
         openSellerProfile(tag.toLowerCase(), 'listings', { pushState: false });
         return;
     }
+    if (params.get('vip_verified') === '1' || state?.view === 'vip-verified') {
+        showSection('vip-verified-listings-section').then(() => restoreScrollFromHistoryState());
+        if (!vipVerifiedPageLoading && (!Array.isArray(vipVerifiedPageListings) || vipVerifiedPageListings.length === 0)) {
+            void fetchVipVerifiedPageFromSupabase({ silent: true, includeProfiles: true, limit: 24, cursor: null, reset: true, filters: currentFilters });
+        }
+        return;
+    }
     const listingParam = params.get('listing');
     const editParam = params.get('edit');
     const newListingParam = params.get('new');
@@ -15664,11 +15736,16 @@ function handleListingRoutesFromUrl() {
     }
     const sectionParam = String(params.get('section') || '').trim();
     if (sectionParam && crawlableStaticSections.has(sectionParam)) {
-        showSection(sectionParam);
+        showSection(sectionParam).then(() => restoreScrollFromHistoryState());
         if (String(params.get('modal') || '').trim() === 'contact') {
             openModal('contactModal');
             scheduleLucideCreateIcons(document.getElementById('contactModal'));
         }
+        return;
+    }
+    const sectionFromState = state?.sectionId ? String(state.sectionId || '').trim() : '';
+    if (sectionFromState && document.getElementById(sectionFromState)) {
+        showSection(sectionFromState).then(() => restoreScrollFromHistoryState());
         return;
     }
     const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
@@ -15678,7 +15755,7 @@ function handleListingRoutesFromUrl() {
             ? 'home-section'
             : lastSectionRaw;
     const lastSection = (blocked.includes(safeLast) && !isLoggedIn()) ? 'home-section' : safeLast;
-    showSection(lastSection);
+    showSection(lastSection).then(() => restoreScrollFromHistoryState());
     if (String(params.get('modal') || '').trim() === 'contact') {
         openModal('contactModal');
         scheduleLucideCreateIcons(document.getElementById('contactModal'));
@@ -16726,7 +16803,28 @@ function renderListings() {
     scheduleLucideCreateIcons(listingsGrid);
 }
 
-function openVipVerifiedListingsPage() {
+function openVipVerifiedListingsPage({ pushState = true } = {}) {
+    snapshotCurrentViewToHistoryState();
+    if (pushState) {
+        const from = getActiveSectionId();
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('listing');
+            url.searchParams.delete('new');
+            url.searchParams.delete('edit');
+            url.searchParams.delete('profile');
+            url.searchParams.delete('course');
+            url.searchParams.delete('chat');
+            url.searchParams.delete('section');
+            url.searchParams.delete('modal');
+            url.searchParams.set('vip_verified', '1');
+            const next = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '');
+            const state = getSafeHistoryState();
+            history.pushState({ ...state, __winjay: true, view: 'vip-verified', sectionId: 'vip-verified-listings-section', from, scrollY: 0 }, '', next);
+        } catch (e) {
+            null;
+        }
+    }
     showSection('vip-verified-listings-section');
     void fetchVipVerifiedPageFromSupabase({ silent: true, includeProfiles: true, limit: 24, cursor: null, reset: true, filters: currentFilters });
 }
