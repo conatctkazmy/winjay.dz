@@ -3328,6 +3328,12 @@ html[dir="rtl"] .home-category-swipe-item {
     .vip-verified-row .card.vip-card .card-header-row {
         flex-direction: column;
         gap: 8px;
+        align-items: stretch;
+    }
+
+    .vip-verified-row .card.vip-card .card-seller-info {
+        width: 100%;
+        max-width: 100%;
     }
     
     .vip-verified-row .card.vip-card .card-price {
