@@ -1358,6 +1358,18 @@ async function fetchVipVerifiedHomeFromSupabase({ silent = true, includeProfiles
     renderListings();
 }
 
+function ensureHomeVipRowsHydrated({ silent = true, filters = null } = {}) {
+    if (DEMO_MODE) return;
+    if (getActiveSectionId() !== 'home-section') return;
+    const safeFilters = filters && typeof filters === 'object' ? filters : (typeof currentFilters === 'object' ? currentFilters : {});
+    if (!vipVideoListingsLoading) {
+        void fetchVipVideoListingsFromSupabase({ silent: true, includeProfiles: true, limit: 4, filters: safeFilters });
+    }
+    if (!vipVerifiedHomeLoading) {
+        void fetchVipVerifiedHomeFromSupabase({ silent: true, includeProfiles: true, limit: 4, filters: safeFilters });
+    }
+}
+
 async function fetchVipVerifiedPageFromSupabase({ silent = true, includeProfiles = true, limit = 24, cursor = null, reset = false, filters = null } = {}) {
     if (DEMO_MODE) {
         renderVipVerifiedListingsPage();
@@ -1540,6 +1552,7 @@ function triggerListingsRefetch({ immediate = false, silent = false } = {}) {
     const key = buildListingsServerFiltersKey(currentFilters);
     if (!immediate && key === listingsActiveServerFiltersKey && Array.isArray(listings) && listings.length > 0) {
         renderListings();
+        ensureHomeVipRowsHydrated({ silent: true, filters: currentFilters });
         return;
     }
     try {
@@ -15181,6 +15194,7 @@ async function showSection(sectionId) {
         clearSellerProfileRouteTag();
         renderListings();
         void renderHomeHeroBanners();
+        ensureHomeVipRowsHydrated({ silent: true, filters: currentFilters });
     } else if (sectionId === 'vip-verified-listings-section') {
         clearSellerProfileRouteTag();
         renderVipVerifiedListingsPage();
