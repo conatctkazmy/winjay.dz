@@ -528,6 +528,7 @@ let listingsLoadedCount = 0;
 let listingsHasMore = true;
 let listingsLoadMoreBound = false;
 let lucideRenderTimer = null;
+let lucidePendingRoots = new Set();
 let marketplaceRenderTimer = null;
 let lastCarouselSwipeAt = 0;
 let homeInitialListingsLoading = true;
@@ -540,22 +541,27 @@ let marketplaceListingsSaveQueued = false;
 
 function scheduleLucideCreateIcons(rootEl = null) {
     if (document.visibilityState !== 'visible') return;
+    try {
+        const root = rootEl && rootEl instanceof Element ? rootEl : null;
+        if (root) lucidePendingRoots.add(root);
+        else lucidePendingRoots.add(document.body);
+    } catch (e) {
+        null;
+    }
     if (lucideRenderTimer) {
-        try {
-            clearTimeout(lucideRenderTimer);
-        } catch (e) {
-            null;
-        }
+        return;
     }
     lucideRenderTimer = setTimeout(() => {
         lucideRenderTimer = null;
         try {
-            const root = rootEl && rootEl instanceof Element ? rootEl : null;
-            if (root && typeof lucide?.createIcons === 'function') {
+            const roots = Array.from(lucidePendingRoots || []);
+            lucidePendingRoots = new Set();
+            if (typeof lucide?.createIcons !== 'function') return;
+            for (const r of roots) {
+                const root = r && r instanceof Element ? r : null;
+                if (!root) continue;
                 lucide.createIcons({ root });
-                return;
             }
-            lucide.createIcons();
         } catch (e) {
             null;
         }
