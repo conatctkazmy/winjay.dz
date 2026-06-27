@@ -1127,7 +1127,7 @@ function buildListingsNextCursorFromRow(row, filters) {
 
 function applyActiveListingsOnly(q) {
     try {
-        return q.eq('status', 'active');
+        return q.eq('status', 'active').is('deleted_at', null);
     } catch (e) {
         return q;
     }
@@ -18110,6 +18110,7 @@ async function fetchListingDetailFromSupabase(listingId, { includeProfiles = tru
             .from('listings')
             .select(includeProfiles ? embeddedSelect : baseSelect)
             .eq('id', id)
+            .is('deleted_at', null)
             .maybeSingle();
         const res = await q;
         data = res.data;
@@ -18121,6 +18122,7 @@ async function fetchListingDetailFromSupabase(listingId, { includeProfiles = tru
             .from('listings')
             .select(baseSelect)
             .eq('id', id)
+            .is('deleted_at', null)
             .maybeSingle();
         const res = await q;
         data = res.data;
@@ -19001,6 +19003,7 @@ async function fetchSellerProfileListingsFromSupabase(ownerId, profileRow, { lim
         .from('listings')
         .select(baseSelect)
         .eq('owner_id', id)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(safeLimit);
     if (error) return [];
