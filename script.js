@@ -16459,6 +16459,10 @@ function initCarouselElement(carouselEl) {
             carouselEl.dataset.dragged = '';
             return;
         }
+        if (carouselEl.dataset.carousel === 'home-hero') {
+            carouselEl.dataset.dragged = '';
+            return;
+        }
         if (carouselEl.dataset.carousel === 'detail') {
             const idx = getIndex();
             const imgs = carouselEl.querySelectorAll('img');
