@@ -16460,6 +16460,22 @@ function initCarouselElement(carouselEl) {
             return;
         }
         if (carouselEl.dataset.carousel === 'home-hero') {
+            const linkEl = e.target instanceof Element ? e.target.closest('a[href]') : null;
+            const href = String(linkEl?.getAttribute('href') || '').trim();
+            if (href) {
+                e.preventDefault();
+                e.stopPropagation();
+                const target = String(linkEl?.getAttribute('target') || '').trim().toLowerCase();
+                if (target === '_blank') {
+                    try {
+                        window.open(href, '_blank', 'noopener,noreferrer');
+                    } catch (err) {
+                        window.location.href = href;
+                    }
+                } else {
+                    window.location.href = href;
+                }
+            }
             carouselEl.dataset.dragged = '';
             return;
         }
