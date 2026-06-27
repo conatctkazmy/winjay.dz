@@ -14899,8 +14899,7 @@ async function adminCreateHomeBanner() {
         if (slotInput) slotInput.value = 'main';
         if (linkInput) linkInput.value = '';
         if (activeInput) activeInput.checked = true;
-        homeBannersCache = null;
-        homeBannersCacheAt = 0;
+        invalidateHomeHeroRenderCache();
         await renderAdminHomeBanners(true);
         void renderHomeHeroBanners({ force: true });
         showToast('Banner added', 'check-circle');
@@ -14929,8 +14928,7 @@ async function adminSaveHomeBanner(id) {
         showToast(error.message || 'Failed to save', 'alert-circle');
         return;
     }
-    homeBannersCache = null;
-    homeBannersCacheAt = 0;
+    invalidateHomeHeroRenderCache();
     void renderHomeHeroBanners({ force: true });
     showToast('Saved', 'check-circle');
 }
@@ -14947,8 +14945,7 @@ async function adminSetHomeBannerActive(id, active) {
         await renderAdminHomeBanners(true);
         return;
     }
-    homeBannersCache = null;
-    homeBannersCacheAt = 0;
+    invalidateHomeHeroRenderCache();
     void renderHomeHeroBanners({ force: true });
 }
 
@@ -14969,8 +14966,7 @@ async function adminReplaceHomeBannerImage(id) {
             return;
         }
         if (fileInput) fileInput.value = '';
-        homeBannersCache = null;
-        homeBannersCacheAt = 0;
+        invalidateHomeHeroRenderCache();
         await renderAdminHomeBanners(true);
         void renderHomeHeroBanners({ force: true });
         showToast('Image replaced', 'check-circle');
@@ -15001,8 +14997,7 @@ async function adminMoveHomeBanner(id, dir) {
         showToast(error.message || 'Failed to reorder', 'alert-circle');
         return;
     }
-    homeBannersCache = null;
-    homeBannersCacheAt = 0;
+    invalidateHomeHeroRenderCache();
     await renderAdminHomeBanners(true);
     void renderHomeHeroBanners({ force: true });
 }
@@ -15020,8 +15015,7 @@ function adminDeleteHomeBanner(id) {
             showToast(error.message || 'Failed to delete', 'alert-circle');
             return;
         }
-        homeBannersCache = null;
-        homeBannersCacheAt = 0;
+        invalidateHomeHeroRenderCache();
         await renderAdminHomeBanners(true);
         void renderHomeHeroBanners({ force: true });
         window.scrollTo(0, y);
@@ -17065,6 +17059,13 @@ let homeBannersCache = null;
 let homeBannersCacheAt = 0;
 let homeHeroAutoplayTimer = null;
 let homeHeroAutoplayCarousel = null;
+
+function invalidateHomeHeroRenderCache() {
+    homeBannersCache = null;
+    homeBannersCacheAt = 0;
+    const slot = document.getElementById('homeHeroSlot');
+    if (slot) slot.dataset.renderedAt = '0';
+}
 
 function safeExternalHttpUrl(url) {
     const raw = String(url || '').trim();
