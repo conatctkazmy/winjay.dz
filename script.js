@@ -13094,11 +13094,9 @@ function deleteMyListing(event, id) {
                 showToast(error.message || 'Failed to delete listing', 'alert-circle');
                 return;
             }
-            favorites = favorites.filter(fid => fid !== id);
-            clearCardHtmlCache();
+            reflectDeletedListingInUi(id);
             showToast('Listing deleted', 'trash-2');
-            await fetchListingsFromSupabase({ silent: true });
-            renderFavorites();
+            void fetchListingsFromSupabase({ silent: true });
         },
         true
     );
@@ -14946,6 +14944,65 @@ function removeAdminModerationCard(listingId) {
     if (el) el.remove();
 }
 
+function pruneListingFromArray(items, listingId) {
+    const id = Number(listingId) || 0;
+    if (!id || !Array.isArray(items)) return Array.isArray(items) ? items : [];
+    return items.filter((item) => Number(item?.id) !== id);
+}
+
+function removeDeletedListingFromUiState(listingId) {
+    const id = Number(listingId) || 0;
+    if (!id) return;
+    listings = pruneListingFromArray(listings, id);
+    myListings = pruneListingFromArray(myListings, id);
+    vipVideoListings = pruneListingFromArray(vipVideoListings, id);
+    vipVerifiedHomeListings = pruneListingFromArray(vipVerifiedHomeListings, id);
+    vipVerifiedPageListings = pruneListingFromArray(vipVerifiedPageListings, id);
+    favorites = Array.isArray(favorites) ? favorites.filter((fid) => Number(fid) !== id) : [];
+    pendingHeartPulses.delete(id);
+    listingReviewsCache.delete(id);
+    listingSimilarCache.delete(id);
+    delete listingDetailImageIndex[id];
+    delete listingReviewPanelState[id];
+    sellerProfileListingsCache.forEach((items, ownerId) => {
+        if (!Array.isArray(items)) return;
+        sellerProfileListingsCache.set(ownerId, pruneListingFromArray(items, id));
+    });
+    listingSimilarCache.forEach((items, key) => {
+        if (!Array.isArray(items)) return;
+        listingSimilarCache.set(key, pruneListingFromArray(items, id));
+    });
+    clearCardHtmlCache();
+}
+
+function reflectDeletedListingInUi(listingId) {
+    const id = Number(listingId) || 0;
+    if (!id) return;
+    removeDeletedListingFromUiState(id);
+    const active = getActiveSectionId();
+    if (active === 'home-section') {
+        renderListings();
+    } else if (active === 'favorites-section') {
+        renderFavorites();
+    } else if (active === 'profile-section') {
+        renderMyListings();
+    } else if (active === 'vip-verified-listings-section') {
+        renderVipVerifiedListingsPage();
+    } else if (active === 'seller-profile-section') {
+        const tag = String(currentSellerProfileTag || '').trim();
+        if (tag) {
+            void openSellerProfile(tag, 'listings', { pushState: false });
+        }
+    } else if (active === 'listing-detail-section') {
+        if (currentListingDetailId === id) {
+            currentListingDetailId = null;
+            navigateBackFromListingFlow();
+            return;
+        }
+        if (currentListingDetailId) void hydrateSimilarListingsForListingDetail(currentListingDetailId);
+    }
+}
+
 async function topUpAdminModerationGrid() {
     if (adminModerationTopUpRunning) return;
     const el = document.getElementById('adminModerationList');
@@ -15085,10 +15142,11 @@ function adminDeleteListing(listingId) {
                 showToast(error.message || 'Failed to delete listing', 'alert-circle');
                 return;
             }
-            showToast('Listing deleted', 'trash-2');
+            reflectDeletedListingInUi(id);
             removeAdminModerationCard(id);
+            showToast('Listing deleted', 'trash-2');
             try {
-                fetchListingsFromSupabase({ silent: true });
+                void fetchListingsFromSupabase({ silent: true });
             } catch (e) {
                 null;
             }
