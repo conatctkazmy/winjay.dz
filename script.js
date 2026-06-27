@@ -11715,7 +11715,7 @@ document.getElementById('addListingForm').addEventListener('submit', async (e) =
 
         if (!isEditMode && !isPrivilegedAccount) {
             const { data: existingUserListings, error: limitErr } = await withTimeout(
-                client.from('listings').select('id').eq('owner_id', userId).limit(FREE_LISTING_LIMIT + 1),
+                client.from('listings').select('id').eq('owner_id', userId).is('deleted_at', null).limit(FREE_LISTING_LIMIT + 1),
                 12000,
                 'Listing limit check timed out'
             );
@@ -13130,6 +13130,7 @@ async function ensureMyProfileListingsLoaded() {
             .from('listings')
             .select(baseSelect)
             .eq('owner_id', currentSupabaseUserId)
+            .is('deleted_at', null)
             .order('created_at', { ascending: false })
             .limit(100);
         if (error) return false;
