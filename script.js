@@ -17187,7 +17187,9 @@ async function renderHomeHeroBanners({ force = false } = {}) {
     }
     const sideRow = activeRows.find((b) => normalizeHomeBannerSlot(b) === 'secondary') || null;
     const carouselRows = activeRows.filter((b) => normalizeHomeBannerSlot(b) !== 'secondary');
-    const slidesHTML = carouselRows
+    const linkedCarouselRows = carouselRows.filter((b) => !!safeExternalHttpUrl(b.link_url));
+    const effectiveCarouselRows = linkedCarouselRows.length ? linkedCarouselRows : carouselRows;
+    const slidesHTML = effectiveCarouselRows
         .map((b) => {
             const url = getHomeBannerPublicUrl(b.image_path);
             if (!url) return '';
