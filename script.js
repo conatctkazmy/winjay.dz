@@ -13085,13 +13085,19 @@ function deleteMyListing(event, id) {
                 return;
             }
             await client.from('listing_images').delete().eq('listing_id', id);
-            const { error } = await client
+            const { data: deletedRow, error } = await client
                 .from('listings')
                 .delete()
                 .eq('id', id)
-                .eq('owner_id', currentSupabaseUserId);
+                .eq('owner_id', currentSupabaseUserId)
+                .select('id')
+                .maybeSingle();
             if (error) {
                 showToast(error.message || 'Failed to delete listing', 'alert-circle');
+                return;
+            }
+            if (!deletedRow?.id) {
+                showToast('Delete failed: listing not found or not allowed', 'alert-circle');
                 return;
             }
             reflectDeletedListingInUi(id);
@@ -15134,12 +15140,20 @@ function adminDeleteListing(listingId) {
                 showToast('Supabase is not configured', 'alert-circle');
                 return;
             }
-            const { error } = await client
+            const deletedAt = new Date().toISOString();
+            const { data: updatedRow, error } = await client
                 .from('listings')
-                .update({ deleted_at: new Date().toISOString() })
-                .eq('id', id);
+                .update({ deleted_at: deletedAt })
+                .eq('id', id)
+                .is('deleted_at', null)
+                .select('id, deleted_at')
+                .maybeSingle();
             if (error) {
                 showToast(error.message || 'Failed to delete listing', 'alert-circle');
+                return;
+            }
+            if (!updatedRow?.id) {
+                showToast('Delete failed: listing not found or already deleted', 'alert-circle');
                 return;
             }
             reflectDeletedListingInUi(id);
