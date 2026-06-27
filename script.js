@@ -13979,6 +13979,70 @@ async function adminRejectIdentity(appId, userId) {
     renderAdminKpis();
 }
 
+const adminSubmissionRowsCache = new Map();
+const adminExpandedSubmissionIds = new Set();
+
+function getSubmissionPayloadObject(submission) {
+    return (submission && typeof submission.payload === 'object' && submission.payload) ? submission.payload : {};
+}
+
+function getSubmissionSummary(submission) {
+    const payload = getSubmissionPayloadObject(submission);
+    const message = String(payload.message || payload.msg || payload.text || '').trim();
+    return message || JSON.stringify(payload || {}, null, 2) || '';
+}
+
+function getSubmissionDetailsText(submission) {
+    const s = submission && typeof submission === 'object' ? submission : {};
+    const payload = getSubmissionPayloadObject(s);
+    const lines = [
+        `Type: ${String(s.type || '—')}`,
+        `Status: ${String(s.status || '—')}`,
+        `Created: ${formatAdminDate(s.created_at)}`,
+        `Email: ${String(payload.email || payload.mail || '—')}`,
+        `Phone: ${String(payload.phone || payload.tel || '—')}`,
+        '',
+        'Message:',
+        String(payload.message || payload.msg || payload.text || '—')
+    ];
+    const extraKeys = Object.keys(payload).filter((k) => !['email', 'mail', 'phone', 'tel', 'message', 'msg', 'text'].includes(String(k)));
+    if (extraKeys.length) {
+        lines.push('', 'Extra payload:', JSON.stringify(Object.fromEntries(extraKeys.map((k) => [k, payload[k]])), null, 2));
+    }
+    return lines.join('\n');
+}
+
+function adminToggleSubmissionDetails(submissionId) {
+    const id = String(submissionId || '').trim();
+    if (!id) return;
+    if (adminExpandedSubmissionIds.has(id)) adminExpandedSubmissionIds.delete(id);
+    else adminExpandedSubmissionIds.add(id);
+    void renderSubmissions();
+}
+
+async function adminUpdateSubmissionStatus(submissionId, nextStatus) {
+    const id = String(submissionId || '').trim();
+    const status = String(nextStatus || '').trim().toLowerCase();
+    if (!id || !status) return;
+    if (!isAdminAuthorized()) return;
+    const client = initSupabase();
+    if (!client) return;
+    const { data, error } = await client
+        .from('submissions')
+        .update({ status })
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+    if (error || !data?.id) {
+        showToast(error?.message || 'Failed to update submission', 'alert-circle');
+        return;
+    }
+    adminSubmissionRowsCache.set(id, data);
+    showToast(`Submission marked ${status}`, 'check-circle');
+    await renderSubmissions();
+    void renderAdminKpis();
+}
+
 async function renderSubmissions() {
     if (!isAdminAuthorized()) return;
     const tbody = document.getElementById('adminSubmissionsTbody');
@@ -13991,21 +14055,41 @@ async function renderSubmissions() {
         if (!relationMissing(error, 'submissions')) showToast(error.message || 'Failed to load submissions', 'alert-circle');
         return;
     }
+    adminSubmissionRowsCache.clear();
+    (data || []).forEach((row) => {
+        if (row?.id) adminSubmissionRowsCache.set(String(row.id), row);
+    });
     const ids = (data || []).map((x) => x.user_id).filter(Boolean);
     const profiles = await fetchProfilesForAdmin(ids);
     tbody.innerHTML = (data || [])
         .map((s) => {
+            const submissionId = String(s.id || '').trim();
             const p = s.user_id ? profiles[s.user_id] || {} : {};
             const userLabel = s.user_id ? `${escapeHtml(p.display_name || 'User')} ${p.tag ? `<span class="muted">${escapeHtml(p.tag)}</span>` : ''}` : '<span class="muted">Guest</span>';
-            const payload = (s && typeof s.payload === 'object' && s.payload) ? s.payload : {};
+            const payload = getSubmissionPayloadObject(s);
             const email = String(payload.email || payload.mail || '').trim();
             const phone = String(payload.phone || payload.tel || '').trim();
-            const message = String(payload.message || payload.msg || payload.text || '').trim();
-            const summary = message ? message : escapeHtml(JSON.stringify(payload || {}, null, 0));
+            const summary = getSubmissionSummary(s);
             const summaryShort = escapeHtml(summary).slice(0, 140);
             const extras = [email ? `Email: ${email}` : '', phone ? `Phone: ${phone}` : ''].filter(Boolean);
             const extrasHtml = extras.length ? `<div class="admin-details-meta">${escapeHtml(extras.join(' · '))}</div>` : '';
             const details = `<div class="admin-details"><div class="admin-details-main">${summaryShort}${summary.length > 140 ? '…' : ''}</div>${extrasHtml}</div>`;
+            const expanded = submissionId && adminExpandedSubmissionIds.has(submissionId);
+            const actions = `
+                <div class="admin-actions">
+                    <button class="admin-action-btn" type="button" onclick="adminToggleSubmissionDetails('${escapeHtml(submissionId)}')">${expanded ? 'Hide' : 'View'}</button>
+                    ${String(s.status || '').toLowerCase() === 'pending'
+                        ? `<button class="admin-action-btn primary" type="button" onclick="adminUpdateSubmissionStatus('${escapeHtml(submissionId)}','resolved')">Resolve</button>
+                           <button class="admin-action-btn danger" type="button" onclick="adminUpdateSubmissionStatus('${escapeHtml(submissionId)}','rejected')">Reject</button>`
+                        : `<button class="admin-action-btn" type="button" onclick="adminUpdateSubmissionStatus('${escapeHtml(submissionId)}','pending')">Reopen</button>`}
+                </div>`;
+            const expandedRow = expanded
+                ? `<tr class="admin-submission-expanded-row">
+                        <td colspan="6">
+                            <pre class="admin-submission-full">${escapeHtml(getSubmissionDetailsText(s))}</pre>
+                        </td>
+                   </tr>`
+                : '';
             return `
                 <tr>
                     <td>${escapeHtml(s.type || '')}</td>
@@ -14013,7 +14097,9 @@ async function renderSubmissions() {
                     <td>${escapeHtml(formatAdminDate(s.created_at))}</td>
                     <td>${adminBadge(s.status)}</td>
                     <td>${details}</td>
+                    <td>${actions}</td>
                 </tr>
+                ${expandedRow}
             `;
         })
         .join('');

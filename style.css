@@ -8461,6 +8461,20 @@ footer {
     font-size: 0.86rem;
 }
 
+.admin-submission-expanded-row td {
+    background: color-mix(in srgb, var(--light-gray) 60%, var(--bg-main) 40%);
+}
+
+.admin-submission-full {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: inherit;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--text-main);
+}
+
 .admin-table th {
     color: var(--text-muted);
     font-weight: 800;
