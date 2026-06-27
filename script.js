@@ -13084,12 +13084,13 @@ function deleteMyListing(event, id) {
                 showToast('Supabase is not configured', 'alert-circle');
                 return;
             }
-            await client.from('listing_images').delete().eq('listing_id', id);
+            const deletedAt = new Date().toISOString();
             const { data: deletedRow, error } = await client
                 .from('listings')
-                .delete()
+                .update({ deleted_at: deletedAt })
                 .eq('id', id)
                 .eq('owner_id', currentSupabaseUserId)
+                .is('deleted_at', null)
                 .select('id')
                 .maybeSingle();
             if (error) {
