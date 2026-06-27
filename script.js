@@ -17054,7 +17054,8 @@ function safeExternalHttpUrl(url) {
     const raw = String(url || '').trim();
     if (!raw) return '';
     try {
-        const u = new URL(raw);
+        const candidate = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw.replace(/^\/+/, '')}`;
+        const u = new URL(candidate);
         const proto = String(u.protocol || '').toLowerCase();
         if (proto !== 'http:' && proto !== 'https:') return '';
         return u.toString();

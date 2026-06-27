@@ -2292,6 +2292,12 @@ html:not([data-initial-section="seller-profile-section"]):not([data-initial-sect
     display: block;
 }
 
+.home-hero-carousel a.carousel-slide {
+    display: block;
+    width: 100%;
+    text-decoration: none;
+}
+
 .home-hero-carousel .carousel-dots {
     position: absolute;
     left: 50%;
