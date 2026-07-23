@@ -770,36 +770,7 @@
                 <button class="back-btn" onclick="navigateBackInApp('home-section')">
                     <i data-lucide="arrow-left"></i> Back
                 </button>
-                <div class="admin-card">
-                    <div class="admin-card-head">
-                        <h3>Live Social Shopping</h3>
-                        <span class="muted" id="liveSocialShoppingAccessBadge">Admin preview</span>
-                    </div>
-                    <div class="empty-state" style="padding: 32px 20px;">
-                        <i data-lucide="radio"></i>
-                        <h3>Feature in development</h3>
-                        <p id="liveSocialShoppingStatus">This preview is still in development and is currently hidden from normal users.</p>
-                    </div>
-                    <div class="admin-two-col">
-                        <div class="admin-card">
-                            <div class="admin-card-head">
-                                <h3>Planned experience</h3>
-                                <span class="muted">Phase 1</span>
-                            </div>
-                            <div class="muted">
-                                Live product sessions, pinned items, instant chat, and a checkout-focused stream layout will live here.
-                            </div>
-                        </div>
-                        <div class="admin-card" id="liveSocialShoppingAdminNote">
-                            <div class="admin-card-head">
-                                <h3>Admin note</h3>
-                                <span class="muted">Development</span>
-                            </div>
-                            <div class="muted">Use the toggle in the admin dashboard to keep this preview hidden from normal users until it is ready.</div>
-                            <button class="submit-btn small" id="liveSocialShoppingAdminShortcut" type="button" onclick="navigateToSection('admin-dashboard-section')">Open admin dashboard</button>
-                        </div>
-                    </div>
-                </div>
+                <div id="liveSocialShoppingRoot"></div>
             </section>
 
             <section id="course-section" class="content-section">

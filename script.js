@@ -524,6 +524,93 @@ let coursesFeatureEnabledFlag = true;
 let coursesFeatureFlagsLoaded = false;
 let liveSocialShoppingFeatureEnabledFlag = false;
 let liveSocialShoppingFeatureFlagsLoaded = false;
+const LIVE_SOCIAL_SHOPPING_SESSIONS = Object.freeze([
+    {
+        id: 'streetwear-lab',
+        status: 'live',
+        title: 'Streetwear Lab: Summer drop',
+        subtitle: 'Limited pieces, live styling, and bundle-only pricing.',
+        host: 'Nora Atelier',
+        handle: '@noraatelier',
+        viewers: 1248,
+        scheduleLabel: 'Live now',
+        durationLabel: '58 min remaining',
+        accent: '#ff6a00',
+        mood: 'Fast-moving',
+        conversionLabel: '12.4% checkout rate',
+        tags: ['Live drop', 'Bundle deals', 'Free returns'],
+        products: [
+            { id: 'streetwear-jacket', name: 'Cropped utility jacket', price: 8900, badge: 'Best seller', inventory: 7, color: '#ffd9bf' },
+            { id: 'streetwear-bag', name: 'Mini crossbody bag', price: 5200, badge: 'Pinned item', inventory: 12, color: '#ffe8cc' },
+            { id: 'streetwear-boots', name: 'Platform ankle boots', price: 11400, badge: 'Low stock', inventory: 4, color: '#ffd4c2' }
+        ]
+    },
+    {
+        id: 'beauty-room',
+        status: 'upcoming',
+        title: 'Beauty Room: Night routine clinic',
+        subtitle: 'Host-led routine building with before/after bundles.',
+        host: 'Lina Beauty Bar',
+        handle: '@linabeauty',
+        viewers: 438,
+        scheduleLabel: 'Tonight at 21:00',
+        durationLabel: 'Starts in 2h 10m',
+        accent: '#d457a6',
+        mood: 'High intent',
+        conversionLabel: 'Pre-save bundle pricing',
+        tags: ['Upcoming', 'Skincare', 'Routine builder'],
+        products: [
+            { id: 'beauty-serum', name: 'Vitamin glow serum', price: 4600, badge: 'Pre-order', inventory: 18, color: '#f7d5ea' },
+            { id: 'beauty-cleanser', name: 'Soft foam cleanser', price: 2800, badge: 'Starter pick', inventory: 24, color: '#fde8f5' },
+            { id: 'beauty-mask', name: 'Hydra sleep mask', price: 3500, badge: 'Bundle deal', inventory: 15, color: '#f7c7df' }
+        ]
+    },
+    {
+        id: 'tech-drop',
+        status: 'live',
+        title: 'Tech Drop: Smart desk setup',
+        subtitle: 'Live demo of productivity gear with instant bundle upgrades.',
+        host: 'Yacine Tech House',
+        handle: '@yacinetech',
+        viewers: 892,
+        scheduleLabel: 'Live now',
+        durationLabel: '32 min remaining',
+        accent: '#4f7cff',
+        mood: 'High engagement',
+        conversionLabel: '18 products sold this hour',
+        tags: ['Tech', 'Desk setup', 'Fast shipping'],
+        products: [
+            { id: 'tech-lamp', name: 'Smart desk lamp', price: 6700, badge: 'Trending', inventory: 10, color: '#dbe6ff' },
+            { id: 'tech-stand', name: 'Aluminium laptop stand', price: 3900, badge: 'Live deal', inventory: 17, color: '#d7e4ff' },
+            { id: 'tech-mic', name: 'USB streaming microphone', price: 9800, badge: 'Creator pick', inventory: 6, color: '#cedcff' }
+        ]
+    },
+    {
+        id: 'home-refresh',
+        status: 'rewatch',
+        title: 'Home Refresh: Rewatch the decor edit',
+        subtitle: 'Replay the best-performing room makeover with product links.',
+        host: 'Maison K',
+        handle: '@maisonk',
+        viewers: 205,
+        scheduleLabel: 'Replay available',
+        durationLabel: '28 min highlight',
+        accent: '#22a06b',
+        mood: 'Steady sales',
+        conversionLabel: 'Replay still converting',
+        tags: ['Replay', 'Home decor', 'Curated picks'],
+        products: [
+            { id: 'home-lamp', name: 'Textured bedside lamp', price: 4800, badge: 'Replay pick', inventory: 14, color: '#d6f5e6' },
+            { id: 'home-chair', name: 'Accent lounge chair', price: 16200, badge: 'Premium', inventory: 3, color: '#cbf0dd' },
+            { id: 'home-table', name: 'Oak side table', price: 7600, badge: 'Fast mover', inventory: 8, color: '#dff7ea' }
+        ]
+    }
+]);
+let liveSocialShoppingState = {
+    activeSessionId: 'streetwear-lab',
+    filter: 'all',
+    cart: {}
+};
 let deletedAccountLogoutActive = false;
 
 let listingsLoadedCount = 0;
@@ -12619,27 +12706,395 @@ function updateAdminDashboardButtonVisibility() {
     btn.style.display = userProfile?.isAdmin ? '' : 'none';
 }
 
+function formatLiveSocialShoppingMoney(value) {
+    return `${new Intl.NumberFormat('fr-DZ').format(Number(value) || 0)} DZD`;
+}
+
+function getLiveSocialShoppingSessionById(sessionId) {
+    return LIVE_SOCIAL_SHOPPING_SESSIONS.find((session) => session.id === sessionId) || LIVE_SOCIAL_SHOPPING_SESSIONS[0];
+}
+
+function getFilteredLiveSocialShoppingSessions(filter = '') {
+    const normalized = String(filter || '').trim().toLowerCase();
+    if (!normalized || normalized === 'all') return LIVE_SOCIAL_SHOPPING_SESSIONS.slice();
+    return LIVE_SOCIAL_SHOPPING_SESSIONS.filter((session) => String(session.status || '').toLowerCase() === normalized);
+}
+
+function getLiveSocialShoppingActiveSession() {
+    const filtered = getFilteredLiveSocialShoppingSessions(liveSocialShoppingState.filter);
+    const active = getLiveSocialShoppingSessionById(liveSocialShoppingState.activeSessionId);
+    if (filtered.some((session) => session.id === active.id)) return active;
+    return filtered[0] || LIVE_SOCIAL_SHOPPING_SESSIONS[0];
+}
+
+function getLiveSocialShoppingStatusLabel(status) {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'live') return 'LIVE NOW';
+    if (normalized === 'upcoming') return 'UP NEXT';
+    if (normalized === 'rewatch') return 'REWATCH';
+    return 'SESSION';
+}
+
+function getLiveSocialShoppingStatusTone(status) {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'live') return 'is-live';
+    if (normalized === 'upcoming') return 'is-upcoming';
+    if (normalized === 'rewatch') return 'is-rewatch';
+    return '';
+}
+
+function getLiveSocialShoppingProductMap() {
+    const map = new Map();
+    LIVE_SOCIAL_SHOPPING_SESSIONS.forEach((session) => {
+        (session.products || []).forEach((product) => {
+            map.set(product.id, { ...product, sessionId: session.id, sessionTitle: session.title, host: session.host });
+        });
+    });
+    return map;
+}
+
+function getLiveSocialShoppingCartItems() {
+    const productMap = getLiveSocialShoppingProductMap();
+    return Object.entries(liveSocialShoppingState.cart || {})
+        .map(([productId, quantity]) => {
+            const product = productMap.get(productId);
+            if (!product || !quantity) return null;
+            return {
+                ...product,
+                quantity: Number(quantity) || 0,
+                subtotal: (Number(product.price) || 0) * (Number(quantity) || 0)
+            };
+        })
+        .filter(Boolean);
+}
+
+function getLiveSocialShoppingCartTotal() {
+    return getLiveSocialShoppingCartItems().reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+}
+
+function setLiveSocialShoppingFilter(filter) {
+    liveSocialShoppingState.filter = String(filter || 'all');
+    const active = getLiveSocialShoppingActiveSession();
+    liveSocialShoppingState.activeSessionId = active?.id || LIVE_SOCIAL_SHOPPING_SESSIONS[0]?.id || '';
+    renderLiveSocialShoppingSection();
+}
+
+function setActiveLiveSocialShoppingSession(sessionId) {
+    if (!sessionId) return;
+    liveSocialShoppingState.activeSessionId = String(sessionId);
+    renderLiveSocialShoppingSection();
+}
+
+function addLiveSocialShoppingProduct(productId) {
+    const key = String(productId || '').trim();
+    if (!key) return;
+    const currentQty = Number(liveSocialShoppingState.cart[key]) || 0;
+    liveSocialShoppingState.cart[key] = currentQty + 1;
+    renderLiveSocialShoppingSection();
+    showToast('Added to shopping tray', 'shopping-bag');
+}
+
+function changeLiveSocialShoppingCartQuantity(productId, delta) {
+    const key = String(productId || '').trim();
+    if (!key) return;
+    const next = (Number(liveSocialShoppingState.cart[key]) || 0) + (Number(delta) || 0);
+    if (next <= 0) {
+        delete liveSocialShoppingState.cart[key];
+    } else {
+        liveSocialShoppingState.cart[key] = next;
+    }
+    renderLiveSocialShoppingSection();
+}
+
+function openLiveSocialShoppingCheckout() {
+    const totalItems = getLiveSocialShoppingCartItems().reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    if (!totalItems) {
+        showToast('Add a product first', 'shopping-bag');
+        return;
+    }
+    showToast(`Checkout ready for ${totalItems} item${totalItems > 1 ? 's' : ''}`, 'check-circle');
+}
+
+function openLiveSocialShoppingAdmin() {
+    navigateToSection('admin-dashboard-section');
+}
+
 function renderLiveSocialShoppingSection() {
     const sectionEl = document.getElementById('live-social-shopping-section');
-    const badgeEl = document.getElementById('liveSocialShoppingAccessBadge');
-    const statusEl = document.getElementById('liveSocialShoppingStatus');
-    const noteEl = document.getElementById('liveSocialShoppingAdminNote');
-    const adminShortcutEl = document.getElementById('liveSocialShoppingAdminShortcut');
+    const root = document.getElementById('liveSocialShoppingRoot');
+    if (!sectionEl || !root) return;
     const isAdminViewer = !!userProfile?.isAdmin;
     const publicPreview = !!liveSocialShoppingFeatureEnabledFlag;
-    if (badgeEl) {
-        badgeEl.textContent = publicPreview
-            ? 'Public preview enabled'
-            : (isAdminViewer ? 'Admin preview' : 'Preview');
-    }
-    if (statusEl) {
-        statusEl.textContent = publicPreview
-            ? 'This preview is visible from the sidebar for everyone while the feature is being built.'
-            : 'This preview is still in development and is currently hidden from normal users.';
-    }
-    if (noteEl) noteEl.style.display = isAdminViewer ? '' : 'none';
-    if (adminShortcutEl) adminShortcutEl.style.display = isAdminViewer ? '' : 'none';
-    scheduleLucideCreateIcons(sectionEl || document.body);
+    const sessions = getFilteredLiveSocialShoppingSessions(liveSocialShoppingState.filter);
+    const activeSession = getLiveSocialShoppingActiveSession();
+    const spotlightProduct = activeSession?.products?.[0] || null;
+    const cartItems = getLiveSocialShoppingCartItems();
+    const total = getLiveSocialShoppingCartTotal();
+    const totalItems = cartItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    const liveSessionsCount = LIVE_SOCIAL_SHOPPING_SESSIONS.filter((session) => session.status === 'live').length;
+    const upcomingSessions = LIVE_SOCIAL_SHOPPING_SESSIONS.filter((session) => session.status === 'upcoming').slice(0, 3);
+    const insightCards = [
+        { icon: 'users', label: 'Live viewers', value: new Intl.NumberFormat('fr-DZ').format(activeSession?.viewers || 0) },
+        { icon: 'zap', label: 'Shopping mood', value: activeSession?.mood || 'High intent' },
+        { icon: 'shopping-bag', label: 'Cart total', value: formatLiveSocialShoppingMoney(total) }
+    ];
+
+    root.innerHTML = `
+        <div class="live-shop-shell">
+            <div class="live-shop-topbar">
+                <div>
+                    <div class="live-shop-eyebrow">Live commerce</div>
+                    <h2>Live Social Shopping</h2>
+                    <p>Host-driven drops, product storytelling, and a checkout-focused experience that feels native to the marketplace.</p>
+                </div>
+                <div class="live-shop-topbar-actions">
+                    <span class="live-shop-mode-pill ${publicPreview ? 'is-public' : 'is-admin'}">${publicPreview ? 'Public preview' : 'Admin preview'}</span>
+                    <span class="live-shop-mode-pill">${liveSessionsCount} live channels</span>
+                    ${isAdminViewer ? `<button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openLiveSocialShoppingAdmin()">Admin dashboard</button>` : ''}
+                </div>
+            </div>
+
+            <div class="live-shop-stage-grid">
+                <div class="live-shop-stage-card">
+                    <div class="live-shop-stage-visual" style="--live-shop-accent:${escapeHtml(activeSession.accent)};">
+                        <div class="live-shop-stage-glow"></div>
+                        <div class="live-shop-stage-pill-row">
+                            <span class="live-shop-status-pill ${getLiveSocialShoppingStatusTone(activeSession.status)}">${escapeHtml(getLiveSocialShoppingStatusLabel(activeSession.status))}</span>
+                            <span class="live-shop-status-pill">${escapeHtml(activeSession.scheduleLabel)}</span>
+                        </div>
+                        <div class="live-shop-stage-broadcast">
+                            <div class="live-shop-stage-screen">
+                                <span class="live-shop-stage-dot"></span>
+                                <span>${escapeHtml(activeSession.host)}</span>
+                            </div>
+                            <div class="live-shop-stage-comments">
+                                <div class="live-shop-stage-comment">"Drop the bundle link"</div>
+                                <div class="live-shop-stage-comment">"Need the pinned item in black"</div>
+                            </div>
+                        </div>
+                        <div class="live-shop-stage-bottom">
+                            <div class="live-shop-stage-metric">
+                                <strong>${new Intl.NumberFormat('fr-DZ').format(activeSession.viewers)}</strong>
+                                <span>watching now</span>
+                            </div>
+                            <div class="live-shop-stage-metric">
+                                <strong>${escapeHtml(activeSession.durationLabel)}</strong>
+                                <span>${escapeHtml(activeSession.conversionLabel)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="live-shop-stage-content">
+                        <div class="live-shop-heading-row">
+                            <div>
+                                <div class="live-shop-host-line">${escapeHtml(activeSession.host)} <span>${escapeHtml(activeSession.handle)}</span></div>
+                                <h3>${escapeHtml(activeSession.title)}</h3>
+                            </div>
+                            <div class="live-shop-price-chip">${spotlightProduct ? escapeHtml(formatLiveSocialShoppingMoney(spotlightProduct.price)) : 'Live pricing'}</div>
+                        </div>
+                        <p>${escapeHtml(activeSession.subtitle)}</p>
+                        <div class="live-shop-tag-row">
+                            ${(activeSession.tags || []).map((tag) => `<span class="live-shop-tag">${escapeHtml(tag)}</span>`).join('')}
+                        </div>
+                        <div class="live-shop-action-row">
+                            ${spotlightProduct ? `<button class="live-shop-btn live-shop-btn-primary" type="button" onclick="addLiveSocialShoppingProduct('${escapeHtml(spotlightProduct.id)}')">Add pinned item</button>` : ''}
+                            <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="setLiveSocialShoppingFilter('live')">Watch live rooms</button>
+                            <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="setLiveSocialShoppingFilter('upcoming')">See upcoming</button>
+                        </div>
+                    </div>
+                </div>
+
+                <aside class="live-shop-spotlight-card">
+                    <div class="live-shop-panel-head">
+                        <div>
+                            <div class="live-shop-panel-label">Spotlight product</div>
+                            <h3>${spotlightProduct ? escapeHtml(spotlightProduct.name) : 'No spotlight yet'}</h3>
+                        </div>
+                        ${spotlightProduct ? `<span class="live-shop-mode-pill">${escapeHtml(spotlightProduct.badge)}</span>` : ''}
+                    </div>
+                    ${spotlightProduct ? `
+                        <div class="live-shop-spotlight-swatch" style="--live-product-color:${escapeHtml(spotlightProduct.color)};"></div>
+                        <div class="live-shop-spotlight-meta">
+                            <div>
+                                <span>Inventory</span>
+                                <strong>${escapeHtml(String(spotlightProduct.inventory))} left</strong>
+                            </div>
+                            <div>
+                                <span>Session</span>
+                                <strong>${escapeHtml(activeSession.scheduleLabel)}</strong>
+                            </div>
+                        </div>
+                        <div class="live-shop-spotlight-price">${escapeHtml(formatLiveSocialShoppingMoney(spotlightProduct.price))}</div>
+                        <div class="live-shop-inline-actions">
+                            <button class="live-shop-btn live-shop-btn-primary" type="button" onclick="addLiveSocialShoppingProduct('${escapeHtml(spotlightProduct.id)}')">Add to tray</button>
+                            <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openLiveSocialShoppingCheckout()">Quick checkout</button>
+                        </div>
+                    ` : '<div class="muted">Select a session to see its pinned product.</div>'}
+                </aside>
+            </div>
+
+            <div class="live-shop-insights-grid">
+                ${insightCards.map((card) => `
+                    <div class="live-shop-insight-card">
+                        <div class="live-shop-insight-icon"><i data-lucide="${escapeHtml(card.icon)}"></i></div>
+                        <div>
+                            <span>${escapeHtml(card.label)}</span>
+                            <strong>${escapeHtml(card.value)}</strong>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div class="live-shop-filter-row">
+                ${[
+                    ['all', 'All sessions'],
+                    ['live', 'Live now'],
+                    ['upcoming', 'Upcoming'],
+                    ['rewatch', 'Rewatch']
+                ].map(([key, label]) => `
+                    <button class="live-shop-filter-chip ${liveSocialShoppingState.filter === key ? 'active' : ''}" type="button" onclick="setLiveSocialShoppingFilter('${key}')">${escapeHtml(label)}</button>
+                `).join('')}
+            </div>
+
+            <div class="live-shop-content-grid">
+                <div class="live-shop-main-column">
+                    <div class="live-shop-section-card">
+                        <div class="live-shop-section-head">
+                            <div>
+                                <div class="live-shop-panel-label">Channels</div>
+                                <h3>Curated sessions</h3>
+                            </div>
+                            <span class="live-shop-mode-pill">${sessions.length} showing</span>
+                        </div>
+                        <div class="live-shop-session-grid">
+                            ${sessions.map((session) => `
+                                <button
+                                    class="live-shop-session-card ${session.id === activeSession.id ? 'active' : ''}"
+                                    type="button"
+                                    onclick="setActiveLiveSocialShoppingSession('${escapeHtml(session.id)}')"
+                                    style="--live-shop-accent:${escapeHtml(session.accent)};"
+                                >
+                                    <div class="live-shop-session-cover">
+                                        <span class="live-shop-status-pill ${getLiveSocialShoppingStatusTone(session.status)}">${escapeHtml(getLiveSocialShoppingStatusLabel(session.status))}</span>
+                                        <strong>${new Intl.NumberFormat('fr-DZ').format(session.viewers)}</strong>
+                                    </div>
+                                    <div class="live-shop-session-meta">
+                                        <div class="live-shop-session-head">
+                                            <h4>${escapeHtml(session.title)}</h4>
+                                            <span>${escapeHtml(session.scheduleLabel)}</span>
+                                        </div>
+                                        <p>${escapeHtml(session.subtitle)}</p>
+                                        <div class="live-shop-session-footer">
+                                            <span>${escapeHtml(session.host)}</span>
+                                            <span>${escapeHtml(session.products?.length || 0)} products</span>
+                                        </div>
+                                    </div>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="live-shop-section-card">
+                        <div class="live-shop-section-head">
+                            <div>
+                                <div class="live-shop-panel-label">Product rail</div>
+                                <h3>Shop this session</h3>
+                            </div>
+                            <span class="live-shop-mode-pill">${escapeHtml(activeSession.host)}</span>
+                        </div>
+                        <div class="live-shop-products-grid">
+                            ${(activeSession.products || []).map((product) => {
+                                const qty = Number(liveSocialShoppingState.cart[product.id]) || 0;
+                                return `
+                                    <article class="live-shop-product-card">
+                                        <div class="live-shop-product-thumb" style="--live-product-color:${escapeHtml(product.color)};"></div>
+                                        <div class="live-shop-product-body">
+                                            <div class="live-shop-product-head">
+                                                <div>
+                                                    <h4>${escapeHtml(product.name)}</h4>
+                                                    <span>${escapeHtml(product.badge)}</span>
+                                                </div>
+                                                <strong>${escapeHtml(formatLiveSocialShoppingMoney(product.price))}</strong>
+                                            </div>
+                                            <div class="live-shop-product-meta">
+                                                <span>${escapeHtml(String(product.inventory))} left in stock</span>
+                                                <span>${qty ? `${qty} in tray` : 'Tap to add'}</span>
+                                            </div>
+                                            <div class="live-shop-inline-actions">
+                                                <button class="live-shop-btn live-shop-btn-primary" type="button" onclick="addLiveSocialShoppingProduct('${escapeHtml(product.id)}')">Add to tray</button>
+                                                <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="setActiveLiveSocialShoppingSession('${escapeHtml(activeSession.id)}')">Keep watching</button>
+                                            </div>
+                                        </div>
+                                    </article>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                </div>
+
+                <aside class="live-shop-side-column">
+                    <div class="live-shop-section-card live-shop-sticky-card">
+                        <div class="live-shop-section-head">
+                            <div>
+                                <div class="live-shop-panel-label">Shopping tray</div>
+                                <h3>${totalItems} item${totalItems === 1 ? '' : 's'}</h3>
+                            </div>
+                            <span class="live-shop-mode-pill">${escapeHtml(formatLiveSocialShoppingMoney(total))}</span>
+                        </div>
+                        <div class="live-shop-cart-list">
+                            ${cartItems.length ? cartItems.map((item) => `
+                                <div class="live-shop-cart-item">
+                                    <div class="live-shop-cart-copy">
+                                        <strong>${escapeHtml(item.name)}</strong>
+                                        <span>${escapeHtml(item.host)}</span>
+                                    </div>
+                                    <div class="live-shop-cart-controls">
+                                        <button class="live-shop-qty-btn" type="button" onclick="changeLiveSocialShoppingCartQuantity('${escapeHtml(item.id)}', -1)">-</button>
+                                        <span>${escapeHtml(String(item.quantity))}</span>
+                                        <button class="live-shop-qty-btn" type="button" onclick="changeLiveSocialShoppingCartQuantity('${escapeHtml(item.id)}', 1)">+</button>
+                                    </div>
+                                    <strong>${escapeHtml(formatLiveSocialShoppingMoney(item.subtotal))}</strong>
+                                </div>
+                            `).join('') : `
+                                <div class="live-shop-empty">
+                                    <i data-lucide="shopping-bag"></i>
+                                    <h4>Your tray is empty</h4>
+                                    <p>Select a live product to build a quick checkout basket.</p>
+                                </div>
+                            `}
+                        </div>
+                        <div class="live-shop-checkout-bar">
+                            <div>
+                                <span>Total</span>
+                                <strong>${escapeHtml(formatLiveSocialShoppingMoney(total))}</strong>
+                            </div>
+                            <button class="live-shop-btn live-shop-btn-primary" type="button" onclick="openLiveSocialShoppingCheckout()">Checkout</button>
+                        </div>
+                    </div>
+
+                    <div class="live-shop-section-card">
+                        <div class="live-shop-section-head">
+                            <div>
+                                <div class="live-shop-panel-label">Schedule</div>
+                                <h3>Upcoming rooms</h3>
+                            </div>
+                        </div>
+                        <div class="live-shop-schedule-list">
+                            ${upcomingSessions.map((session) => `
+                                <button class="live-shop-schedule-item" type="button" onclick="setActiveLiveSocialShoppingSession('${escapeHtml(session.id)}'); setLiveSocialShoppingFilter('upcoming');">
+                                    <div>
+                                        <strong>${escapeHtml(session.title)}</strong>
+                                        <span>${escapeHtml(session.host)}</span>
+                                    </div>
+                                    <span>${escapeHtml(session.durationLabel)}</span>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    `;
+    scheduleLucideCreateIcons(root);
 }
 
 async function saveFeatureFlagState(key, enabled) {

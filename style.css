@@ -10275,3 +10275,673 @@ footer {
     font-weight: 700;
     font-size: 0.92rem;
 }
+
+.live-shop-shell {
+    max-width: 1380px;
+    margin: 0 auto;
+    display: grid;
+    gap: 18px;
+    padding: 6px 0 28px;
+}
+
+.live-shop-topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 4px 4px 0;
+}
+
+.live-shop-topbar h2 {
+    margin: 6px 0 8px;
+    font-size: clamp(28px, 3vw, 40px);
+    line-height: 1.05;
+}
+
+.live-shop-topbar p {
+    margin: 0;
+    max-width: 760px;
+    color: var(--text-muted);
+    font-size: 15px;
+    line-height: 1.7;
+}
+
+.live-shop-topbar-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.live-shop-eyebrow,
+.live-shop-panel-label {
+    color: var(--primary-color);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 11px;
+}
+
+.live-shop-mode-pill,
+.live-shop-tag,
+.live-shop-status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-main) 86%, var(--primary-color) 14%);
+    color: var(--text-main);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.live-shop-mode-pill.is-public {
+    border-color: rgba(34, 160, 107, 0.28);
+    background: rgba(34, 160, 107, 0.1);
+    color: #1d7f56;
+}
+
+.live-shop-mode-pill.is-admin {
+    border-color: rgba(255, 106, 0, 0.2);
+    background: rgba(255, 106, 0, 0.1);
+    color: var(--primary-color);
+}
+
+.live-shop-status-pill.is-live {
+    background: rgba(255, 106, 0, 0.12);
+    border-color: rgba(255, 106, 0, 0.24);
+    color: var(--primary-color);
+}
+
+.live-shop-status-pill.is-upcoming {
+    background: rgba(79, 124, 255, 0.1);
+    border-color: rgba(79, 124, 255, 0.22);
+    color: #3f66d3;
+}
+
+.live-shop-status-pill.is-rewatch {
+    background: rgba(34, 160, 107, 0.1);
+    border-color: rgba(34, 160, 107, 0.22);
+    color: #1d7f56;
+}
+
+.live-shop-stage-grid,
+.live-shop-content-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.92fr);
+    gap: 18px;
+}
+
+.live-shop-stage-card,
+.live-shop-spotlight-card,
+.live-shop-section-card,
+.live-shop-insight-card {
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    box-shadow: 0 18px 45px rgba(15, 20, 25, 0.06);
+}
+
+.live-shop-stage-card {
+    overflow: hidden;
+}
+
+.live-shop-stage-visual {
+    position: relative;
+    min-height: 340px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 18px;
+    color: #fff;
+    background:
+        radial-gradient(circle at 18% 20%, rgba(255,255,255,0.2), transparent 32%),
+        radial-gradient(circle at 80% 25%, rgba(255,255,255,0.14), transparent 28%),
+        linear-gradient(140deg, color-mix(in srgb, var(--live-shop-accent) 78%, #120e0b 22%), #10131a 66%, color-mix(in srgb, var(--live-shop-accent) 18%, #0f1115 82%));
+}
+
+.live-shop-stage-glow {
+    position: absolute;
+    inset: auto -80px -110px auto;
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--live-shop-accent) 72%, #fff 28%);
+    filter: blur(80px);
+    opacity: 0.28;
+    pointer-events: none;
+}
+
+.live-shop-stage-pill-row,
+.live-shop-tag-row,
+.live-shop-action-row,
+.live-shop-inline-actions,
+.live-shop-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.live-shop-stage-broadcast {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 16px;
+}
+
+.live-shop-stage-screen {
+    width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.13);
+    backdrop-filter: blur(16px);
+    font-weight: 700;
+}
+
+.live-shop-stage-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ff694f;
+    box-shadow: 0 0 0 5px rgba(255, 105, 79, 0.18);
+}
+
+.live-shop-stage-comments {
+    display: grid;
+    justify-items: end;
+    gap: 8px;
+}
+
+.live-shop-stage-comment {
+    max-width: min(320px, 100%);
+    padding: 11px 14px;
+    border-radius: 16px;
+    background: rgba(9, 12, 17, 0.42);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(16px);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.live-shop-stage-bottom {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.live-shop-stage-metric {
+    min-width: 170px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    background: rgba(255,255,255,0.11);
+    backdrop-filter: blur(16px);
+}
+
+.live-shop-stage-metric strong,
+.live-shop-insight-card strong,
+.live-shop-cart-item strong,
+.live-shop-product-head strong,
+.live-shop-checkout-bar strong,
+.live-shop-spotlight-price,
+.live-shop-session-cover strong {
+    display: block;
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.live-shop-stage-metric span,
+.live-shop-insight-card span,
+.live-shop-product-head span,
+.live-shop-product-meta span,
+.live-shop-cart-copy span,
+.live-shop-checkout-bar span,
+.live-shop-schedule-item span,
+.live-shop-spotlight-meta span,
+.live-shop-host-line span,
+.live-shop-session-head span,
+.live-shop-session-footer span {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.live-shop-stage-card .live-shop-stage-metric span {
+    color: rgba(255,255,255,0.82);
+}
+
+.live-shop-stage-content,
+.live-shop-spotlight-card,
+.live-shop-section-card {
+    padding: 18px;
+}
+
+.live-shop-heading-row,
+.live-shop-panel-head,
+.live-shop-section-head,
+.live-shop-product-head,
+.live-shop-session-head,
+.live-shop-cart-item,
+.live-shop-checkout-bar,
+.live-shop-topbar,
+.live-shop-spotlight-meta,
+.live-shop-session-footer,
+.live-shop-cart-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.live-shop-stage-content h3,
+.live-shop-panel-head h3,
+.live-shop-section-head h3,
+.live-shop-product-head h4,
+.live-shop-session-head h4,
+.live-shop-empty h4 {
+    margin: 0;
+}
+
+.live-shop-stage-content p {
+    margin: 12px 0 0;
+    color: var(--text-muted);
+    line-height: 1.7;
+}
+
+.live-shop-host-line {
+    color: var(--text-main);
+    font-weight: 800;
+    margin-bottom: 8px;
+}
+
+.live-shop-price-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 14px;
+    border-radius: 14px;
+    background: rgba(255, 106, 0, 0.08);
+    color: var(--primary-color);
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.live-shop-spotlight-card,
+.live-shop-sticky-card {
+    position: sticky;
+    top: 90px;
+}
+
+.live-shop-spotlight-swatch,
+.live-shop-product-thumb {
+    width: 100%;
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at 30% 28%, rgba(255,255,255,0.7), transparent 32%),
+        linear-gradient(145deg, color-mix(in srgb, var(--live-product-color) 78%, #ffffff 22%), color-mix(in srgb, var(--live-product-color) 32%, #f4f6fb 68%));
+}
+
+.live-shop-spotlight-swatch {
+    height: 170px;
+    margin: 16px 0;
+}
+
+.live-shop-product-thumb {
+    height: 132px;
+}
+
+.live-shop-spotlight-meta {
+    padding: 14px 0 4px;
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 16px;
+}
+
+.live-shop-spotlight-meta strong {
+    display: block;
+    margin-top: 4px;
+}
+
+.live-shop-spotlight-price {
+    margin-bottom: 16px;
+    font-size: 24px;
+}
+
+.live-shop-insights-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.live-shop-insight-card {
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.live-shop-insight-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    color: var(--primary-color);
+    background: rgba(255, 106, 0, 0.08);
+}
+
+.live-shop-insight-icon i,
+.live-shop-insight-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.live-shop-filter-row {
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+}
+
+.live-shop-filter-chip,
+.live-shop-btn,
+.live-shop-session-card,
+.live-shop-schedule-item,
+.live-shop-qty-btn {
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    color: var(--text-main);
+}
+
+.live-shop-filter-chip {
+    appearance: none;
+    border-radius: 999px;
+    padding: 10px 14px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.18s ease;
+}
+
+.live-shop-filter-chip.active,
+.live-shop-filter-chip:hover {
+    border-color: rgba(255, 106, 0, 0.24);
+    background: rgba(255, 106, 0, 0.1);
+    color: var(--primary-color);
+}
+
+.live-shop-main-column,
+.live-shop-side-column,
+.live-shop-cart-list,
+.live-shop-schedule-list {
+    display: grid;
+    gap: 18px;
+}
+
+.live-shop-session-grid,
+.live-shop-products-grid {
+    display: grid;
+    gap: 14px;
+}
+
+.live-shop-session-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.live-shop-products-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.live-shop-session-card {
+    appearance: none;
+    width: 100%;
+    padding: 0;
+    text-align: left;
+    border-radius: 22px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.live-shop-session-card:hover,
+.live-shop-session-card.active {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--live-shop-accent) 44%, var(--border-color) 56%);
+    box-shadow: 0 14px 30px rgba(15, 20, 25, 0.08);
+}
+
+.live-shop-session-cover {
+    padding: 16px;
+    min-height: 124px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    color: #fff;
+    background:
+        radial-gradient(circle at 20% 18%, rgba(255,255,255,0.18), transparent 28%),
+        linear-gradient(145deg, color-mix(in srgb, var(--live-shop-accent) 76%, #1a1a1a 24%), #11151d 74%);
+}
+
+.live-shop-session-meta,
+.live-shop-product-body {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+}
+
+.live-shop-session-meta p {
+    margin: 0;
+    color: var(--text-muted);
+    line-height: 1.6;
+    font-size: 14px;
+}
+
+.live-shop-product-card {
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: 22px;
+    background: var(--bg-main);
+    box-shadow: 0 12px 26px rgba(15, 20, 25, 0.05);
+}
+
+.live-shop-product-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+.live-shop-cart-list {
+    min-height: 150px;
+}
+
+.live-shop-cart-item {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.live-shop-cart-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.live-shop-cart-copy {
+    min-width: 0;
+}
+
+.live-shop-cart-copy strong,
+.live-shop-session-head h4,
+.live-shop-product-head h4 {
+    font-size: 15px;
+    line-height: 1.4;
+}
+
+.live-shop-cart-controls {
+    flex: 0 0 auto;
+}
+
+.live-shop-qty-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.live-shop-checkout-bar {
+    margin-top: 10px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-color);
+}
+
+.live-shop-empty {
+    padding: 18px 6px 8px;
+    text-align: center;
+}
+
+.live-shop-empty i,
+.live-shop-empty svg {
+    width: 24px;
+    height: 24px;
+    color: var(--primary-color);
+}
+
+.live-shop-empty p {
+    margin: 10px auto 0;
+    max-width: 240px;
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+.live-shop-schedule-item {
+    appearance: none;
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: 18px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.18s ease, transform 0.18s ease;
+}
+
+.live-shop-schedule-item:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 106, 0, 0.22);
+}
+
+.live-shop-btn {
+    appearance: none;
+    width: auto;
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 16px;
+    border-radius: 14px;
+    font-weight: 800;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.live-shop-btn:hover {
+    transform: translateY(-1px);
+}
+
+.live-shop-btn-primary {
+    border-color: transparent;
+    background: var(--primary-color);
+    color: #fff;
+    box-shadow: 0 10px 22px rgba(255, 106, 0, 0.22);
+}
+
+.live-shop-btn-ghost {
+    background: var(--bg-main);
+    color: var(--text-main);
+}
+
+@media (max-width: 1200px) {
+    .live-shop-stage-grid,
+    .live-shop-content-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .live-shop-spotlight-card,
+    .live-shop-sticky-card {
+        position: static;
+    }
+}
+
+@media (max-width: 900px) {
+    .live-shop-session-grid,
+    .live-shop-products-grid,
+    .live-shop-insights-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .live-shop-topbar,
+    .live-shop-heading-row,
+    .live-shop-section-head,
+    .live-shop-panel-head,
+    .live-shop-product-head,
+    .live-shop-checkout-bar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .live-shop-stage-visual {
+        min-height: 300px;
+    }
+}
+
+@media (max-width: 640px) {
+    .live-shop-shell {
+        gap: 14px;
+        padding-bottom: 20px;
+    }
+
+    .live-shop-stage-content,
+    .live-shop-spotlight-card,
+    .live-shop-section-card {
+        padding: 14px;
+    }
+
+    .live-shop-stage-visual {
+        min-height: 260px;
+        padding: 16px;
+    }
+
+    .live-shop-stage-bottom,
+    .live-shop-spotlight-meta,
+    .live-shop-cart-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .live-shop-btn {
+        font-size: 13px;
+        padding: 10px 14px;
+    }
+
+    .live-shop-cart-controls {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
