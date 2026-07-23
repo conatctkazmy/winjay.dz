@@ -20,47 +20,6 @@ function applyTouchDeviceClass() {
 applyTouchDeviceClass();
 window.addEventListener('orientationchange', () => setTimeout(applyTouchDeviceClass, 180));
 
-// #region debug-point A:partial-load-reporter
-function reportPartialLoadDebug(hypothesisId, location, msg, data = {}) {
-    try {
-        fetch('http://127.0.0.1:7777/event', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                sessionId: 'partial-app-load',
-                runId: 'pre-fix',
-                hypothesisId,
-                location,
-                msg: `[DEBUG] ${msg}`,
-                data,
-                ts: Date.now()
-            })
-        }).catch(() => null);
-    } catch (e) {
-        null;
-    }
-}
-
-if (!window.__partialLoadDebugHooksBound) {
-    window.__partialLoadDebugHooksBound = true;
-    window.addEventListener('error', (event) => {
-        reportPartialLoadDebug('A', 'window:error', 'uncaught-error', {
-            message: String(event?.message || ''),
-            source: String(event?.filename || ''),
-            line: Number(event?.lineno || 0),
-            column: Number(event?.colno || 0)
-        });
-    });
-    window.addEventListener('unhandledrejection', (event) => {
-        const reason = event?.reason;
-        reportPartialLoadDebug('A', 'window:unhandledrejection', 'unhandled-rejection', {
-            message: String(reason?.message || reason || ''),
-            name: String(reason?.name || '')
-        });
-    });
-}
-// #endregion
-
 const DEFAULT_AVATAR_SVG = "data:image/svg+xml,%3Csvg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23e2e8f0'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%2394a3b8'/%3E%3Cellipse cx='20' cy='35' rx='12' ry='8' fill='%2394a3b8'/%3E%3C/svg%3E";
 
 function createEmptyUserProfile() {
@@ -585,6 +544,12 @@ let liveShoppingSessionsPollTimer = null;
 let liveShoppingRoomPresenceChannel = null;
 let liveShoppingRoomPresenceCount = 0;
 let liveShoppingSessionsSignature = '';
+let liveShoppingRoomPresenceSessionId = '';
+let liveShoppingRoomPeerId = '';
+let liveViewerPeerConnection = null;
+let liveViewerRemoteStream = null;
+let liveViewerBroadcasterPeerId = '';
+let liveBroadcasterPeerConnections = new Map();
 
 let listingsLoadedCount = 0;
 let listingsHasMore = true;
@@ -868,21 +833,10 @@ async function refreshCoursesFeatureFlag({ silent = false } = {}) {
 
 async function refreshLiveSocialShoppingFeatureFlag({ silent = false } = {}) {
     const client = initSupabase();
-    // #region debug-point C:live-flag-entry
-    reportPartialLoadDebug('C', 'refreshLiveSocialShoppingFeatureFlag:entry', 'live-flag-refresh-enter', {
-        hasClient: !!client,
-        silent: !!silent
-    });
-    // #endregion
     if (!client) {
         liveSocialShoppingFeatureEnabledFlag = false;
         liveSocialShoppingFeatureFlagsLoaded = true;
         applyLiveSocialShoppingFeatureVisibility();
-        // #region debug-point C:live-flag-no-client
-        reportPartialLoadDebug('C', 'refreshLiveSocialShoppingFeatureFlag:no-client', 'live-flag-refresh-no-client', {
-            enabled: !!liveSocialShoppingFeatureEnabledFlag
-        });
-        // #endregion
         return liveSocialShoppingFeatureEnabledFlag;
     }
     try {
@@ -891,23 +845,11 @@ async function refreshLiveSocialShoppingFeatureFlag({ silent = false } = {}) {
         liveSocialShoppingFeatureEnabledFlag = !!data?.enabled;
         liveSocialShoppingFeatureFlagsLoaded = true;
         applyLiveSocialShoppingFeatureVisibility();
-        // #region debug-point C:live-flag-success
-        reportPartialLoadDebug('C', 'refreshLiveSocialShoppingFeatureFlag:success', 'live-flag-refresh-success', {
-            enabled: !!liveSocialShoppingFeatureEnabledFlag,
-            hasRow: !!data
-        });
-        // #endregion
         return liveSocialShoppingFeatureEnabledFlag;
     } catch (e) {
         liveSocialShoppingFeatureEnabledFlag = false;
         liveSocialShoppingFeatureFlagsLoaded = true;
         applyLiveSocialShoppingFeatureVisibility();
-        // #region debug-point C:live-flag-error
-        reportPartialLoadDebug('C', 'refreshLiveSocialShoppingFeatureFlag:error', 'live-flag-refresh-error', {
-            message: String(e?.message || e || ''),
-            silent: !!silent
-        });
-        // #endregion
         if (!silent) null;
         return liveSocialShoppingFeatureEnabledFlag;
     }
@@ -2049,42 +1991,18 @@ async function handleAuthSessionChange(event, session) {
 }
 
 async function bootstrapSupabaseAuth() {
-    // #region debug-point A:bootstrap-auth-entry
-    reportPartialLoadDebug('A', 'bootstrapSupabaseAuth:entry', 'bootstrap-auth-enter', {
-        hasClient: !!supabaseClient
-    });
-    // #endregion
     if (!supabaseClient) return;
     const { data, error } = await supabaseClient.auth.getSession();
-    // #region debug-point A:bootstrap-auth-session
-    reportPartialLoadDebug('A', 'bootstrapSupabaseAuth:getSession', 'bootstrap-auth-session-result', {
-        hasError: !!error,
-        hasSession: !!data?.session,
-        hasUser: !!data?.session?.user
-    });
-    // #endregion
     if (error) return;
     applyAuthSessionToLocalState(data?.session || null);
     if (data?.session?.user) {
         const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
         const authUser = userData?.user || null;
-        // #region debug-point A:bootstrap-auth-user
-        reportPartialLoadDebug('A', 'bootstrapSupabaseAuth:getUser', 'bootstrap-auth-user-result', {
-            hasError: !!userErr,
-            hasUser: !!authUser?.id
-        });
-        // #endregion
         if (userErr || !authUser?.id) {
             await forceVisitorLogout({ message: 'Session expired', silent: true });
             return;
         }
         const row = await ensureSupabaseProfileRow(supabaseClient, authUser);
-        // #region debug-point A:bootstrap-auth-profile-row
-        reportPartialLoadDebug('A', 'bootstrapSupabaseAuth:profileRow', 'bootstrap-auth-profile-row-result', {
-            hasRow: !!row,
-            deleted: !!row?.deleted_at
-        });
-        // #endregion
         if (row && row.deleted_at) {
             await forceVisitorLogout({ message: 'Account disabled', silent: false });
             return;
@@ -2101,12 +2019,6 @@ async function bootstrapSupabaseAuth() {
         bootstrapLivePresence();
         maybeOpenPendingAdmin();
     }
-    // #region debug-point A:bootstrap-auth-exit
-    reportPartialLoadDebug('A', 'bootstrapSupabaseAuth:exit', 'bootstrap-auth-exit', {
-        loggedIn: !!currentSupabaseUserId,
-        hasProfile: !!hasLoadedSupabaseProfile
-    });
-    // #endregion
 }
 
 function clearSupabaseAuthTokenFromAllStorages() {
@@ -7188,13 +7100,6 @@ function runWhenIdle(fn, timeout = 1500) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // #region debug-point A:dom-ready-entry
-    reportPartialLoadDebug('A', 'DOMContentLoaded:entry', 'dom-content-loaded-enter', {
-        readyState: String(document.readyState || ''),
-        path: String(window.location.pathname || ''),
-        search: String(window.location.search || '')
-    });
-    // #endregion
     loadLiveSocialShoppingTray();
     setPendingReferralFromUrl();
     cacheTranslationNodes();
@@ -7224,25 +7129,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         null;
     }
     updateNavbarAuthUI();
-    // #region debug-point B:dom-ready-navbar
-    reportPartialLoadDebug('B', 'DOMContentLoaded:afterUpdateNavbarAuthUI', 'dom-content-loaded-after-navbar', {
-        loginVisible: document.getElementById('navLoginBtn')?.style?.display !== 'none',
-        hasProfileMenu: !!document.getElementById('navProfileMenu')
-    });
-    // #endregion
     initSupabase();
-    // #region debug-point A:dom-ready-supabase
-    reportPartialLoadDebug('A', 'DOMContentLoaded:afterInitSupabase', 'dom-content-loaded-after-init-supabase', {
-        hasClient: !!supabaseClient
-    });
-    // #endregion
     await bootstrapSupabaseAuth();
-    // #region debug-point A:dom-ready-after-auth
-    reportPartialLoadDebug('A', 'DOMContentLoaded:afterBootstrapSupabaseAuth', 'dom-content-loaded-after-auth', {
-        loggedIn: !!currentSupabaseUserId,
-        hasProfile: !!hasLoadedSupabaseProfile
-    });
-    // #endregion
     runWhenIdle(() => {
         Promise.all([
             refreshCoursesFeatureFlag({ silent: true }),
@@ -7361,15 +7249,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const listingIdFromUrl = Number(listingParam) || 0;
     const editIdFromUrl = Number(editParam) || 0;
     const courseIdFromUrl = String(courseParam || '').trim();
-    // #region debug-point D:dom-ready-route-state
-    reportPartialLoadDebug('D', 'DOMContentLoaded:route-restore', 'dom-content-loaded-route-state', {
-        lastSection: String(lastSection || ''),
-        sectionParam,
-        courseIdFromUrl,
-        listingIdFromUrl,
-        editIdFromUrl
-    });
-    // #endregion
 
     if (listingsGrid && (!Array.isArray(listings) || listings.length === 0)) {
         homeInitialListingsLoading = true;
@@ -12580,17 +12459,6 @@ function updateNavbarAuthUI() {
     const freeVerifiedPill = document.getElementById('navFreeVerifiedPill');
     const profileMenu = document.getElementById('navProfileMenu');
     const sidebarCoursesItem = document.getElementById('sidebarCoursesItem');
-    // #region debug-point B:navbar-auth-ui
-    reportPartialLoadDebug('B', 'updateNavbarAuthUI', 'update-navbar-auth-ui', {
-        loggedIn,
-        profileReady,
-        likelyLoggedIn,
-        hasLoginBtn: !!loginBtn,
-        hasNotificationsBtn: !!notificationsBtn,
-        hasMessagesBtn: !!messagesBtn,
-        hasProfileMenu: !!profileMenu
-    });
-    // #endregion
 
     if (loginBtn) loginBtn.style.display = likelyLoggedIn ? 'none' : 'inline-flex';
     if (notificationsBtn) notificationsBtn.style.display = loggedIn ? '' : 'none';
@@ -13094,6 +12962,289 @@ function isLiveRoomMounted() {
     return isLiveStudioMounted() || !!document.querySelector('.live-viewer-stage');
 }
 
+function getLiveShoppingRoomPeerId() {
+    if (liveShoppingRoomPeerId) return liveShoppingRoomPeerId;
+    const base = String(currentSupabaseUserId || getAnonVisitorId() || 'viewer').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 18) || 'viewer';
+    liveShoppingRoomPeerId = `${base}-${Math.random().toString(36).slice(2, 8)}`;
+    return liveShoppingRoomPeerId;
+}
+
+function createLiveShoppingRtcConfig() {
+    return {
+        iceServers: [
+            {
+                urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']
+            }
+        ]
+    };
+}
+
+function closeLiveShoppingPeerConnection(pc) {
+    if (!pc) return;
+    try {
+        pc.onicecandidate = null;
+        pc.ontrack = null;
+        pc.onconnectionstatechange = null;
+        pc.oniceconnectionstatechange = null;
+    } catch (e) {
+        null;
+    }
+    try {
+        pc.close();
+    } catch (e) {
+        null;
+    }
+}
+
+function hasLiveViewerVideoStream() {
+    try {
+        return !!liveViewerRemoteStream?.getVideoTracks?.()?.length;
+    } catch (e) {
+        return false;
+    }
+}
+
+function updateLiveViewerPlayback() {
+    const stageEl = document.querySelector('.live-viewer-stage');
+    const videoEl = document.getElementById('liveViewerStream');
+    const statusEl = document.querySelector('[data-live-viewer-connection-state]');
+    const ready = hasLiveViewerVideoStream();
+    if (stageEl) stageEl.classList.toggle('has-live-video', ready);
+    if (statusEl) statusEl.textContent = ready ? 'Live video connected' : 'Connecting to live video...';
+    if (!videoEl) return;
+    if (!ready) {
+        try {
+            videoEl.pause?.();
+        } catch (e) {
+            null;
+        }
+        if (videoEl.srcObject) videoEl.srcObject = null;
+        return;
+    }
+    if (videoEl.srcObject !== liveViewerRemoteStream) videoEl.srcObject = liveViewerRemoteStream;
+    const playLiveViewerStream = async () => {
+        try {
+            videoEl.muted = false;
+            await videoEl.play?.();
+        } catch (e) {
+            try {
+                videoEl.muted = true;
+                await videoEl.play?.();
+            } catch (err) {
+                null;
+            }
+        }
+    };
+    void playLiveViewerStream();
+}
+
+function resetLiveViewerConnection() {
+    closeLiveShoppingPeerConnection(liveViewerPeerConnection);
+    liveViewerPeerConnection = null;
+    liveViewerBroadcasterPeerId = '';
+    liveViewerRemoteStream = null;
+    updateLiveViewerPlayback();
+}
+
+function resetLiveBroadcasterConnections() {
+    try {
+        liveBroadcasterPeerConnections.forEach((pc) => {
+            closeLiveShoppingPeerConnection(pc);
+        });
+    } catch (e) {
+        null;
+    }
+    liveBroadcasterPeerConnections = new Map();
+}
+
+function resetLiveShoppingRtcState() {
+    resetLiveViewerConnection();
+    resetLiveBroadcasterConnections();
+}
+
+function sendLiveShoppingSignal(kind, payload = {}) {
+    if (!liveShoppingRoomPresenceChannel || !liveShoppingRoomPresenceSessionId) return;
+    try {
+        void liveShoppingRoomPresenceChannel.send({
+            type: 'broadcast',
+            event: 'webrtc-signal',
+            payload: {
+                kind: String(kind || '').trim(),
+                session_id: liveShoppingRoomPresenceSessionId,
+                from_peer_id: getLiveShoppingRoomPeerId(),
+                ...payload
+            }
+        });
+    } catch (e) {
+        null;
+    }
+}
+
+function createLiveViewerPeerConnection(broadcasterPeerId) {
+    if (liveViewerPeerConnection && liveViewerBroadcasterPeerId === broadcasterPeerId) return liveViewerPeerConnection;
+    resetLiveViewerConnection();
+    if (typeof RTCPeerConnection === 'undefined') return null;
+    const pc = new RTCPeerConnection(createLiveShoppingRtcConfig());
+    liveViewerPeerConnection = pc;
+    liveViewerBroadcasterPeerId = broadcasterPeerId;
+    pc.ontrack = (event) => {
+        const stream = event?.streams?.[0] || null;
+        if (stream) {
+            liveViewerRemoteStream = stream;
+        } else if (event?.track) {
+            if (!liveViewerRemoteStream) liveViewerRemoteStream = new MediaStream();
+            try {
+                liveViewerRemoteStream.addTrack(event.track);
+            } catch (e) {
+                null;
+            }
+        }
+        updateLiveViewerPlayback();
+    };
+    pc.onicecandidate = (event) => {
+        if (!event?.candidate) return;
+        sendLiveShoppingSignal('ice-candidate', {
+            target_peer_id: broadcasterPeerId,
+            candidate: event.candidate?.toJSON ? event.candidate.toJSON() : event.candidate
+        });
+    };
+    pc.onconnectionstatechange = () => {
+        const state = String(pc.connectionState || '').toLowerCase();
+        if (state === 'failed' || state === 'disconnected' || state === 'closed') {
+            resetLiveViewerConnection();
+        }
+    };
+    return pc;
+}
+
+async function handleLiveViewerOfferSignal(fromPeerId, description) {
+    const desc = description && typeof description === 'object' ? description : null;
+    if (!fromPeerId || !desc) return;
+    const pc = createLiveViewerPeerConnection(fromPeerId);
+    if (!pc) return;
+    await pc.setRemoteDescription(new RTCSessionDescription(desc));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    sendLiveShoppingSignal('answer', {
+        target_peer_id: fromPeerId,
+        description: pc.localDescription?.toJSON ? pc.localDescription.toJSON() : pc.localDescription
+    });
+}
+
+async function handleLiveViewerIceCandidateSignal(fromPeerId, candidate) {
+    if (!candidate || !fromPeerId) return;
+    const pc = createLiveViewerPeerConnection(fromPeerId);
+    if (!pc?.remoteDescription) return;
+    try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (e) {
+        null;
+    }
+}
+
+async function createLiveBroadcastPeerConnection(viewerPeerId) {
+    if (!viewerPeerId || liveBroadcasterPeerConnections.has(viewerPeerId) || typeof RTCPeerConnection === 'undefined') return;
+    await ensureLiveStudioMedia();
+    if (!liveStudioStream) return;
+    const pc = new RTCPeerConnection(createLiveShoppingRtcConfig());
+    liveBroadcasterPeerConnections.set(viewerPeerId, pc);
+    try {
+        liveStudioStream.getTracks().forEach((track) => {
+            pc.addTrack(track, liveStudioStream);
+        });
+    } catch (e) {
+        null;
+    }
+    pc.onicecandidate = (event) => {
+        if (!event?.candidate) return;
+        sendLiveShoppingSignal('ice-candidate', {
+            target_peer_id: viewerPeerId,
+            candidate: event.candidate?.toJSON ? event.candidate.toJSON() : event.candidate
+        });
+    };
+    pc.onconnectionstatechange = () => {
+        const state = String(pc.connectionState || '').toLowerCase();
+        if (state === 'failed' || state === 'disconnected' || state === 'closed') {
+            closeLiveShoppingPeerConnection(pc);
+            liveBroadcasterPeerConnections.delete(viewerPeerId);
+        }
+    };
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    sendLiveShoppingSignal('offer', {
+        target_peer_id: viewerPeerId,
+        description: pc.localDescription?.toJSON ? pc.localDescription.toJSON() : pc.localDescription
+    });
+}
+
+async function handleLiveBroadcasterAnswerSignal(fromPeerId, description) {
+    const pc = liveBroadcasterPeerConnections.get(fromPeerId);
+    const desc = description && typeof description === 'object' ? description : null;
+    if (!pc || !desc) return;
+    await pc.setRemoteDescription(new RTCSessionDescription(desc));
+}
+
+async function handleLiveBroadcasterIceCandidateSignal(fromPeerId, candidate) {
+    const pc = liveBroadcasterPeerConnections.get(fromPeerId);
+    if (!pc || !candidate || !pc.localDescription) return;
+    try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (e) {
+        null;
+    }
+}
+
+function syncLiveBroadcastPeers(entries) {
+    const activeSession = getActiveLiveStudioSession();
+    if (!activeSession || liveSocialShoppingState.viewMode !== 'studio' || !isCurrentUserLiveSessionOwner(activeSession)) return;
+    const viewerPeerIds = new Set(
+        entries
+            .filter((entry) => String(entry?.role || '') === 'viewer')
+            .map((entry) => String(entry?.peer_id || '').trim())
+            .filter(Boolean)
+    );
+    liveBroadcasterPeerConnections.forEach((pc, peerId) => {
+        if (viewerPeerIds.has(peerId)) return;
+        closeLiveShoppingPeerConnection(pc);
+        liveBroadcasterPeerConnections.delete(peerId);
+    });
+    viewerPeerIds.forEach((peerId) => {
+        if (!liveBroadcasterPeerConnections.has(peerId)) void createLiveBroadcastPeerConnection(peerId);
+    });
+}
+
+function handleLiveShoppingSignal(payload) {
+    const activeSession = getActiveLiveStudioSession();
+    if (!activeSession) return;
+    const sessionId = String(payload?.session_id || '').trim();
+    if (!sessionId || sessionId !== String(activeSession.id || '')) return;
+    const myPeerId = getLiveShoppingRoomPeerId();
+    const targetPeerId = String(payload?.target_peer_id || '').trim();
+    const fromPeerId = String(payload?.from_peer_id || '').trim();
+    if (targetPeerId && targetPeerId !== myPeerId) return;
+    if (!fromPeerId || fromPeerId === myPeerId) return;
+    const kind = String(payload?.kind || '').trim();
+    if (kind === 'stream-ended' && liveSocialShoppingState.viewMode === 'viewer') {
+        resetLiveViewerConnection();
+        return;
+    }
+    if (liveSocialShoppingState.viewMode === 'viewer') {
+        if (kind === 'offer') {
+            void handleLiveViewerOfferSignal(fromPeerId, payload?.description);
+        } else if (kind === 'ice-candidate') {
+            void handleLiveViewerIceCandidateSignal(fromPeerId, payload?.candidate);
+        }
+        return;
+    }
+    if (liveSocialShoppingState.viewMode === 'studio' && isCurrentUserLiveSessionOwner(activeSession)) {
+        if (kind === 'answer') {
+            void handleLiveBroadcasterAnswerSignal(fromPeerId, payload?.description);
+        } else if (kind === 'ice-candidate') {
+            void handleLiveBroadcasterIceCandidateSignal(fromPeerId, payload?.candidate);
+        }
+    }
+}
+
 async function sendLiveRoomMessage(event) {
     event?.preventDefault?.();
     if (!requireAuthOrPrompt()) return;
@@ -13174,6 +13325,7 @@ function setActiveLiveSession(sessionId, { openStudio = false } = {}) {
 }
 
 function stopLiveStudioStream() {
+    resetLiveBroadcasterConnections();
     try {
         liveStudioStream?.getTracks?.()?.forEach((track) => track.stop());
     } catch (e) {
@@ -13209,6 +13361,7 @@ function exitLiveSocialShoppingRoom() {
 
 function stopLiveShoppingRoomPresence() {
     const client = initSupabase();
+    resetLiveShoppingRtcState();
     try {
         if (client && liveShoppingRoomPresenceChannel) client.removeChannel(liveShoppingRoomPresenceChannel);
     } catch (e) {
@@ -13216,6 +13369,7 @@ function stopLiveShoppingRoomPresence() {
     }
     liveShoppingRoomPresenceChannel = null;
     liveShoppingRoomPresenceCount = 0;
+    liveShoppingRoomPresenceSessionId = '';
 }
 
 function getLiveSessionViewerCount(sessionId, fallback = 0) {
@@ -13231,25 +13385,38 @@ function bootstrapLiveShoppingRoomPresence(sessionId) {
     if (!id) return;
     const client = initSupabase();
     if (!client) return;
+    if (liveShoppingRoomPresenceChannel && liveShoppingRoomPresenceSessionId === id) {
+        if (liveSocialShoppingState.viewMode === 'viewer') updateLiveViewerPlayback();
+        return;
+    }
     stopLiveShoppingRoomPresence();
-    const key = `${currentSupabaseUserId || getAnonVisitorId()}:live:${id}`;
+    liveShoppingRoomPresenceSessionId = id;
+    const key = `${currentSupabaseUserId || getAnonVisitorId()}:live:${id}:${getLiveShoppingRoomPeerId()}`;
     liveShoppingRoomPresenceChannel = client.channel(`live-room:${id}`, { config: { presence: { key } } });
     liveShoppingRoomPresenceChannel.on('presence', { event: 'sync' }, () => {
         const state = liveShoppingRoomPresenceChannel.presenceState?.() || {};
         const entries = flattenPresenceState(state).filter((entry) => String(entry?.session_id || '') === id);
         liveShoppingRoomPresenceCount = entries.length;
+        syncLiveBroadcastPeers(entries);
         if (getActiveSectionId() === 'live-social-shopping-section' && String(liveSocialShoppingState.activeSessionId || '') === id) {
             if ((liveSocialShoppingState.viewMode === 'studio' || liveSocialShoppingState.viewMode === 'viewer') && isLiveRoomMounted()) updateLiveStudioViewerCountUI();
             else renderLiveSocialShoppingSection();
         }
     });
+    liveShoppingRoomPresenceChannel.on('broadcast', { event: 'webrtc-signal' }, ({ payload }) => {
+        handleLiveShoppingSignal(payload || {});
+    });
     liveShoppingRoomPresenceChannel.subscribe((status) => {
         if (status !== 'SUBSCRIBED') return;
         try {
+            const activeSession = getActiveLiveStudioSession();
+            const role = liveSocialShoppingState.viewMode === 'studio' && isCurrentUserLiveSessionOwner(activeSession) ? 'broadcaster' : 'viewer';
             liveShoppingRoomPresenceChannel.track({
                 user_id: currentSupabaseUserId || null,
                 anon_id: getAnonVisitorId(),
                 session_id: id,
+                peer_id: getLiveShoppingRoomPeerId(),
+                role,
                 section: 'live-social-shopping-section',
                 last_seen: new Date().toISOString()
             });
@@ -13416,6 +13583,7 @@ function toggleLiveStudioCamera() {
 async function endLiveSocialShoppingSession() {
     const active = getActiveLiveStudioSession();
     if (!active) return;
+    sendLiveShoppingSignal('stream-ended');
     const client = initSupabase();
     if (client) {
         const { error } = await client
@@ -13822,6 +13990,7 @@ function renderLiveSocialShoppingSection() {
     if (viewMode === 'viewer' && activeSession) {
         const messages = getLiveRoomMessages(activeSession.id);
         const viewerCount = getLiveSessionViewerCount(activeSession.id, activeSession.viewerCount);
+        const viewerVideoReady = hasLiveViewerVideoStream();
         root.innerHTML = `
             <div class="live-shop-shell live-studio-shell">
                 <div class="live-shop-topbar">
@@ -13838,7 +14007,9 @@ function renderLiveSocialShoppingSection() {
                 </div>
                 <div class="live-studio-grid">
                     <div class="live-studio-stage-card">
-                        <div class="live-studio-video-shell live-viewer-stage" style="background-image:url('${escapeHtml(activeSession.previewImage || getListingPreviewImage(activeSession.pinnedListing) || '')}');">
+                        <div class="live-studio-video-shell live-viewer-stage ${viewerVideoReady ? 'has-live-video' : ''}" style="background-image:url('${escapeHtml(activeSession.previewImage || getListingPreviewImage(activeSession.pinnedListing) || '')}');">
+                            <video id="liveViewerStream" autoplay playsinline></video>
+                            <div class="live-viewer-connection-state" data-live-viewer-connection-state>${viewerVideoReady ? 'Live video connected' : 'Connecting to live video...'}</div>
                             <div class="live-studio-overlay-top">
                                 <span class="live-shop-status-pill is-live">LIVE</span>
                                 <span class="live-session-viewers"><i data-lucide="eye"></i> <span data-live-viewer-count>${escapeHtml(String(viewerCount))}</span></span>
@@ -13896,6 +14067,7 @@ function renderLiveSocialShoppingSection() {
             </div>
         `;
         bootstrapLiveShoppingRoomPresence(activeSession.id);
+        setTimeout(() => { updateLiveViewerPlayback(); }, 0);
         updateLiveShoppingTrayUI();
         scheduleLucideCreateIcons(root);
         return;
@@ -16917,13 +17089,6 @@ function adminDeleteListing(listingId) {
 }
 
 async function showSection(sectionId) {
-    // #region debug-point D:show-section-entry
-    reportPartialLoadDebug('D', 'showSection:entry', 'show-section-enter', {
-        sectionId: String(sectionId || ''),
-        loggedIn: !!isLoggedIn(),
-        activeSectionId: String(getActiveSectionId?.() || '')
-    });
-    // #endregion
     if (sectionId === 'profile-section' && !isLoggedIn()) {
         setPendingSectionAfterAuth('profile-section');
         openModal('authGateModal');
@@ -16998,13 +17163,6 @@ async function showSection(sectionId) {
     } catch {}
     closeMobileSearchExpand();
     document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
-    // #region debug-point D:show-section-target
-    reportPartialLoadDebug('D', 'showSection:target-check', 'show-section-target-check', {
-        sectionId: String(sectionId || ''),
-        targetExists: !!document.getElementById(sectionId),
-        sectionCount: document.querySelectorAll('.content-section').length
-    });
-    // #endregion
     document.getElementById(sectionId).classList.add('active');
     try {
         document.documentElement.classList.toggle('listing-detail-view', sectionId === 'listing-detail-section');
