@@ -762,6 +762,10 @@ function isLiveSocialShoppingEnabledForViewer() {
     return !!liveSocialShoppingFeatureEnabledFlag || !!userProfile?.isAdmin;
 }
 
+function canCurrentUserGoLive() {
+    return isLoggedIn() && isLiveSocialShoppingEnabledForViewer();
+}
+
 function applyCoursesFeatureVisibility() {
     const allow = isCoursesFeatureEnabledForViewer();
     const loggedIn = isLoggedIn();
@@ -12803,9 +12807,20 @@ function ensureLiveSocialShoppingSessionsPolling() {
     if (liveShoppingSessionsPollTimer) return;
     liveShoppingSessionsPollTimer = setInterval(() => {
         void refreshLiveSocialShoppingSessions({ silent: true }).then(() => {
-            if (getActiveSectionId() === 'live-social-shopping-section' && liveSocialShoppingState.viewMode !== 'setup') {
-                renderLiveSocialShoppingSection();
+            if (getActiveSectionId() !== 'live-social-shopping-section' || liveSocialShoppingState.viewMode === 'setup') return;
+            if (liveSocialShoppingState.viewMode === 'studio' && isLiveStudioMounted()) {
+                const activeSession = getActiveLiveStudioSession();
+                if (!activeSession) {
+                    liveSocialShoppingState.activeSessionId = '';
+                    liveSocialShoppingState.viewMode = 'browse';
+                    stopLiveStudioTickers();
+                    stopLiveShoppingRoomPresence();
+                    stopLiveStudioStream();
+                    renderLiveSocialShoppingSection();
+                }
+                return;
             }
+            renderLiveSocialShoppingSection();
         });
     }, 7000);
 }
@@ -13052,6 +13067,10 @@ function bindLiveSetupThumbnailInput() {
 
 function openLiveSocialShoppingGoLive() {
     if (!requireAuthOrPrompt()) return;
+    if (!isLiveSocialShoppingEnabledForViewer()) {
+        showToast('Live Social Shopping is temporarily unavailable', 'alert-circle');
+        return;
+    }
     liveSocialShoppingState.viewMode = 'setup';
     liveSocialShoppingState.setupThumbnailDataUrl = '';
     liveSocialShoppingState.activeSessionId = '';
@@ -13062,6 +13081,10 @@ function openLiveSocialShoppingGoLive() {
 async function startLiveSocialShoppingSession(event) {
     event?.preventDefault?.();
     if (!requireAuthOrPrompt()) return;
+    if (!isLiveSocialShoppingEnabledForViewer()) {
+        showToast('Live Social Shopping is temporarily unavailable', 'alert-circle');
+        return;
+    }
     const title = document.getElementById('liveSetupTitle')?.value?.trim?.() || '';
     const tagline = document.getElementById('liveSetupTagline')?.value?.trim?.() || '';
     const pinnedListingId = document.getElementById('liveSetupPinnedListing')?.value?.trim?.() || '';
@@ -13406,6 +13429,7 @@ function renderLiveSocialShoppingSection() {
     if (!sectionEl || !root) return;
     const isAdminViewer = !!userProfile?.isAdmin;
     const publicPreview = !!liveSocialShoppingFeatureEnabledFlag;
+    const canGoLive = canCurrentUserGoLive();
     const liveSessions = getLiveSocialShoppingSessions();
     const activeSession = getActiveLiveStudioSession() || liveSessions[0] || null;
     const viewMode = String(liveSocialShoppingState.viewMode || 'browse');
@@ -13597,7 +13621,7 @@ function renderLiveSocialShoppingSection() {
                         <h4>No live sessions right now</h4>
                         <p>This page now shows only actual live sessions. There are no demo rails, fake listings, or fake viewers here anymore.</p>
                         <div class="live-shop-empty-actions">
-                            <button class="live-shop-btn live-shop-btn-accent" type="button" onclick="openLiveSocialShoppingGoLive()">Go live</button>
+                            ${canGoLive ? `<button class="live-shop-btn live-shop-btn-accent" type="button" onclick="openLiveSocialShoppingGoLive()">Go live</button>` : ''}
                             <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="navigateToSection('home-section')">Back home</button>
                         </div>
                     </div>
@@ -13674,7 +13698,7 @@ function renderLiveSocialShoppingSection() {
                         <div class="live-shop-action-row">
                             ${spotlightProduct ? `<button class="live-shop-btn live-shop-btn-primary" type="button" onclick="addLiveSocialShoppingProduct('${escapeHtml(String(spotlightProduct.id))}')">Add pinned product</button>` : ''}
                             ${activeSession ? `<button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="setActiveLiveSession('${escapeHtml(activeSession.id)}', { openStudio: true })">Open room</button>` : ''}
-                            <button class="live-shop-btn live-shop-btn-accent" type="button" onclick="openLiveSocialShoppingGoLive()">Go live</button>
+                            ${canGoLive ? `<button class="live-shop-btn live-shop-btn-accent" type="button" onclick="openLiveSocialShoppingGoLive()">Go live</button>` : ''}
                             <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openLiveSocialShoppingCheckout()">Open tray</button>
                             ${spotlightProduct ? `<button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openListingDetail(${Number(spotlightProduct.id) || 0})">View listing</button>` : ''}
                         </div>
