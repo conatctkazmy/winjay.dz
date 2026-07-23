@@ -13173,25 +13173,34 @@ function toggleLiveStudioCamera() {
     else renderLiveSocialShoppingSection();
 }
 
-function endLiveSocialShoppingSession() {
+async function endLiveSocialShoppingSession() {
     const active = getActiveLiveStudioSession();
     if (!active) return;
     const client = initSupabase();
     if (client) {
-        void client
+        const { error } = await client
             .from('submissions')
             .update({ status: 'ended' })
             .eq('id', active.id)
-            .eq('type', 'live_session');
+            .eq('type', 'live_session')
+            .select('id')
+            .maybeSingle();
+        if (error) {
+            showToast(error.message || 'Failed to end live', 'alert-circle');
+            return;
+        }
     }
+    liveSocialShoppingState.sessions = getLiveSocialShoppingSessions().filter((session) => String(session.id || '') !== String(active.id));
     liveSocialShoppingState.activeSessionId = '';
     liveSocialShoppingState.viewMode = 'browse';
     liveSocialShoppingState.messages[String(active.id)] = [];
     stopLiveStudioTickers();
     stopLiveShoppingRoomPresence();
     stopLiveStudioStream();
-    void refreshLiveSocialShoppingSessions({ silent: true }).then(() => renderLiveSocialShoppingSection());
     renderLiveSocialShoppingSection();
+    void refreshLiveSocialShoppingSessions({ silent: true }).then(() => {
+        if (getActiveSectionId() === 'live-social-shopping-section') renderLiveSocialShoppingSection();
+    });
     showToast('Live ended', 'radio');
 }
 
