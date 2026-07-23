@@ -10341,6 +10341,13 @@ footer {
     white-space: nowrap;
 }
 
+.live-shop-tag {
+    padding: 7px 12px;
+    background: rgba(255, 106, 0, 0.08);
+    border-color: rgba(255, 106, 0, 0.14);
+    font-size: 11px;
+}
+
 .live-shop-mode-pill.is-public {
     border-color: rgba(34, 160, 107, 0.28);
     background: rgba(34, 160, 107, 0.1);
@@ -10428,6 +10435,16 @@ footer {
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
+}
+
+.live-shop-tag-row {
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.live-shop-action-row {
+    gap: 12px;
+    margin-top: 16px;
 }
 
 .live-shop-stage-broadcast {
@@ -10851,10 +10868,11 @@ footer {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 11px 16px;
-    border-radius: 14px;
+    padding: 10px 15px;
+    min-height: 42px;
+    border-radius: 13px;
     font-weight: 800;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1;
     cursor: pointer;
     white-space: nowrap;
@@ -10869,12 +10887,18 @@ footer {
     border-color: transparent;
     background: var(--primary-color);
     color: #fff;
-    box-shadow: 0 10px 22px rgba(255, 106, 0, 0.22);
+    box-shadow: 0 8px 18px rgba(255, 106, 0, 0.18);
 }
 
 .live-shop-btn-ghost {
-    background: var(--bg-main);
+    background: color-mix(in srgb, var(--bg-main) 92%, var(--primary-color) 8%);
     color: var(--text-main);
+    border-color: color-mix(in srgb, var(--border-color) 82%, var(--primary-color) 18%);
+}
+
+.live-shop-btn-ghost:hover {
+    background: color-mix(in srgb, var(--bg-main) 86%, var(--primary-color) 14%);
+    border-color: rgba(255, 106, 0, 0.18);
 }
 
 @media (max-width: 1200px) {
@@ -10936,8 +10960,9 @@ footer {
     }
 
     .live-shop-btn {
-        font-size: 13px;
-        padding: 10px 14px;
+        font-size: 12px;
+        padding: 9px 13px;
+        min-height: 40px;
     }
 
     .live-shop-cart-controls {
