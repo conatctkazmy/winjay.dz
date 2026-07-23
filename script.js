@@ -522,6 +522,8 @@ let myIdentityStatus = null;
 
 let coursesFeatureEnabledFlag = true;
 let coursesFeatureFlagsLoaded = false;
+let liveSocialShoppingFeatureEnabledFlag = false;
+let liveSocialShoppingFeatureFlagsLoaded = false;
 let deletedAccountLogoutActive = false;
 
 let listingsLoadedCount = 0;
@@ -738,6 +740,10 @@ function isCoursesFeatureEnabledForViewer() {
     return !!coursesFeatureEnabledFlag || !!userProfile?.isAdmin;
 }
 
+function isLiveSocialShoppingEnabledForViewer() {
+    return !!liveSocialShoppingFeatureEnabledFlag || !!userProfile?.isAdmin;
+}
+
 function applyCoursesFeatureVisibility() {
     const allow = isCoursesFeatureEnabledForViewer();
     const loggedIn = isLoggedIn();
@@ -761,6 +767,12 @@ function applyCoursesFeatureVisibility() {
     if (!allow && sellerCoursesPanel) sellerCoursesPanel.classList.remove('active');
 }
 
+function applyLiveSocialShoppingFeatureVisibility() {
+    const allow = isLiveSocialShoppingEnabledForViewer();
+    const sidebarLiveSocialShoppingItem = document.getElementById('sidebarLiveSocialShoppingItem');
+    if (sidebarLiveSocialShoppingItem) sidebarLiveSocialShoppingItem.style.display = allow ? '' : 'none';
+}
+
 async function refreshCoursesFeatureFlag({ silent = false } = {}) {
     const client = initSupabase();
     if (!client) {
@@ -782,6 +794,30 @@ async function refreshCoursesFeatureFlag({ silent = false } = {}) {
         applyCoursesFeatureVisibility();
         if (!silent) null;
         return coursesFeatureEnabledFlag;
+    }
+}
+
+async function refreshLiveSocialShoppingFeatureFlag({ silent = false } = {}) {
+    const client = initSupabase();
+    if (!client) {
+        liveSocialShoppingFeatureEnabledFlag = false;
+        liveSocialShoppingFeatureFlagsLoaded = true;
+        applyLiveSocialShoppingFeatureVisibility();
+        return liveSocialShoppingFeatureEnabledFlag;
+    }
+    try {
+        const { data, error } = await client.from('feature_flags').select('enabled').eq('key', 'live_social_shopping_enabled').maybeSingle();
+        if (error) throw error;
+        liveSocialShoppingFeatureEnabledFlag = !!data?.enabled;
+        liveSocialShoppingFeatureFlagsLoaded = true;
+        applyLiveSocialShoppingFeatureVisibility();
+        return liveSocialShoppingFeatureEnabledFlag;
+    } catch (e) {
+        liveSocialShoppingFeatureEnabledFlag = false;
+        liveSocialShoppingFeatureFlagsLoaded = true;
+        applyLiveSocialShoppingFeatureVisibility();
+        if (!silent) null;
+        return liveSocialShoppingFeatureEnabledFlag;
     }
 }
 
@@ -7061,9 +7097,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     initSupabase();
     await bootstrapSupabaseAuth();
     runWhenIdle(() => {
-        refreshCoursesFeatureFlag({ silent: true })
+        Promise.all([
+            refreshCoursesFeatureFlag({ silent: true }),
+            refreshLiveSocialShoppingFeatureFlag({ silent: true })
+        ])
             .then(() => {
                 applyCoursesFeatureVisibility();
+                applyLiveSocialShoppingFeatureVisibility();
             })
             .catch(() => null);
     }, 1200);
@@ -12400,6 +12440,7 @@ function updateNavbarAuthUI() {
     if (freeVerifiedPill) freeVerifiedPill.style.display = profileReady && !verified ? '' : 'none';
     if (profileMenu) profileMenu.style.display = loggedIn ? '' : 'none';
     if (sidebarCoursesItem) sidebarCoursesItem.style.display = loggedIn && isCoursesFeatureEnabledForViewer() ? '' : 'none';
+    applyLiveSocialShoppingFeatureVisibility();
 
     try {
         const showSkeleton = likelyLoggedIn && !profileReady;
@@ -12418,6 +12459,7 @@ function updateProfileUI() {
         if (content) content.style.display = 'none';
         updateNavbarAuthUI();
         applyCoursesFeatureVisibility();
+        applyLiveSocialShoppingFeatureVisibility();
         return;
     }
     if (skeleton) skeleton.style.display = 'none';
@@ -12483,6 +12525,7 @@ function updateProfileUI() {
     updateAdminDashboardButtonVisibility();
     updateNavbarAuthUI();
     applyCoursesFeatureVisibility();
+    applyLiveSocialShoppingFeatureVisibility();
     updateListingVideoGroupVisibility();
     scheduleLucideCreateIcons(document.getElementById('profile-section') || document.body);
     refreshMyProfileFollowCounts();
@@ -12574,6 +12617,53 @@ function updateAdminDashboardButtonVisibility() {
     const btn = document.getElementById('adminDashboardDropdownItem');
     if (!btn) return;
     btn.style.display = userProfile?.isAdmin ? '' : 'none';
+}
+
+function renderLiveSocialShoppingSection() {
+    const sectionEl = document.getElementById('live-social-shopping-section');
+    const badgeEl = document.getElementById('liveSocialShoppingAccessBadge');
+    const statusEl = document.getElementById('liveSocialShoppingStatus');
+    const noteEl = document.getElementById('liveSocialShoppingAdminNote');
+    const adminShortcutEl = document.getElementById('liveSocialShoppingAdminShortcut');
+    const isAdminViewer = !!userProfile?.isAdmin;
+    const publicPreview = !!liveSocialShoppingFeatureEnabledFlag;
+    if (badgeEl) {
+        badgeEl.textContent = publicPreview
+            ? 'Public preview enabled'
+            : (isAdminViewer ? 'Admin preview' : 'Preview');
+    }
+    if (statusEl) {
+        statusEl.textContent = publicPreview
+            ? 'This preview is visible from the sidebar for everyone while the feature is being built.'
+            : 'This preview is still in development and is currently hidden from normal users.';
+    }
+    if (noteEl) noteEl.style.display = isAdminViewer ? '' : 'none';
+    if (adminShortcutEl) adminShortcutEl.style.display = isAdminViewer ? '' : 'none';
+    scheduleLucideCreateIcons(sectionEl || document.body);
+}
+
+async function saveFeatureFlagState(key, enabled) {
+    const client = initSupabase();
+    if (!client) throw new Error('Supabase is not configured');
+    const payload = {
+        enabled: !!enabled,
+        updated_at: new Date().toISOString()
+    };
+    const { data, error } = await client
+        .from('feature_flags')
+        .update(payload)
+        .eq('key', key)
+        .select('key')
+        .maybeSingle();
+    if (error) throw error;
+    if (data?.key) return data;
+    const { data: inserted, error: insertError } = await client
+        .from('feature_flags')
+        .insert({ key, ...payload })
+        .select('key')
+        .maybeSingle();
+    if (insertError) throw insertError;
+    return inserted;
 }
 
 function showVerifiedPopup(event) {
@@ -14686,34 +14776,58 @@ async function renderAdminOverviewLists() {
 
 async function renderAdminFeatureFlags() {
     if (!isAdminAuthorized()) return;
-    const toggle = document.getElementById('adminCoursesFeatureToggle');
-    const hint = document.getElementById('adminCoursesFeatureHint');
-    if (!toggle) return;
-    await refreshCoursesFeatureFlag({ silent: true });
-    toggle.checked = !!coursesFeatureEnabledFlag;
-    if (hint) {
-        hint.textContent = coursesFeatureEnabledFlag
+    const coursesToggle = document.getElementById('adminCoursesFeatureToggle');
+    const coursesHint = document.getElementById('adminCoursesFeatureHint');
+    const liveToggle = document.getElementById('adminLiveSocialShoppingFeatureToggle');
+    const liveHint = document.getElementById('adminLiveSocialShoppingFeatureHint');
+    if (!coursesToggle && !liveToggle) return;
+    await Promise.all([
+        refreshCoursesFeatureFlag({ silent: true }),
+        refreshLiveSocialShoppingFeatureFlag({ silent: true })
+    ]);
+    if (coursesToggle) coursesToggle.checked = !!coursesFeatureEnabledFlag;
+    if (coursesHint) {
+        coursesHint.textContent = coursesFeatureEnabledFlag
             ? 'Courses are visible to everyone.'
             : 'Courses are hidden for all users (admins can still access).';
     }
-    if (!toggle.dataset.bound) {
-        toggle.dataset.bound = '1';
-        toggle.addEventListener('change', async () => {
-            const client = initSupabase();
-            if (!client) {
-                showToast('Supabase is not configured', 'alert-circle');
-                return;
-            }
-            const next = !!toggle.checked;
-            const { error } = await client.from('feature_flags').update({ enabled: next, updated_at: new Date().toISOString() }).eq('key', 'courses_enabled');
-            if (error) {
-                showToast(error.message || 'Failed to update feature flag', 'alert-circle');
+    if (liveToggle) liveToggle.checked = !!liveSocialShoppingFeatureEnabledFlag;
+    if (liveHint) {
+        liveHint.textContent = liveSocialShoppingFeatureEnabledFlag
+            ? 'Live Social Shopping is visible to everyone.'
+            : 'Live Social Shopping is hidden for normal users (admins can still access it).';
+    }
+    if (coursesToggle && !coursesToggle.dataset.bound) {
+        coursesToggle.dataset.bound = '1';
+        coursesToggle.addEventListener('change', async () => {
+            const next = !!coursesToggle.checked;
+            try {
+                await saveFeatureFlagState('courses_enabled', next);
+            } catch (error) {
+                showToast(error?.message || 'Failed to update feature flag', 'alert-circle');
                 await refreshCoursesFeatureFlag({ silent: true });
-                toggle.checked = !!coursesFeatureEnabledFlag;
+                coursesToggle.checked = !!coursesFeatureEnabledFlag;
                 return;
             }
             await refreshCoursesFeatureFlag({ silent: true });
             showToast(next ? 'Courses enabled' : 'Courses hidden', 'check-circle');
+        });
+    }
+    if (liveToggle && !liveToggle.dataset.bound) {
+        liveToggle.dataset.bound = '1';
+        liveToggle.addEventListener('change', async () => {
+            const next = !!liveToggle.checked;
+            try {
+                await saveFeatureFlagState('live_social_shopping_enabled', next);
+            } catch (error) {
+                showToast(error?.message || 'Failed to update feature flag', 'alert-circle');
+                await refreshLiveSocialShoppingFeatureFlag({ silent: true });
+                liveToggle.checked = !!liveSocialShoppingFeatureEnabledFlag;
+                return;
+            }
+            await refreshLiveSocialShoppingFeatureFlag({ silent: true });
+            renderLiveSocialShoppingSection();
+            showToast(next ? 'Live Social Shopping enabled' : 'Live Social Shopping hidden', 'check-circle');
         });
     }
 }
@@ -15268,6 +15382,10 @@ async function showSection(sectionId) {
         showToast('Courses are temporarily unavailable', 'alert-circle');
         sectionId = 'home-section';
     }
+    if (sectionId === 'live-social-shopping-section' && !isLiveSocialShoppingEnabledForViewer()) {
+        showToast('Live Social Shopping is temporarily unavailable', 'alert-circle');
+        sectionId = 'home-section';
+    }
     if (sectionId !== 'course-section') {
         activeCourseId = null;
         activeCourseFromSection = 'profile-section';
@@ -15413,6 +15531,9 @@ async function showSection(sectionId) {
         } finally {
             stopSectionLoadingSkeleton();
         }
+    } else if (sectionId === 'live-social-shopping-section') {
+        clearSellerProfileRouteTag();
+        renderLiveSocialShoppingSection();
     } else if (sectionId === 'course-section') {
         clearSellerProfileRouteTag();
         startSectionLoadingSkeleton('course-section');
@@ -19088,6 +19209,7 @@ async function openSellerProfileByOwnerId(ownerId, section = 'listings') {
         </div>`;
     showSection('seller-profile-section');
     applyCoursesFeatureVisibility();
+    applyLiveSocialShoppingFeatureVisibility();
     try {
         const sellerGrid = content.querySelector('#sellerListingsSection .listings-grid');
         if (sellerGrid) initCarouselsInContainer(sellerGrid);
@@ -19278,6 +19400,7 @@ async function openSellerProfile(tag, section = 'listings', { pushState = true }
         </div>`;
     showSection('seller-profile-section');
     applyCoursesFeatureVisibility();
+    applyLiveSocialShoppingFeatureVisibility();
     try {
         const sellerGrid = content.querySelector('#sellerListingsSection .listings-grid');
         if (sellerGrid) initCarouselsInContainer(sellerGrid);

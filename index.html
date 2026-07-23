@@ -27,6 +27,7 @@
                 'ambassadors-section',
                 'profile-section',
                 'favorites-section',
+                'live-social-shopping-section',
                 'course-section',
                 'messages-section',
                 'settings-section',
@@ -234,6 +235,7 @@
                     <ul>
                         <li><a href="#" onclick="navigateToSection('favorites-section'); return false;"><i data-lucide="heart"></i> <span data-i18n="sidebar_favorites">Favorites</span></a></li>
                         <li><a href="#" onclick="navigateToSection('messages-section'); return false;"><i data-lucide="message-circle"></i> <span data-i18n="sidebar_messages">Messages</span></a></li>
+                        <li id="sidebarLiveSocialShoppingItem" style="display:none;"><a href="#" onclick="navigateToSection('live-social-shopping-section'); return false;"><i data-lucide="radio"></i> <span>Live Social Shopping</span></a></li>
                         <li id="sidebarCoursesItem" style="display:none;"><a href="#" onclick="navigateToSection('course-section'); return false;"><i data-lucide="graduation-cap"></i> <span data-i18n="sidebar_courses">Courses</span></a></li>
                         <li id="sidebarVerifiedCta" style="display:none;"><a href="#" onclick="openVerifiedUpgradeModal(); return false;"><i data-lucide="badge-check"></i> <span style="color: #28a745;" data-i18n="sidebar_become_verified">Become Verified</span></a></li>
                         <li id="sidebarVipCta" style="display:none;"><a href="#" onclick="openVipModal(); return false;"><i data-lucide="crown"></i> <span style="color: #ffd700;" data-i18n="sidebar_become_vip">Become VIP</span></a></li>
@@ -764,6 +766,42 @@
                 </div>
             </section>
 
+            <section id="live-social-shopping-section" class="content-section">
+                <button class="back-btn" onclick="navigateBackInApp('home-section')">
+                    <i data-lucide="arrow-left"></i> Back
+                </button>
+                <div class="admin-card">
+                    <div class="admin-card-head">
+                        <h3>Live Social Shopping</h3>
+                        <span class="muted" id="liveSocialShoppingAccessBadge">Admin preview</span>
+                    </div>
+                    <div class="empty-state" style="padding: 32px 20px;">
+                        <i data-lucide="radio"></i>
+                        <h3>Feature in development</h3>
+                        <p id="liveSocialShoppingStatus">This preview is still in development and is currently hidden from normal users.</p>
+                    </div>
+                    <div class="admin-two-col">
+                        <div class="admin-card">
+                            <div class="admin-card-head">
+                                <h3>Planned experience</h3>
+                                <span class="muted">Phase 1</span>
+                            </div>
+                            <div class="muted">
+                                Live product sessions, pinned items, instant chat, and a checkout-focused stream layout will live here.
+                            </div>
+                        </div>
+                        <div class="admin-card" id="liveSocialShoppingAdminNote">
+                            <div class="admin-card-head">
+                                <h3>Admin note</h3>
+                                <span class="muted">Development</span>
+                            </div>
+                            <div class="muted">Use the toggle in the admin dashboard to keep this preview hidden from normal users until it is ready.</div>
+                            <button class="submit-btn small" id="liveSocialShoppingAdminShortcut" type="button" onclick="navigateToSection('admin-dashboard-section')">Open admin dashboard</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section id="course-section" class="content-section">
                 <button class="back-btn" onclick="navigateBackFromCourse()">
                     <i data-lucide="arrow-left"></i> Back
@@ -1157,6 +1195,14 @@
                                     <div class="toggle-label">Courses feature (public)</div>
                                 </div>
                                 <div class="muted" id="adminCoursesFeatureHint"></div>
+                                <div class="toggle-row" style="margin-top: 14px;">
+                                    <label class="toggle-modern">
+                                        <input id="adminLiveSocialShoppingFeatureToggle" class="toggle-input" type="checkbox">
+                                        <span class="toggle-switch"></span>
+                                    </label>
+                                    <div class="toggle-label">Live Social Shopping (public)</div>
+                                </div>
+                                <div class="muted" id="adminLiveSocialShoppingFeatureHint"></div>
                             </div>
                             <div class="admin-two-col">
                                 <div class="admin-card">
