@@ -767,6 +767,11 @@ function canCurrentUserGoLive() {
     return isLoggedIn() && isLiveSocialShoppingEnabledForViewer();
 }
 
+async function ensureLiveSocialShoppingFeatureFlagReady() {
+    if (liveSocialShoppingFeatureFlagsLoaded) return liveSocialShoppingFeatureEnabledFlag;
+    return refreshLiveSocialShoppingFeatureFlag({ silent: true });
+}
+
 function applyCoursesFeatureVisibility() {
     const allow = isCoursesFeatureEnabledForViewer();
     const loggedIn = isLoggedIn();
@@ -13145,8 +13150,9 @@ function bindLiveSetupThumbnailInput() {
     });
 }
 
-function openLiveSocialShoppingGoLive() {
+async function openLiveSocialShoppingGoLive() {
     if (!requireAuthOrPrompt()) return;
+    await ensureLiveSocialShoppingFeatureFlagReady();
     if (!isLiveSocialShoppingEnabledForViewer()) {
         showToast('Live Social Shopping is temporarily unavailable', 'alert-circle');
         return;
@@ -13161,6 +13167,7 @@ function openLiveSocialShoppingGoLive() {
 async function startLiveSocialShoppingSession(event) {
     event?.preventDefault?.();
     if (!requireAuthOrPrompt()) return;
+    await ensureLiveSocialShoppingFeatureFlagReady();
     if (!isLiveSocialShoppingEnabledForViewer()) {
         showToast('Live Social Shopping is temporarily unavailable', 'alert-circle');
         return;
@@ -16785,6 +16792,9 @@ async function showSection(sectionId) {
         openModal('authGateModal');
         scheduleLucideCreateIcons(document.getElementById('authGateModal'));
         return;
+    }
+    if (sectionId === 'live-social-shopping-section') {
+        await ensureLiveSocialShoppingFeatureFlagReady();
     }
     if (sectionId === 'course-section' && !isCoursesFeatureEnabledForViewer()) {
         try {
