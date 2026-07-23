@@ -12866,7 +12866,8 @@ function ensureLiveSocialShoppingMessagesPolling(sessionId) {
     liveShoppingMessagesPollTimer = setInterval(() => {
         void refreshLiveSocialShoppingMessages(id, { silent: true }).then(() => {
             if (getActiveSectionId() === 'live-social-shopping-section' && String(liveSocialShoppingState.activeSessionId || '') === id) {
-                renderLiveSocialShoppingSection();
+                if (liveSocialShoppingState.viewMode === 'studio' && isLiveStudioMounted()) updateLiveStudioChatUI();
+                else renderLiveSocialShoppingSection();
             }
         });
     }, 4000);
@@ -12886,6 +12887,52 @@ function getLiveRoomMessages(sessionId) {
     return Array.isArray(liveSocialShoppingState.messages?.[String(sessionId || '')])
         ? liveSocialShoppingState.messages[String(sessionId || '')]
         : [];
+}
+
+function isLiveStudioMounted() {
+    return !!document.getElementById('liveStudioCameraPreview');
+}
+
+function updateLiveStudioViewerCountUI() {
+    const activeSession = getActiveLiveStudioSession();
+    if (!activeSession || !isLiveStudioMounted()) return;
+    const nextCount = String(getLiveSessionViewerCount(activeSession.id, activeSession.viewerCount));
+    document.querySelectorAll('[data-live-viewer-count]').forEach((node) => {
+        node.textContent = nextCount;
+    });
+}
+
+function updateLiveStudioChatUI() {
+    const activeSession = getActiveLiveStudioSession();
+    const listEl = document.getElementById('liveStudioChatList');
+    if (!activeSession || !listEl) return;
+    const messages = getLiveRoomMessages(activeSession.id);
+    if (!messages.length) {
+        listEl.innerHTML = `<div class="live-shop-empty"><i data-lucide="message-circle"></i><h4>No messages yet</h4><p>Real audience comments will appear here when viewers send them.</p></div>`;
+        scheduleLucideCreateIcons(listEl);
+        return;
+    }
+    listEl.innerHTML = messages.map((message) => `
+        <div class="live-studio-chat-item">
+            <strong>${escapeHtml(message.author || 'Viewer')}</strong>
+            <span>${escapeHtml(message.text || '')}</span>
+        </div>
+    `).join('');
+}
+
+function updateLiveStudioControlLabels() {
+    const micBtn = document.getElementById('liveStudioMicBtn');
+    const camBtn = document.getElementById('liveStudioCameraBtn');
+    if (micBtn) {
+        micBtn.textContent = liveSocialShoppingState.studioMicEnabled ? 'Mute mic' : 'Unmute mic';
+        micBtn.classList.toggle('live-shop-btn-ghost', !!liveSocialShoppingState.studioMicEnabled);
+        micBtn.classList.toggle('live-shop-btn-accent', !liveSocialShoppingState.studioMicEnabled);
+    }
+    if (camBtn) {
+        camBtn.textContent = liveSocialShoppingState.studioCameraEnabled ? 'Turn camera off' : 'Turn camera on';
+        camBtn.classList.toggle('live-shop-btn-ghost', !!liveSocialShoppingState.studioCameraEnabled);
+        camBtn.classList.toggle('live-shop-btn-accent', !liveSocialShoppingState.studioCameraEnabled);
+    }
 }
 
 function getActiveLiveStudioSession() {
@@ -12962,7 +13009,8 @@ function bootstrapLiveShoppingRoomPresence(sessionId) {
         const entries = flattenPresenceState(state).filter((entry) => String(entry?.session_id || '') === id);
         liveShoppingRoomPresenceCount = entries.length;
         if (getActiveSectionId() === 'live-social-shopping-section' && String(liveSocialShoppingState.activeSessionId || '') === id) {
-            renderLiveSocialShoppingSection();
+            if (liveSocialShoppingState.viewMode === 'studio' && isLiveStudioMounted()) updateLiveStudioViewerCountUI();
+            else renderLiveSocialShoppingSection();
         }
     });
     liveShoppingRoomPresenceChannel.subscribe((status) => {
@@ -13074,11 +13122,19 @@ async function startLiveSocialShoppingSession(event) {
 async function ensureLiveStudioMedia() {
     const videoEl = document.getElementById('liveStudioCameraPreview');
     if (!videoEl) return;
+    if (liveStudioStream) {
+        try {
+            if (videoEl.srcObject !== liveStudioStream) videoEl.srcObject = liveStudioStream;
+            await videoEl.play?.();
+            return;
+        } catch (e) {
+            null;
+        }
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
         showToast('Camera not supported', 'alert-circle');
         return;
     }
-    stopLiveStudioStream();
     try {
         liveStudioStream = await navigator.mediaDevices.getUserMedia({
             video: liveSocialShoppingState.studioCameraEnabled,
@@ -13100,7 +13156,8 @@ function toggleLiveStudioMic() {
     } catch (e) {
         null;
     }
-    renderLiveSocialShoppingSection();
+    if (isLiveStudioMounted()) updateLiveStudioControlLabels();
+    else renderLiveSocialShoppingSection();
 }
 
 function toggleLiveStudioCamera() {
@@ -13112,7 +13169,8 @@ function toggleLiveStudioCamera() {
     } catch (e) {
         null;
     }
-    renderLiveSocialShoppingSection();
+    if (isLiveStudioMounted()) updateLiveStudioControlLabels();
+    else renderLiveSocialShoppingSection();
 }
 
 function endLiveSocialShoppingSession() {
@@ -13445,7 +13503,7 @@ function renderLiveSocialShoppingSection() {
                     </div>
                     <div class="live-shop-topbar-actions">
                         <span class="live-shop-status-pill is-live">LIVE</span>
-                        <span class="live-shop-mode-pill"><i data-lucide="users"></i> ${escapeHtml(String(viewerCount))} viewers</span>
+                        <span class="live-shop-mode-pill"><i data-lucide="users"></i> <span data-live-viewer-count>${escapeHtml(String(viewerCount))}</span> viewers</span>
                         <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="endLiveSocialShoppingSession()">End live</button>
                     </div>
                 </div>
@@ -13455,7 +13513,7 @@ function renderLiveSocialShoppingSection() {
                             <video id="liveStudioCameraPreview" autoplay playsinline muted></video>
                             <div class="live-studio-overlay-top">
                                 <span class="live-shop-status-pill is-live">LIVE</span>
-                                <span class="live-session-viewers"><i data-lucide="eye"></i> ${escapeHtml(String(viewerCount))}</span>
+                                <span class="live-session-viewers"><i data-lucide="eye"></i> <span data-live-viewer-count>${escapeHtml(String(viewerCount))}</span></span>
                             </div>
                             <div class="live-studio-overlay-bottom">
                                 <div>
@@ -13465,8 +13523,8 @@ function renderLiveSocialShoppingSection() {
                             </div>
                         </div>
                         <div class="live-studio-controls">
-                            <button class="live-shop-btn ${liveSocialShoppingState.studioMicEnabled ? 'live-shop-btn-ghost' : 'live-shop-btn-accent'}" type="button" onclick="toggleLiveStudioMic()">${liveSocialShoppingState.studioMicEnabled ? 'Mute mic' : 'Unmute mic'}</button>
-                            <button class="live-shop-btn ${liveSocialShoppingState.studioCameraEnabled ? 'live-shop-btn-ghost' : 'live-shop-btn-accent'}" type="button" onclick="toggleLiveStudioCamera()">${liveSocialShoppingState.studioCameraEnabled ? 'Turn camera off' : 'Turn camera on'}</button>
+                            <button id="liveStudioMicBtn" class="live-shop-btn ${liveSocialShoppingState.studioMicEnabled ? 'live-shop-btn-ghost' : 'live-shop-btn-accent'}" type="button" onclick="toggleLiveStudioMic()">${liveSocialShoppingState.studioMicEnabled ? 'Mute mic' : 'Unmute mic'}</button>
+                            <button id="liveStudioCameraBtn" class="live-shop-btn ${liveSocialShoppingState.studioCameraEnabled ? 'live-shop-btn-ghost' : 'live-shop-btn-accent'}" type="button" onclick="toggleLiveStudioCamera()">${liveSocialShoppingState.studioCameraEnabled ? 'Turn camera off' : 'Turn camera on'}</button>
                             <button class="live-shop-btn live-shop-btn-primary" type="button" onclick="addLiveSocialShoppingProduct('${escapeHtml(String(activeSession.pinnedListing?.id || ''))}')">Pin product to tray</button>
                         </div>
                     </div>
@@ -13492,9 +13550,9 @@ function renderLiveSocialShoppingSection() {
                                     <h3>Audience messages</h3>
                                 </div>
                             </div>
-                            <div class="live-studio-chat-list">
+                            <div class="live-studio-chat-list" id="liveStudioChatList">
                                 ${messages.length ? messages.map((message) => `
-                                    <div class="live-studio-chat-item ${message.role === 'system' ? 'is-system' : ''}">
+                                    <div class="live-studio-chat-item">
                                         <strong>${escapeHtml(message.author || 'Viewer')}</strong>
                                         <span>${escapeHtml(message.text || '')}</span>
                                     </div>
