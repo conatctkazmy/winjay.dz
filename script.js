@@ -20,6 +20,28 @@ function applyTouchDeviceClass() {
 applyTouchDeviceClass();
 window.addEventListener('orientationchange', () => setTimeout(applyTouchDeviceClass, 180));
 
+// #region debug-point A:live-viewer-video-reporter
+function reportLiveViewerVideoDebug(hypothesisId, location, msg, data = {}) {
+    try {
+        fetch('http://127.0.0.1:7777/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: 'live-viewer-video',
+                runId: 'pre-fix',
+                hypothesisId,
+                location,
+                msg: `[DEBUG] ${msg}`,
+                data,
+                ts: Date.now()
+            })
+        }).catch(() => null);
+    } catch (e) {
+        null;
+    }
+}
+// #endregion
+
 const DEFAULT_AVATAR_SVG = "data:image/svg+xml,%3Csvg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23e2e8f0'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%2394a3b8'/%3E%3Cellipse cx='20' cy='35' rx='12' ry='8' fill='%2394a3b8'/%3E%3C/svg%3E";
 
 function createEmptyUserProfile() {
@@ -13009,6 +13031,15 @@ function updateLiveViewerPlayback() {
     const videoEl = document.getElementById('liveViewerStream');
     const statusEl = document.querySelector('[data-live-viewer-connection-state]');
     const ready = hasLiveViewerVideoStream();
+    // #region debug-point C:viewer-playback
+    reportLiveViewerVideoDebug('C', 'updateLiveViewerPlayback', 'viewer-playback-update', {
+        ready,
+        hasVideoElement: !!videoEl,
+        hasStream: !!liveViewerRemoteStream,
+        videoTracks: Number(liveViewerRemoteStream?.getVideoTracks?.()?.length || 0),
+        audioTracks: Number(liveViewerRemoteStream?.getAudioTracks?.()?.length || 0)
+    });
+    // #endregion
     if (stageEl) stageEl.classList.toggle('has-live-video', ready);
     if (statusEl) statusEl.textContent = ready ? 'Live video connected' : 'Connecting to live video...';
     if (!videoEl) return;
@@ -13089,6 +13120,17 @@ function createLiveViewerPeerConnection(broadcasterPeerId) {
     liveViewerBroadcasterPeerId = broadcasterPeerId;
     pc.ontrack = (event) => {
         const stream = event?.streams?.[0] || null;
+        // #region debug-point C:viewer-track
+        reportLiveViewerVideoDebug('C', 'createLiveViewerPeerConnection:ontrack', 'viewer-track-received', {
+            fromPeerId: broadcasterPeerId,
+            kind: String(event?.track?.kind || ''),
+            enabled: !!event?.track?.enabled,
+            muted: !!event?.track?.muted,
+            readyState: String(event?.track?.readyState || ''),
+            streamVideoTracks: Number(stream?.getVideoTracks?.()?.length || 0),
+            streamAudioTracks: Number(stream?.getAudioTracks?.()?.length || 0)
+        });
+        // #endregion
         if (stream) {
             liveViewerRemoteStream = stream;
         } else if (event?.track) {
@@ -13103,6 +13145,11 @@ function createLiveViewerPeerConnection(broadcasterPeerId) {
     };
     pc.onicecandidate = (event) => {
         if (!event?.candidate) return;
+        // #region debug-point C:viewer-ice
+        reportLiveViewerVideoDebug('C', 'createLiveViewerPeerConnection:onicecandidate', 'viewer-ice-candidate', {
+            fromPeerId: broadcasterPeerId
+        });
+        // #endregion
         sendLiveShoppingSignal('ice-candidate', {
             target_peer_id: broadcasterPeerId,
             candidate: event.candidate?.toJSON ? event.candidate.toJSON() : event.candidate
@@ -13110,6 +13157,12 @@ function createLiveViewerPeerConnection(broadcasterPeerId) {
     };
     pc.onconnectionstatechange = () => {
         const state = String(pc.connectionState || '').toLowerCase();
+        // #region debug-point C:viewer-connection-state
+        reportLiveViewerVideoDebug('C', 'createLiveViewerPeerConnection:onconnectionstatechange', 'viewer-connection-state', {
+            fromPeerId: broadcasterPeerId,
+            state
+        });
+        // #endregion
         if (state === 'failed' || state === 'disconnected' || state === 'closed') {
             resetLiveViewerConnection();
         }
@@ -13120,6 +13173,12 @@ function createLiveViewerPeerConnection(broadcasterPeerId) {
 async function handleLiveViewerOfferSignal(fromPeerId, description) {
     const desc = description && typeof description === 'object' ? description : null;
     if (!fromPeerId || !desc) return;
+    // #region debug-point C:viewer-offer
+    reportLiveViewerVideoDebug('C', 'handleLiveViewerOfferSignal', 'viewer-offer-received', {
+        fromPeerId,
+        type: String(desc?.type || '')
+    });
+    // #endregion
     const pc = createLiveViewerPeerConnection(fromPeerId);
     if (!pc) return;
     await pc.setRemoteDescription(new RTCSessionDescription(desc));
@@ -13144,7 +13203,26 @@ async function handleLiveViewerIceCandidateSignal(fromPeerId, candidate) {
 
 async function createLiveBroadcastPeerConnection(viewerPeerId) {
     if (!viewerPeerId || liveBroadcasterPeerConnections.has(viewerPeerId) || typeof RTCPeerConnection === 'undefined') return;
+    // #region debug-point A:broadcast-peer-entry
+    reportLiveViewerVideoDebug('A', 'createLiveBroadcastPeerConnection:entry', 'broadcast-peer-create-enter', {
+        viewerPeerId,
+        hasStreamBefore: !!liveStudioStream,
+        hasStudioNode: !!document.getElementById('liveStudioCameraPreview')
+    });
+    // #endregion
     await ensureLiveStudioMedia();
+    // #region debug-point B:broadcast-peer-after-media
+    reportLiveViewerVideoDebug('B', 'createLiveBroadcastPeerConnection:afterEnsureMedia', 'broadcast-peer-after-ensure-media', {
+        viewerPeerId,
+        hasStream: !!liveStudioStream,
+        audioTracks: Number(liveStudioStream?.getAudioTracks?.()?.length || 0),
+        videoTracks: Number(liveStudioStream?.getVideoTracks?.()?.length || 0),
+        videoEnabled: !!liveStudioStream?.getVideoTracks?.()?.[0]?.enabled,
+        videoMuted: !!liveStudioStream?.getVideoTracks?.()?.[0]?.muted,
+        videoReadyState: String(liveStudioStream?.getVideoTracks?.()?.[0]?.readyState || ''),
+        audioEnabled: !!liveStudioStream?.getAudioTracks?.()?.[0]?.enabled
+    });
+    // #endregion
     if (!liveStudioStream) return;
     const pc = new RTCPeerConnection(createLiveShoppingRtcConfig());
     liveBroadcasterPeerConnections.set(viewerPeerId, pc);
@@ -13152,11 +13230,27 @@ async function createLiveBroadcastPeerConnection(viewerPeerId) {
         liveStudioStream.getTracks().forEach((track) => {
             pc.addTrack(track, liveStudioStream);
         });
+        // #region debug-point B:broadcast-tracks-added
+        reportLiveViewerVideoDebug('B', 'createLiveBroadcastPeerConnection:addTrack', 'broadcast-tracks-added', {
+            viewerPeerId,
+            tracks: liveStudioStream.getTracks().map((track) => ({
+                kind: String(track?.kind || ''),
+                enabled: !!track?.enabled,
+                muted: !!track?.muted,
+                readyState: String(track?.readyState || '')
+            }))
+        });
+        // #endregion
     } catch (e) {
         null;
     }
     pc.onicecandidate = (event) => {
         if (!event?.candidate) return;
+        // #region debug-point B:broadcast-ice
+        reportLiveViewerVideoDebug('B', 'createLiveBroadcastPeerConnection:onicecandidate', 'broadcast-ice-candidate', {
+            viewerPeerId
+        });
+        // #endregion
         sendLiveShoppingSignal('ice-candidate', {
             target_peer_id: viewerPeerId,
             candidate: event.candidate?.toJSON ? event.candidate.toJSON() : event.candidate
@@ -13164,6 +13258,12 @@ async function createLiveBroadcastPeerConnection(viewerPeerId) {
     };
     pc.onconnectionstatechange = () => {
         const state = String(pc.connectionState || '').toLowerCase();
+        // #region debug-point B:broadcast-connection-state
+        reportLiveViewerVideoDebug('B', 'createLiveBroadcastPeerConnection:onconnectionstatechange', 'broadcast-connection-state', {
+            viewerPeerId,
+            state
+        });
+        // #endregion
         if (state === 'failed' || state === 'disconnected' || state === 'closed') {
             closeLiveShoppingPeerConnection(pc);
             liveBroadcasterPeerConnections.delete(viewerPeerId);
@@ -13203,6 +13303,12 @@ function syncLiveBroadcastPeers(entries) {
             .map((entry) => String(entry?.peer_id || '').trim())
             .filter(Boolean)
     );
+    // #region debug-point D:sync-broadcast-peers
+    reportLiveViewerVideoDebug('D', 'syncLiveBroadcastPeers', 'sync-broadcast-peers', {
+        viewerPeerIds: Array.from(viewerPeerIds),
+        existingPeerIds: Array.from(liveBroadcasterPeerConnections.keys())
+    });
+    // #endregion
     liveBroadcasterPeerConnections.forEach((pc, peerId) => {
         if (viewerPeerIds.has(peerId)) return;
         closeLiveShoppingPeerConnection(pc);
@@ -13397,6 +13503,16 @@ function bootstrapLiveShoppingRoomPresence(sessionId) {
         const state = liveShoppingRoomPresenceChannel.presenceState?.() || {};
         const entries = flattenPresenceState(state).filter((entry) => String(entry?.session_id || '') === id);
         liveShoppingRoomPresenceCount = entries.length;
+        // #region debug-point D:presence-sync
+        reportLiveViewerVideoDebug('D', 'bootstrapLiveShoppingRoomPresence:presenceSync', 'presence-sync', {
+            sessionId: id,
+            count: liveShoppingRoomPresenceCount,
+            roles: entries.map((entry) => ({
+                role: String(entry?.role || ''),
+                peerId: String(entry?.peer_id || '')
+            }))
+        });
+        // #endregion
         syncLiveBroadcastPeers(entries);
         if (getActiveSectionId() === 'live-social-shopping-section' && String(liveSocialShoppingState.activeSessionId || '') === id) {
             if ((liveSocialShoppingState.viewMode === 'studio' || liveSocialShoppingState.viewMode === 'viewer') && isLiveRoomMounted()) updateLiveStudioViewerCountUI();
@@ -13528,11 +13644,28 @@ async function startLiveSocialShoppingSession(event) {
 
 async function ensureLiveStudioMedia() {
     const videoEl = document.getElementById('liveStudioCameraPreview');
+    // #region debug-point A:ensure-media-entry
+    reportLiveViewerVideoDebug('A', 'ensureLiveStudioMedia:entry', 'ensure-studio-media-enter', {
+        hasVideoElement: !!videoEl,
+        hasExistingStream: !!liveStudioStream,
+        studioCameraEnabled: !!liveSocialShoppingState.studioCameraEnabled,
+        studioMicEnabled: !!liveSocialShoppingState.studioMicEnabled
+    });
+    // #endregion
     if (!videoEl) return;
     if (liveStudioStream) {
         try {
             if (videoEl.srcObject !== liveStudioStream) videoEl.srcObject = liveStudioStream;
             await videoEl.play?.();
+            // #region debug-point A:ensure-media-reuse
+            reportLiveViewerVideoDebug('A', 'ensureLiveStudioMedia:reuse', 'ensure-studio-media-reuse', {
+                audioTracks: Number(liveStudioStream?.getAudioTracks?.()?.length || 0),
+                videoTracks: Number(liveStudioStream?.getVideoTracks?.()?.length || 0),
+                videoEnabled: !!liveStudioStream?.getVideoTracks?.()?.[0]?.enabled,
+                videoMuted: !!liveStudioStream?.getVideoTracks?.()?.[0]?.muted,
+                videoReadyState: String(liveStudioStream?.getVideoTracks?.()?.[0]?.readyState || '')
+            });
+            // #endregion
             return;
         } catch (e) {
             null;
@@ -13549,7 +13682,22 @@ async function ensureLiveStudioMedia() {
         });
         videoEl.srcObject = liveStudioStream;
         await videoEl.play?.();
+        // #region debug-point B:ensure-media-success
+        reportLiveViewerVideoDebug('B', 'ensureLiveStudioMedia:success', 'ensure-studio-media-success', {
+            audioTracks: Number(liveStudioStream?.getAudioTracks?.()?.length || 0),
+            videoTracks: Number(liveStudioStream?.getVideoTracks?.()?.length || 0),
+            videoEnabled: !!liveStudioStream?.getVideoTracks?.()?.[0]?.enabled,
+            videoMuted: !!liveStudioStream?.getVideoTracks?.()?.[0]?.muted,
+            videoReadyState: String(liveStudioStream?.getVideoTracks?.()?.[0]?.readyState || '')
+        });
+        // #endregion
     } catch (e) {
+        // #region debug-point E:ensure-media-error
+        reportLiveViewerVideoDebug('E', 'ensureLiveStudioMedia:error', 'ensure-studio-media-error', {
+            message: String(e?.message || e || ''),
+            name: String(e?.name || '')
+        });
+        // #endregion
         showToast('Camera or microphone permission denied', 'alert-circle');
     }
 }
