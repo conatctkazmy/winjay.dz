@@ -11102,6 +11102,237 @@ footer {
     box-shadow: 0 12px 26px rgba(15, 20, 25, 0.05);
 }
 
+.live-setup-grid,
+.live-studio-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.88fr);
+    gap: 18px;
+}
+
+.live-setup-card,
+.live-setup-preview-card,
+.live-studio-stage-card,
+.live-studio-panel {
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    box-shadow: 0 18px 45px rgba(15, 20, 25, 0.06);
+    padding: 18px;
+}
+
+.live-setup-thumb-picker {
+    margin-top: 10px;
+    min-height: 280px;
+    border-radius: 22px;
+    border: 1px dashed rgba(255, 106, 0, 0.26);
+    background: rgba(255, 106, 0, 0.05);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.live-setup-thumb-picker img {
+    width: 100%;
+    height: 100%;
+    min-height: 280px;
+    object-fit: cover;
+    display: block;
+}
+
+.live-setup-thumb-empty {
+    display: grid;
+    gap: 10px;
+    justify-items: center;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.live-setup-thumb-empty i,
+.live-setup-thumb-empty svg {
+    width: 28px;
+    height: 28px;
+    color: var(--primary-color);
+}
+
+.live-session-card {
+    overflow: hidden;
+    border-radius: 22px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+}
+
+.live-session-preview-media,
+.live-shop-session-cover.live-shop-session-cover-media {
+    min-height: 220px;
+    padding: 16px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    position: relative;
+}
+
+.live-session-preview-media::after,
+.live-shop-session-cover.live-shop-session-cover-media::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(8, 11, 17, 0.1), rgba(8, 11, 17, 0.56));
+    pointer-events: none;
+}
+
+.live-session-preview-media > *,
+.live-shop-session-cover.live-shop-session-cover-media > * {
+    position: relative;
+    z-index: 1;
+}
+
+.live-session-preview-copy {
+    padding: 16px;
+    display: grid;
+    gap: 8px;
+}
+
+.live-session-preview-copy strong {
+    font-size: 16px;
+    line-height: 1.4;
+}
+
+.live-session-preview-copy span,
+.live-session-viewers {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.live-session-viewers {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: rgba(12, 16, 23, 0.58);
+    color: #fff;
+    backdrop-filter: blur(14px);
+}
+
+.live-session-viewers i,
+.live-session-viewers svg {
+    width: 14px;
+    height: 14px;
+}
+
+.live-studio-shell {
+    gap: 20px;
+}
+
+.live-studio-stage-card {
+    overflow: hidden;
+    padding: 0;
+}
+
+.live-studio-video-shell {
+    position: relative;
+    min-height: 560px;
+    background: #090d12;
+}
+
+.live-studio-video-shell video {
+    width: 100%;
+    height: 560px;
+    object-fit: cover;
+    display: block;
+    background: #090d12;
+}
+
+.live-studio-overlay-top,
+.live-studio-overlay-bottom {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    z-index: 2;
+}
+
+.live-studio-overlay-top {
+    top: 18px;
+}
+
+.live-studio-overlay-bottom {
+    bottom: 18px;
+    align-items: flex-end;
+}
+
+.live-studio-overlay-bottom strong,
+.live-studio-overlay-bottom span {
+    display: block;
+    color: #fff;
+}
+
+.live-studio-overlay-bottom span {
+    margin-top: 6px;
+    color: rgba(255,255,255,0.82);
+    font-size: 13px;
+}
+
+.live-studio-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 18px;
+    border-top: 1px solid var(--border-color);
+    background: #fff;
+}
+
+.live-studio-side {
+    display: grid;
+    gap: 18px;
+}
+
+.live-studio-product-thumb {
+    height: 170px;
+    margin: 16px 0;
+}
+
+.live-studio-chat-list {
+    display: grid;
+    gap: 10px;
+    max-height: 360px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.live-studio-chat-item {
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: rgba(255, 106, 0, 0.06);
+    border: 1px solid rgba(255, 106, 0, 0.1);
+    display: grid;
+    gap: 4px;
+}
+
+.live-studio-chat-item.is-system {
+    background: rgba(17, 24, 39, 0.06);
+    border-color: rgba(17, 24, 39, 0.08);
+}
+
+.live-studio-chat-item strong {
+    font-size: 13px;
+}
+
+.live-studio-chat-item span {
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
 .live-shop-product-meta {
     display: flex;
     align-items: center;
@@ -11253,7 +11484,9 @@ footer {
 
 @media (max-width: 1200px) {
     .live-shop-stage-grid,
-    .live-shop-content-grid {
+    .live-shop-content-grid,
+    .live-setup-grid,
+    .live-studio-grid {
         grid-template-columns: 1fr;
     }
 
@@ -11295,6 +11528,12 @@ footer {
 
     .live-shop-stage-visual {
         min-height: 300px;
+    }
+
+    .live-studio-video-shell,
+    .live-studio-video-shell video {
+        min-height: 380px;
+        height: 380px;
     }
 
     .live-checkout-summary-card {
@@ -11356,6 +11595,18 @@ footer {
     .live-checkout-item {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .live-studio-overlay-top,
+    .live-studio-overlay-bottom,
+    .live-studio-controls {
+        left: 14px;
+        right: 14px;
+    }
+
+    .live-studio-controls {
+        position: static;
+        padding: 14px;
     }
 
     .live-shop-btn {
