@@ -561,6 +561,11 @@ html.admin-dashboard-view .navbar-inner {
     white-space: nowrap;
 }
 
+.nav-tray-btn:has(.tray-badge[style*="display: none"]) {
+    background: var(--bg-main);
+    border-color: var(--border-color);
+}
+
 .tray-badge {
     position: absolute;
     top: -4px;
@@ -11150,6 +11155,17 @@ footer {
     background: var(--primary-color);
     color: #fff;
     box-shadow: 0 8px 18px rgba(255, 106, 0, 0.18);
+}
+
+.live-shop-btn-accent {
+    border-color: transparent;
+    background: #111827;
+    color: #fff;
+    box-shadow: 0 10px 20px rgba(17, 24, 39, 0.14);
+}
+
+.live-shop-btn-accent:hover {
+    background: #1f2937;
 }
 
 .live-shop-btn-ghost {

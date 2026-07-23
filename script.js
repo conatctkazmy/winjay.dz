@@ -12757,10 +12757,10 @@ function updateLiveShoppingTrayUI() {
     const items = getLiveSocialShoppingCartItems();
     const count = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
     const total = getLiveSocialShoppingCartTotal();
-    trayBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+    trayBtn.style.display = 'inline-flex';
     badgeEl.style.display = count > 0 ? '' : 'none';
     badgeEl.textContent = String(count);
-    totalEl.textContent = formatLiveSocialShoppingMoney(total);
+    totalEl.textContent = count > 0 ? formatLiveSocialShoppingMoney(total) : 'Cart';
 }
 
 function setActiveLiveSocialShoppingCollection(collectionId) {
@@ -12867,13 +12867,29 @@ function renderLiveCheckoutSummary() {
 
 function openLiveSocialShoppingCheckout() {
     if (!getLiveSocialShoppingCartItems().length) {
-        showToast('Add a product first', 'shopping-bag');
+        navigateToSection('live-social-shopping-section');
+        showToast('Add products to the cart first', 'shopping-bag');
         return;
     }
     renderLiveCheckoutSummary();
     populateLiveCheckoutDefaults();
     openModal('liveCheckoutModal');
     scheduleLucideCreateIcons(document.getElementById('liveCheckoutModal'));
+}
+
+function openLiveSocialShoppingGoLive() {
+    if (!requireAuthOrPrompt()) return;
+    navigateToSection('create-listing-section');
+    try {
+        const categorySelect = document.getElementById('listingCategory');
+        if (categorySelect && !categorySelect.value) {
+            categorySelect.value = 'Boutiques';
+            categorySelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    } catch (e) {
+        null;
+    }
+    showToast('Create a product listing to go live', 'radio');
 }
 
 async function submitLiveSocialShoppingCheckout(event) {
@@ -13056,6 +13072,7 @@ function renderLiveSocialShoppingSection() {
                         </div>
                         <div class="live-shop-action-row">
                             ${spotlightProduct ? `<button class="live-shop-btn live-shop-btn-primary" type="button" onclick="addLiveSocialShoppingProduct('${escapeHtml(String(spotlightProduct.id))}')">Add spotlight item</button>` : ''}
+                            <button class="live-shop-btn live-shop-btn-accent" type="button" onclick="openLiveSocialShoppingGoLive()">Go live</button>
                             <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openLiveSocialShoppingCheckout()">Open tray</button>
                             ${spotlightProduct ? `<button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openListingDetail(${Number(spotlightProduct.id) || 0})">View listing</button>` : ''}
                         </div>
