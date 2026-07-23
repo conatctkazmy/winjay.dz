@@ -543,6 +543,7 @@ let liveShoppingMessagesPollTimer = null;
 let liveShoppingSessionsPollTimer = null;
 let liveShoppingRoomPresenceChannel = null;
 let liveShoppingRoomPresenceCount = 0;
+let liveShoppingSessionsSignature = '';
 
 let listingsLoadedCount = 0;
 let listingsHasMore = true;
@@ -12721,6 +12722,19 @@ function getLiveSocialShoppingSessions() {
         .filter((session) => session.pinnedListing && session.previewImage);
 }
 
+function getLiveSocialShoppingSessionsSignature(sessions) {
+    return (Array.isArray(sessions) ? sessions : [])
+        .map((session) => [
+            String(session?.id || ''),
+            String(session?.status || ''),
+            String(session?.ownerId || ''),
+            String(session?.pinnedListingId || ''),
+            String(session?.previewImage || ''),
+            String(session?.startedAt || '')
+        ].join('|'))
+        .join('||');
+}
+
 function getLiveSocialShoppingCartCatalog() {
     const map = new Map();
     getLiveSocialShoppingSourceListings().forEach((item, index) => {
@@ -12797,18 +12811,21 @@ async function refreshLiveSocialShoppingSessions({ silent = false } = {}) {
         }
         return [];
     }
-    liveSocialShoppingState.sessions = (Array.isArray(data) ? data : [])
+    const nextSessions = (Array.isArray(data) ? data : [])
         .map((row, index) => mapLiveSessionRow(row, index))
         .filter((session) => session.pinnedListing && session.previewImage);
+    liveSocialShoppingState.sessions = nextSessions;
+    liveShoppingSessionsSignature = getLiveSocialShoppingSessionsSignature(nextSessions);
     return liveSocialShoppingState.sessions;
 }
 
 function ensureLiveSocialShoppingSessionsPolling() {
     if (liveShoppingSessionsPollTimer) return;
     liveShoppingSessionsPollTimer = setInterval(() => {
+        const previousSignature = liveShoppingSessionsSignature;
         void refreshLiveSocialShoppingSessions({ silent: true }).then(() => {
             if (getActiveSectionId() !== 'live-social-shopping-section' || liveSocialShoppingState.viewMode === 'setup') return;
-            if (liveSocialShoppingState.viewMode === 'studio' && isLiveStudioMounted()) {
+            if ((liveSocialShoppingState.viewMode === 'studio' || liveSocialShoppingState.viewMode === 'viewer') && isLiveRoomMounted()) {
                 const activeSession = getActiveLiveStudioSession();
                 if (!activeSession) {
                     liveSocialShoppingState.activeSessionId = '';
@@ -12820,6 +12837,7 @@ function ensureLiveSocialShoppingSessionsPolling() {
                 }
                 return;
             }
+            if (liveSocialShoppingState.viewMode === 'browse' && previousSignature === liveShoppingSessionsSignature) return;
             renderLiveSocialShoppingSection();
         });
     }, 7000);
@@ -12881,7 +12899,7 @@ function ensureLiveSocialShoppingMessagesPolling(sessionId) {
     liveShoppingMessagesPollTimer = setInterval(() => {
         void refreshLiveSocialShoppingMessages(id, { silent: true }).then(() => {
             if (getActiveSectionId() === 'live-social-shopping-section' && String(liveSocialShoppingState.activeSessionId || '') === id) {
-                if (liveSocialShoppingState.viewMode === 'studio' && isLiveStudioMounted()) updateLiveStudioChatUI();
+                if ((liveSocialShoppingState.viewMode === 'studio' || liveSocialShoppingState.viewMode === 'viewer') && isLiveRoomMounted()) updateLiveStudioChatUI();
                 else renderLiveSocialShoppingSection();
             }
         });
@@ -12919,20 +12937,66 @@ function updateLiveStudioViewerCountUI() {
 
 function updateLiveStudioChatUI() {
     const activeSession = getActiveLiveStudioSession();
-    const listEl = document.getElementById('liveStudioChatList');
-    if (!activeSession || !listEl) return;
+    if (!activeSession) return;
     const messages = getLiveRoomMessages(activeSession.id);
-    if (!messages.length) {
-        listEl.innerHTML = `<div class="live-shop-empty"><i data-lucide="message-circle"></i><h4>No messages yet</h4><p>Real audience comments will appear here when viewers send them.</p></div>`;
-        scheduleLucideCreateIcons(listEl);
+    document.querySelectorAll('[data-live-chat-list]').forEach((listEl) => {
+        const emptyText = String(listEl.getAttribute('data-empty-text') || 'Real audience comments will appear here when viewers send them.');
+        if (!messages.length) {
+            listEl.innerHTML = `<div class="live-shop-empty"><i data-lucide="message-circle"></i><h4>No messages yet</h4><p>${escapeHtml(emptyText)}</p></div>`;
+            scheduleLucideCreateIcons(listEl);
+            return;
+        }
+        listEl.innerHTML = messages.map((message) => `
+            <div class="live-studio-chat-item">
+                <strong>${escapeHtml(message.author || 'Viewer')}</strong>
+                <span>${escapeHtml(message.text || '')}</span>
+            </div>
+        `).join('');
+    });
+}
+
+function isLiveRoomMounted() {
+    return isLiveStudioMounted() || !!document.querySelector('.live-viewer-stage');
+}
+
+async function sendLiveRoomMessage(event) {
+    event?.preventDefault?.();
+    if (!requireAuthOrPrompt()) return;
+    const activeSession = getActiveLiveStudioSession();
+    if (!activeSession?.id) return;
+    const input = document.getElementById('liveRoomChatInput');
+    const submitBtn = document.getElementById('liveRoomChatSubmit');
+    const text = String(input?.value || '').trim();
+    if (!text) return;
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
         return;
     }
-    listEl.innerHTML = messages.map((message) => `
-        <div class="live-studio-chat-item">
-            <strong>${escapeHtml(message.author || 'Viewer')}</strong>
-            <span>${escapeHtml(message.text || '')}</span>
-        </div>
-    `).join('');
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+        const payload = {
+            session_id: String(activeSession.id),
+            text,
+            author: userProfile?.name || currentSupabaseUserEmail || 'Viewer'
+        };
+        const { error } = await client
+            .from('submissions')
+            .insert({
+                user_id: currentSupabaseUserId || null,
+                type: 'live_message',
+                status: 'visible',
+                payload
+            });
+        if (error) throw error;
+        if (input) input.value = '';
+        await refreshLiveSocialShoppingMessages(String(activeSession.id), { silent: true });
+        updateLiveStudioChatUI();
+    } catch (error) {
+        showToast(error?.message || 'Failed to send message', 'alert-circle');
+    } finally {
+        if (submitBtn) submitBtn.disabled = false;
+    }
 }
 
 function updateLiveStudioControlLabels() {
@@ -12956,11 +13020,18 @@ function getActiveLiveStudioSession() {
     return getLiveSocialShoppingSessions().find((session) => session.id === id) || null;
 }
 
+function isCurrentUserLiveSessionOwner(session) {
+    return !!session && String(session.ownerId || '') === String(currentSupabaseUserId || '');
+}
+
 function setActiveLiveSession(sessionId, { openStudio = false } = {}) {
     const id = String(sessionId || '').trim();
     if (!id) return;
+    const session = getLiveSocialShoppingSessions().find((item) => String(item.id || '') === id) || null;
     liveSocialShoppingState.activeSessionId = id;
-    liveSocialShoppingState.viewMode = openStudio ? 'studio' : 'browse';
+    liveSocialShoppingState.viewMode = openStudio
+        ? (isCurrentUserLiveSessionOwner(session) ? 'studio' : 'viewer')
+        : 'browse';
     liveShoppingRoomPresenceCount = 0;
     void refreshLiveSocialShoppingMessages(id, { silent: true });
     ensureLiveSocialShoppingMessagesPolling(id);
@@ -12990,6 +13061,15 @@ function stopLiveStudioTickers() {
     }
     liveStudioTicker = null;
     liveStudioChatTicker = null;
+}
+
+function exitLiveSocialShoppingRoom() {
+    liveSocialShoppingState.activeSessionId = '';
+    liveSocialShoppingState.viewMode = 'browse';
+    stopLiveStudioTickers();
+    stopLiveShoppingRoomPresence();
+    stopLiveStudioStream();
+    renderLiveSocialShoppingSection();
 }
 
 function stopLiveShoppingRoomPresence() {
@@ -13024,7 +13104,7 @@ function bootstrapLiveShoppingRoomPresence(sessionId) {
         const entries = flattenPresenceState(state).filter((entry) => String(entry?.session_id || '') === id);
         liveShoppingRoomPresenceCount = entries.length;
         if (getActiveSectionId() === 'live-social-shopping-section' && String(liveSocialShoppingState.activeSessionId || '') === id) {
-            if (liveSocialShoppingState.viewMode === 'studio' && isLiveStudioMounted()) updateLiveStudioViewerCountUI();
+            if ((liveSocialShoppingState.viewMode === 'studio' || liveSocialShoppingState.viewMode === 'viewer') && isLiveRoomMounted()) updateLiveStudioViewerCountUI();
             else renderLiveSocialShoppingSection();
         }
     });
@@ -13523,7 +13603,7 @@ function renderLiveSocialShoppingSection() {
         scheduleLucideCreateIcons(root);
         return;
     }
-    if (viewMode === 'studio' && activeSession) {
+    if (viewMode === 'studio' && activeSession && isCurrentUserLiveSessionOwner(activeSession)) {
         const messages = getLiveRoomMessages(activeSession.id);
         const viewerCount = getLiveSessionViewerCount(activeSession.id, activeSession.viewerCount);
         root.innerHTML = `
@@ -13583,7 +13663,7 @@ function renderLiveSocialShoppingSection() {
                                     <h3>Audience messages</h3>
                                 </div>
                             </div>
-                            <div class="live-studio-chat-list" id="liveStudioChatList">
+                            <div class="live-studio-chat-list" id="liveStudioChatList" data-live-chat-list data-empty-text="Real audience comments will appear here when viewers send them.">
                                 ${messages.length ? messages.map((message) => `
                                     <div class="live-studio-chat-item">
                                         <strong>${escapeHtml(message.author || 'Viewer')}</strong>
@@ -13598,6 +13678,87 @@ function renderLiveSocialShoppingSection() {
         `;
         bootstrapLiveShoppingRoomPresence(activeSession.id);
         setTimeout(() => { ensureLiveStudioMedia(); }, 0);
+        updateLiveShoppingTrayUI();
+        scheduleLucideCreateIcons(root);
+        return;
+    }
+    if (viewMode === 'viewer' && activeSession) {
+        const messages = getLiveRoomMessages(activeSession.id);
+        const viewerCount = getLiveSessionViewerCount(activeSession.id, activeSession.viewerCount);
+        root.innerHTML = `
+            <div class="live-shop-shell live-studio-shell">
+                <div class="live-shop-topbar">
+                    <div>
+                        <div class="live-shop-eyebrow">Viewer room</div>
+                        <h2>${escapeHtml(activeSession.title)}</h2>
+                        <p>${escapeHtml(activeSession.tagline || 'Join the live, watch the seller, and shop the pinned product in real time.')}</p>
+                    </div>
+                    <div class="live-shop-topbar-actions">
+                        <span class="live-shop-status-pill is-live">LIVE</span>
+                        <span class="live-shop-mode-pill"><i data-lucide="users"></i> <span data-live-viewer-count>${escapeHtml(String(viewerCount))}</span> viewers</span>
+                        <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="exitLiveSocialShoppingRoom()">Back to lives</button>
+                    </div>
+                </div>
+                <div class="live-studio-grid">
+                    <div class="live-studio-stage-card">
+                        <div class="live-studio-video-shell live-viewer-stage" style="background-image:url('${escapeHtml(activeSession.previewImage || getListingPreviewImage(activeSession.pinnedListing) || '')}');">
+                            <div class="live-studio-overlay-top">
+                                <span class="live-shop-status-pill is-live">LIVE</span>
+                                <span class="live-session-viewers"><i data-lucide="eye"></i> <span data-live-viewer-count>${escapeHtml(String(viewerCount))}</span></span>
+                            </div>
+                            <div class="live-studio-overlay-bottom">
+                                <div>
+                                    <strong>${escapeHtml(activeSession.pinnedListing?.seller?.name || 'Seller')}</strong>
+                                    <span>${escapeHtml(activeSession.title)}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="live-studio-controls">
+                            <button class="live-shop-btn live-shop-btn-primary" type="button" onclick="addLiveSocialShoppingProduct('${escapeHtml(String(activeSession.pinnedListing?.id || ''))}')">Add pinned product</button>
+                            <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openListingDetail(${Number(activeSession.pinnedListing?.id) || 0})">View listing</button>
+                            <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openLiveSocialShoppingCheckout()">Open tray</button>
+                        </div>
+                    </div>
+                    <aside class="live-studio-side">
+                        <div class="live-studio-panel">
+                            <div class="live-shop-panel-head">
+                                <div>
+                                    <div class="live-shop-panel-label">Pinned product</div>
+                                    <h3>${escapeHtml(activeSession.pinnedListing?.title || 'No pinned product')}</h3>
+                                </div>
+                                <span class="live-shop-mode-pill">${escapeHtml(formatLiveSocialShoppingMoney(activeSession.pinnedListing?.price || 0))}</span>
+                            </div>
+                            <div class="live-shop-product-thumb live-studio-product-thumb" style="--live-product-color:${escapeHtml(getLiveSocialShoppingCardColor(activeSession.pinnedListing, 0))}; background-image:url('${escapeHtml(getListingPreviewImage(activeSession.pinnedListing))}');"></div>
+                            <div class="live-shop-inline-actions">
+                                <button class="live-shop-btn live-shop-btn-primary" type="button" onclick="addLiveSocialShoppingProduct('${escapeHtml(String(activeSession.pinnedListing?.id || ''))}')">Add to tray</button>
+                                <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openListingDetail(${Number(activeSession.pinnedListing?.id) || 0})">View listing</button>
+                            </div>
+                        </div>
+                        <div class="live-studio-panel">
+                            <div class="live-shop-panel-head">
+                                <div>
+                                    <div class="live-shop-panel-label">Live chat</div>
+                                    <h3>Room messages</h3>
+                                </div>
+                            </div>
+                            <div class="live-studio-chat-list" data-live-chat-list data-empty-text="Messages from real viewers will appear here.">
+                                ${messages.length ? messages.map((message) => `
+                                    <div class="live-studio-chat-item">
+                                        <strong>${escapeHtml(message.author || 'Viewer')}</strong>
+                                        <span>${escapeHtml(message.text || '')}</span>
+                                    </div>
+                                `).join('') : `<div class="live-shop-empty"><i data-lucide="message-circle"></i><h4>No messages yet</h4><p>Messages from real viewers will appear here.</p></div>`}
+                            </div>
+                            <form class="live-room-chat-form" onsubmit="sendLiveRoomMessage(event)">
+                                <input id="liveRoomChatInput" type="text" maxlength="280" placeholder="Write a message to this live room">
+                                <button id="liveRoomChatSubmit" class="live-shop-btn live-shop-btn-accent" type="submit">Send</button>
+                            </form>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+        `;
+        bootstrapLiveShoppingRoomPresence(activeSession.id);
         updateLiveShoppingTrayUI();
         scheduleLucideCreateIcons(root);
         return;

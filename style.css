@@ -11318,6 +11318,30 @@ footer {
     padding-right: 4px;
 }
 
+.live-room-chat-form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.live-room-chat-form input {
+    flex: 1;
+    min-width: 0;
+    height: 46px;
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    padding: 0 14px;
+    font-size: 14px;
+}
+
+.live-room-chat-form input:focus {
+    outline: none;
+    border-color: rgba(255, 106, 0, 0.4);
+    box-shadow: 0 0 0 4px rgba(255, 106, 0, 0.08);
+}
+
 .live-studio-chat-item {
     padding: 12px 14px;
     border-radius: 16px;
