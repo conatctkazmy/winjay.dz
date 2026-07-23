@@ -20,6 +20,47 @@ function applyTouchDeviceClass() {
 applyTouchDeviceClass();
 window.addEventListener('orientationchange', () => setTimeout(applyTouchDeviceClass, 180));
 
+// #region debug-point A:partial-load-reporter
+function reportPartialLoadDebug(hypothesisId, location, msg, data = {}) {
+    try {
+        fetch('http://127.0.0.1:7777/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: 'partial-app-load',
+                runId: 'pre-fix',
+                hypothesisId,
+                location,
+                msg: `[DEBUG] ${msg}`,
+                data,
+                ts: Date.now()
+            })
+        }).catch(() => null);
+    } catch (e) {
+        null;
+    }
+}
+
+if (!window.__partialLoadDebugHooksBound) {
+    window.__partialLoadDebugHooksBound = true;
+    window.addEventListener('error', (event) => {
+        reportPartialLoadDebug('A', 'window:error', 'uncaught-error', {
+            message: String(event?.message || ''),
+            source: String(event?.filename || ''),
+            line: Number(event?.lineno || 0),
+            column: Number(event?.colno || 0)
+        });
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+        const reason = event?.reason;
+        reportPartialLoadDebug('A', 'window:unhandledrejection', 'unhandled-rejection', {
+            message: String(reason?.message || reason || ''),
+            name: String(reason?.name || '')
+        });
+    });
+}
+// #endregion
+
 const DEFAULT_AVATAR_SVG = "data:image/svg+xml,%3Csvg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23e2e8f0'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%2394a3b8'/%3E%3Cellipse cx='20' cy='35' rx='12' ry='8' fill='%2394a3b8'/%3E%3C/svg%3E";
 
 function createEmptyUserProfile() {
@@ -827,10 +868,21 @@ async function refreshCoursesFeatureFlag({ silent = false } = {}) {
 
 async function refreshLiveSocialShoppingFeatureFlag({ silent = false } = {}) {
     const client = initSupabase();
+    // #region debug-point C:live-flag-entry
+    reportPartialLoadDebug('C', 'refreshLiveSocialShoppingFeatureFlag:entry', 'live-flag-refresh-enter', {
+        hasClient: !!client,
+        silent: !!silent
+    });
+    // #endregion
     if (!client) {
         liveSocialShoppingFeatureEnabledFlag = false;
         liveSocialShoppingFeatureFlagsLoaded = true;
         applyLiveSocialShoppingFeatureVisibility();
+        // #region debug-point C:live-flag-no-client
+        reportPartialLoadDebug('C', 'refreshLiveSocialShoppingFeatureFlag:no-client', 'live-flag-refresh-no-client', {
+            enabled: !!liveSocialShoppingFeatureEnabledFlag
+        });
+        // #endregion
         return liveSocialShoppingFeatureEnabledFlag;
     }
     try {
@@ -839,11 +891,23 @@ async function refreshLiveSocialShoppingFeatureFlag({ silent = false } = {}) {
         liveSocialShoppingFeatureEnabledFlag = !!data?.enabled;
         liveSocialShoppingFeatureFlagsLoaded = true;
         applyLiveSocialShoppingFeatureVisibility();
+        // #region debug-point C:live-flag-success
+        reportPartialLoadDebug('C', 'refreshLiveSocialShoppingFeatureFlag:success', 'live-flag-refresh-success', {
+            enabled: !!liveSocialShoppingFeatureEnabledFlag,
+            hasRow: !!data
+        });
+        // #endregion
         return liveSocialShoppingFeatureEnabledFlag;
     } catch (e) {
         liveSocialShoppingFeatureEnabledFlag = false;
         liveSocialShoppingFeatureFlagsLoaded = true;
         applyLiveSocialShoppingFeatureVisibility();
+        // #region debug-point C:live-flag-error
+        reportPartialLoadDebug('C', 'refreshLiveSocialShoppingFeatureFlag:error', 'live-flag-refresh-error', {
+            message: String(e?.message || e || ''),
+            silent: !!silent
+        });
+        // #endregion
         if (!silent) null;
         return liveSocialShoppingFeatureEnabledFlag;
     }
@@ -1985,18 +2049,42 @@ async function handleAuthSessionChange(event, session) {
 }
 
 async function bootstrapSupabaseAuth() {
+    // #region debug-point A:bootstrap-auth-entry
+    reportPartialLoadDebug('A', 'bootstrapSupabaseAuth:entry', 'bootstrap-auth-enter', {
+        hasClient: !!supabaseClient
+    });
+    // #endregion
     if (!supabaseClient) return;
     const { data, error } = await supabaseClient.auth.getSession();
+    // #region debug-point A:bootstrap-auth-session
+    reportPartialLoadDebug('A', 'bootstrapSupabaseAuth:getSession', 'bootstrap-auth-session-result', {
+        hasError: !!error,
+        hasSession: !!data?.session,
+        hasUser: !!data?.session?.user
+    });
+    // #endregion
     if (error) return;
     applyAuthSessionToLocalState(data?.session || null);
     if (data?.session?.user) {
         const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
         const authUser = userData?.user || null;
+        // #region debug-point A:bootstrap-auth-user
+        reportPartialLoadDebug('A', 'bootstrapSupabaseAuth:getUser', 'bootstrap-auth-user-result', {
+            hasError: !!userErr,
+            hasUser: !!authUser?.id
+        });
+        // #endregion
         if (userErr || !authUser?.id) {
             await forceVisitorLogout({ message: 'Session expired', silent: true });
             return;
         }
         const row = await ensureSupabaseProfileRow(supabaseClient, authUser);
+        // #region debug-point A:bootstrap-auth-profile-row
+        reportPartialLoadDebug('A', 'bootstrapSupabaseAuth:profileRow', 'bootstrap-auth-profile-row-result', {
+            hasRow: !!row,
+            deleted: !!row?.deleted_at
+        });
+        // #endregion
         if (row && row.deleted_at) {
             await forceVisitorLogout({ message: 'Account disabled', silent: false });
             return;
@@ -2013,6 +2101,12 @@ async function bootstrapSupabaseAuth() {
         bootstrapLivePresence();
         maybeOpenPendingAdmin();
     }
+    // #region debug-point A:bootstrap-auth-exit
+    reportPartialLoadDebug('A', 'bootstrapSupabaseAuth:exit', 'bootstrap-auth-exit', {
+        loggedIn: !!currentSupabaseUserId,
+        hasProfile: !!hasLoadedSupabaseProfile
+    });
+    // #endregion
 }
 
 function clearSupabaseAuthTokenFromAllStorages() {
@@ -7094,6 +7188,13 @@ function runWhenIdle(fn, timeout = 1500) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // #region debug-point A:dom-ready-entry
+    reportPartialLoadDebug('A', 'DOMContentLoaded:entry', 'dom-content-loaded-enter', {
+        readyState: String(document.readyState || ''),
+        path: String(window.location.pathname || ''),
+        search: String(window.location.search || '')
+    });
+    // #endregion
     loadLiveSocialShoppingTray();
     setPendingReferralFromUrl();
     cacheTranslationNodes();
@@ -7123,8 +7224,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         null;
     }
     updateNavbarAuthUI();
+    // #region debug-point B:dom-ready-navbar
+    reportPartialLoadDebug('B', 'DOMContentLoaded:afterUpdateNavbarAuthUI', 'dom-content-loaded-after-navbar', {
+        loginVisible: document.getElementById('navLoginBtn')?.style?.display !== 'none',
+        hasProfileMenu: !!document.getElementById('navProfileMenu')
+    });
+    // #endregion
     initSupabase();
+    // #region debug-point A:dom-ready-supabase
+    reportPartialLoadDebug('A', 'DOMContentLoaded:afterInitSupabase', 'dom-content-loaded-after-init-supabase', {
+        hasClient: !!supabaseClient
+    });
+    // #endregion
     await bootstrapSupabaseAuth();
+    // #region debug-point A:dom-ready-after-auth
+    reportPartialLoadDebug('A', 'DOMContentLoaded:afterBootstrapSupabaseAuth', 'dom-content-loaded-after-auth', {
+        loggedIn: !!currentSupabaseUserId,
+        hasProfile: !!hasLoadedSupabaseProfile
+    });
+    // #endregion
     runWhenIdle(() => {
         Promise.all([
             refreshCoursesFeatureFlag({ silent: true }),
@@ -7219,7 +7337,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Restore last viewed section
     const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
     const blocked = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section'];
-    const lastSection = (blocked.includes(lastSectionRaw) && !isLoggedIn()) ? 'home-section' : lastSectionRaw;
+    const safeInitialSection =
+        lastSectionRaw === 'listing-detail-section' || lastSectionRaw === 'create-listing-section' || lastSectionRaw === 'seller-profile-section'
+            ? 'home-section'
+            : lastSectionRaw;
+    const lastSection = (blocked.includes(safeInitialSection) && !isLoggedIn()) ? 'home-section' : safeInitialSection;
     const params = new URLSearchParams(window.location.search);
     const adminParam = params.get(ADMIN_DASHBOARD_PARAM);
     if (adminParam && String(adminParam).trim() === ADMIN_DASHBOARD_VALUE) {
@@ -7239,6 +7361,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const listingIdFromUrl = Number(listingParam) || 0;
     const editIdFromUrl = Number(editParam) || 0;
     const courseIdFromUrl = String(courseParam || '').trim();
+    // #region debug-point D:dom-ready-route-state
+    reportPartialLoadDebug('D', 'DOMContentLoaded:route-restore', 'dom-content-loaded-route-state', {
+        lastSection: String(lastSection || ''),
+        sectionParam,
+        courseIdFromUrl,
+        listingIdFromUrl,
+        editIdFromUrl
+    });
+    // #endregion
 
     if (listingsGrid && (!Array.isArray(listings) || listings.length === 0)) {
         homeInitialListingsLoading = true;
@@ -7329,19 +7460,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         openListingDetail(listingIdFromUrl, { pushState: false });
         endBootUI();
     } else {
-        if (lastSection === 'seller-profile-section') {
-            const storedTag = (localStorage.getItem(SELLER_PROFILE_LAST_TAG_STORAGE_KEY) || '').trim();
-            if (storedTag) {
-                showSection('seller-profile-section');
-                const content = document.getElementById('externalProfileContent');
-                setInnerHTMLIfEmpty(content, getSellerProfileSkeletonHTML());
-                endBootUI();
-                await openSellerProfile(storedTag.toLowerCase());
-            } else {
-                showSection('home-section');
-                endBootUI();
-            }
-        } else if (sectionParam && crawlableStaticSections.has(sectionParam)) {
+        if (sectionParam && crawlableStaticSections.has(sectionParam)) {
             showSection(sectionParam);
             endBootUI();
         } else {
@@ -12461,6 +12580,17 @@ function updateNavbarAuthUI() {
     const freeVerifiedPill = document.getElementById('navFreeVerifiedPill');
     const profileMenu = document.getElementById('navProfileMenu');
     const sidebarCoursesItem = document.getElementById('sidebarCoursesItem');
+    // #region debug-point B:navbar-auth-ui
+    reportPartialLoadDebug('B', 'updateNavbarAuthUI', 'update-navbar-auth-ui', {
+        loggedIn,
+        profileReady,
+        likelyLoggedIn,
+        hasLoginBtn: !!loginBtn,
+        hasNotificationsBtn: !!notificationsBtn,
+        hasMessagesBtn: !!messagesBtn,
+        hasProfileMenu: !!profileMenu
+    });
+    // #endregion
 
     if (loginBtn) loginBtn.style.display = likelyLoggedIn ? 'none' : 'inline-flex';
     if (notificationsBtn) notificationsBtn.style.display = loggedIn ? '' : 'none';
@@ -16787,6 +16917,13 @@ function adminDeleteListing(listingId) {
 }
 
 async function showSection(sectionId) {
+    // #region debug-point D:show-section-entry
+    reportPartialLoadDebug('D', 'showSection:entry', 'show-section-enter', {
+        sectionId: String(sectionId || ''),
+        loggedIn: !!isLoggedIn(),
+        activeSectionId: String(getActiveSectionId?.() || '')
+    });
+    // #endregion
     if (sectionId === 'profile-section' && !isLoggedIn()) {
         setPendingSectionAfterAuth('profile-section');
         openModal('authGateModal');
@@ -16861,6 +16998,13 @@ async function showSection(sectionId) {
     } catch {}
     closeMobileSearchExpand();
     document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
+    // #region debug-point D:show-section-target
+    reportPartialLoadDebug('D', 'showSection:target-check', 'show-section-target-check', {
+        sectionId: String(sectionId || ''),
+        targetExists: !!document.getElementById(sectionId),
+        sectionCount: document.querySelectorAll('.content-section').length
+    });
+    // #endregion
     document.getElementById(sectionId).classList.add('active');
     try {
         document.documentElement.classList.toggle('listing-detail-view', sectionId === 'listing-detail-section');
@@ -17485,7 +17629,7 @@ function handleListingRoutesFromUrl() {
     const lastSectionRaw = localStorage.getItem('winjayLastSection') || 'home-section';
     const blocked = ['profile-section', 'messages-section', 'favorites-section', 'settings-section', 'admin-dashboard-section'];
     const safeLast =
-        lastSectionRaw === 'listing-detail-section' || lastSectionRaw === 'create-listing-section'
+        lastSectionRaw === 'listing-detail-section' || lastSectionRaw === 'create-listing-section' || lastSectionRaw === 'seller-profile-section'
             ? 'home-section'
             : lastSectionRaw;
     const lastSection = (blocked.includes(safeLast) && !isLoggedIn()) ? 'home-section' : safeLast;
