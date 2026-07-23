@@ -12992,6 +12992,10 @@ function renderLiveSocialShoppingSection() {
                         <i data-lucide="shopping-bag"></i>
                         <h4>No active listings available yet</h4>
                         <p>Create or publish listings to test the live shopping flow with real products from your marketplace.</p>
+                        <div class="live-shop-empty-actions">
+                            <button class="live-shop-btn live-shop-btn-accent" type="button" onclick="openLiveSocialShoppingGoLive()">Go live</button>
+                            <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openCreateListingPage()">Create listing</button>
+                        </div>
                     </div>
                 </div>
             </div>
