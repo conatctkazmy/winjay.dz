@@ -10053,11 +10053,20 @@ footer {
     }
 
     .nav-right {
-        gap: 4px;
+        gap: 3px;
+    }
+
+    .notification-btn {
+        display: inline-flex !important;
     }
 
     .messages-btn {
         display: none;
+    }
+
+    .nav-tray-btn {
+        padding: 0 8px;
+        min-width: 34px;
     }
 
 
