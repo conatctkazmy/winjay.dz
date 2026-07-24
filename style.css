@@ -6111,6 +6111,66 @@ body.dark-mode .listing-status-badge {
     background: #ffffff;
 }
 
+.cart-page-shell {
+    border: 1px solid rgba(15, 20, 25, 0.08);
+    border-radius: 28px;
+    overflow: hidden;
+    background: var(--bg-main);
+    box-shadow: 0 24px 60px rgba(15, 20, 25, 0.08);
+}
+
+.cart-page-head {
+    padding-right: 32px;
+}
+
+.cart-page-head-actions,
+.cart-page-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.cart-page-empty-card {
+    display: grid;
+    gap: 18px;
+    padding: 32px;
+    border: 1px solid rgba(15, 20, 25, 0.08);
+    border-radius: 28px;
+    background:
+        radial-gradient(circle at top right, rgba(255, 106, 0, 0.1), transparent 26%),
+        linear-gradient(180deg, #fffaf7 0%, var(--bg-main) 100%);
+    box-shadow: 0 24px 60px rgba(15, 20, 25, 0.06);
+}
+
+.cart-page-empty-icon {
+    width: 64px;
+    height: 64px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 20px;
+    background: rgba(255, 106, 0, 0.1);
+    color: var(--primary-color);
+}
+
+.cart-page-empty-icon i,
+.cart-page-empty-icon svg {
+    width: 28px;
+    height: 28px;
+}
+
+.cart-page-empty-copy h2 {
+    margin: 6px 0 10px;
+}
+
+.cart-page-empty-copy p {
+    margin: 0;
+    max-width: 680px;
+    color: var(--text-muted);
+    line-height: 1.7;
+}
+
 #createCourseModal .modal-content {
     max-height: 88vh;
     overflow-y: auto;
@@ -11257,6 +11317,60 @@ footer {
     background: #090d12;
 }
 
+.live-viewer-stage {
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+
+.live-viewer-stage::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(9, 13, 18, 0.08) 0%, rgba(9, 13, 18, 0.18) 100%);
+    pointer-events: none;
+}
+
+.live-viewer-stage video {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    opacity: 0;
+    transition: opacity 180ms ease;
+}
+
+.live-viewer-stage.has-live-video video {
+    opacity: 1;
+}
+
+.live-viewer-stage.has-live-video::after {
+    background: linear-gradient(180deg, rgba(9, 13, 18, 0.04) 0%, rgba(9, 13, 18, 0.12) 100%);
+}
+
+.live-viewer-connection-state {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: 18px;
+    z-index: 2;
+    display: inline-flex;
+    width: fit-content;
+    max-width: calc(100% - 36px);
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: rgba(9, 13, 18, 0.64);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.live-viewer-stage.has-live-video .live-viewer-connection-state {
+    opacity: 0;
+    pointer-events: none;
+}
+
 .live-studio-overlay-top,
 .live-studio-overlay-bottom {
     position: absolute;
@@ -11581,6 +11695,10 @@ footer {
     .live-checkout-form-card .form-row {
         grid-template-columns: 1fr;
         gap: 0;
+    }
+
+    .cart-page-empty-card {
+        padding: 24px 18px;
     }
 }
 

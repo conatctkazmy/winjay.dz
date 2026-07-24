@@ -30,6 +30,7 @@
                 'live-social-shopping-section',
                 'course-section',
                 'messages-section',
+                'cart-section',
                 'settings-section',
                 'about-section',
                 'terms-section',
@@ -112,9 +113,9 @@
                     <i data-lucide="message-circle"></i>
                     <span class="message-badge" id="messageBadge" style="display: none;">0</span>
                 </button>
-                <button class="nav-tray-btn" id="navTrayBtn" type="button" onclick="openLiveSocialShoppingCheckout()" title="Shopping tray">
+                <button class="nav-tray-btn" id="navTrayBtn" type="button" onclick="openCartPage()" title="Cart">
                     <i data-lucide="shopping-bag"></i>
-                    <span class="nav-tray-label">Tray</span>
+                    <span class="nav-tray-label">Cart</span>
                     <span class="nav-tray-total" id="navTrayTotal">0 DZD</span>
                     <span class="tray-badge" id="navTrayBadge" style="display: none;">0</span>
                 </button>
@@ -777,6 +778,13 @@
                     <i data-lucide="arrow-left"></i> Back
                 </button>
                 <div id="liveSocialShoppingRoot"></div>
+            </section>
+
+            <section id="cart-section" class="content-section">
+                <button class="back-btn" onclick="navigateBackInApp('home-section')">
+                    <i data-lucide="arrow-left"></i> Back
+                </button>
+                <div id="cartSectionRoot"></div>
             </section>
 
             <section id="course-section" class="content-section">

@@ -80,6 +80,28 @@ const LOGIN_COOLDOWN_UNTIL_STORAGE_KEY = 'winjayLoginCooldownUntilV1';
 const LANGUAGE_STORAGE_KEY = 'winjayLangV1';
 const MY_PROFILE_LAST_TAB_STORAGE_KEY = 'winjayMyProfileLastTabV1';
 const LIVE_SHOPPING_TRAY_STORAGE_KEY = 'winjayLiveShoppingTrayV1';
+const LIVE_CHECKOUT_FIELD_IDS = {
+    fullName: 'liveCheckoutFullName',
+    phone: 'liveCheckoutPhone',
+    email: 'liveCheckoutEmail',
+    wilaya: 'liveCheckoutWilaya',
+    city: 'liveCheckoutCity',
+    address: 'liveCheckoutAddress',
+    deliveryMethod: 'liveCheckoutDeliveryMethod',
+    paymentMethod: 'liveCheckoutPaymentMethod',
+    notes: 'liveCheckoutNotes'
+};
+const CART_PAGE_CHECKOUT_FIELD_IDS = {
+    fullName: 'cartPageFullName',
+    phone: 'cartPagePhone',
+    email: 'cartPageEmail',
+    wilaya: 'cartPageWilaya',
+    city: 'cartPageCity',
+    address: 'cartPageAddress',
+    deliveryMethod: 'cartPageDeliveryMethod',
+    paymentMethod: 'cartPagePaymentMethod',
+    notes: 'cartPageNotes'
+};
 const FREE_VERIFIED_TOTAL = 1000;
 const REFERRALS_REQUIRED = 10;
 const MARKETPLACE_LISTINGS_STORAGE_KEY = 'marketplaceListingsV1';
@@ -13787,6 +13809,7 @@ function addLiveSocialShoppingProduct(productId) {
     updateLiveShoppingTrayUI();
     renderLiveSocialShoppingSection();
     renderLiveCheckoutSummary();
+    if (getActiveSectionId() === 'cart-section') renderCartSection();
     showToast('Added to tray', 'shopping-bag');
 }
 
@@ -13800,6 +13823,7 @@ function changeLiveSocialShoppingCartQuantity(productId, delta) {
     updateLiveShoppingTrayUI();
     renderLiveSocialShoppingSection();
     renderLiveCheckoutSummary();
+    if (getActiveSectionId() === 'cart-section') renderCartSection();
 }
 
 function removeLiveSocialShoppingProduct(productId) {
@@ -13810,23 +13834,72 @@ function removeLiveSocialShoppingProduct(productId) {
     updateLiveShoppingTrayUI();
     renderLiveSocialShoppingSection();
     renderLiveCheckoutSummary();
+    if (getActiveSectionId() === 'cart-section') renderCartSection();
 }
 
 function openLiveSocialShoppingAdmin() {
     navigateToSection('admin-dashboard-section');
 }
 
+function getCheckoutFieldSnapshot(fieldIds) {
+    return Object.entries(fieldIds || {}).reduce((acc, [key, id]) => {
+        const input = document.getElementById(id);
+        acc[key] = input ? String(input.value || '') : '';
+        return acc;
+    }, {});
+}
+
+function applyCheckoutFieldDefaults(fieldIds, snapshot = null) {
+    const defaults = {
+        fullName: userProfile?.name && userProfile.name !== 'Guest' ? userProfile.name : '',
+        phone: userProfile?.phone || '',
+        email: currentSupabaseUserEmail || '',
+        wilaya: userProfile?.location || '',
+        city: userProfile?.location || '',
+        address: '',
+        deliveryMethod: 'delivery',
+        paymentMethod: 'cash_on_delivery',
+        notes: ''
+    };
+    Object.entries(fieldIds || {}).forEach(([key, id]) => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        const saved = String(snapshot?.[key] || '');
+        if (saved) {
+            input.value = saved;
+            return;
+        }
+        if (!input.value) input.value = String(defaults[key] || '');
+    });
+}
+
 function populateLiveCheckoutDefaults() {
-    const nameEl = document.getElementById('liveCheckoutFullName');
-    const phoneEl = document.getElementById('liveCheckoutPhone');
-    const emailEl = document.getElementById('liveCheckoutEmail');
-    const wilayaEl = document.getElementById('liveCheckoutWilaya');
-    const cityEl = document.getElementById('liveCheckoutCity');
-    if (nameEl && !nameEl.value) nameEl.value = userProfile?.name && userProfile.name !== 'Guest' ? userProfile.name : '';
-    if (phoneEl && !phoneEl.value) phoneEl.value = userProfile?.phone || '';
-    if (emailEl && !emailEl.value) emailEl.value = currentSupabaseUserEmail || '';
-    if (wilayaEl && !wilayaEl.value) wilayaEl.value = userProfile?.location || '';
-    if (cityEl && !cityEl.value) cityEl.value = userProfile?.location || '';
+    applyCheckoutFieldDefaults(LIVE_CHECKOUT_FIELD_IDS);
+}
+
+function getLiveCheckoutItemThumbStyle(item) {
+    const styles = [`--live-product-color:${escapeHtml(item?.color || '#ff6a00')}`];
+    if (item?.image) styles.push(`background-image:url('${escapeHtml(String(item.image))}')`);
+    return styles.join(';');
+}
+
+function getLiveCheckoutItemsMarkup(items) {
+    return (Array.isArray(items) ? items : []).map((item) => `
+        <div class="live-checkout-item">
+            <div class="live-checkout-item-thumb" style="${getLiveCheckoutItemThumbStyle(item)}"></div>
+            <div class="live-checkout-item-copy">
+                <strong>${escapeHtml(item.title)}</strong>
+                <span>${escapeHtml(item.sellerName)}${item.location ? ` • ${escapeHtml(item.location)}` : ''}</span>
+            </div>
+            <div class="live-checkout-item-controls">
+                <button class="live-shop-qty-btn" type="button" onclick="changeLiveSocialShoppingCartQuantity('${escapeHtml(item.productId)}', -1)">-</button>
+                <span>${escapeHtml(String(item.quantity))}</span>
+                <button class="live-shop-qty-btn" type="button" onclick="changeLiveSocialShoppingCartQuantity('${escapeHtml(item.productId)}', 1)">+</button>
+            </div>
+            <strong>${escapeHtml(formatLiveSocialShoppingMoney(item.subtotal))}</strong>
+            <button class="live-checkout-remove-btn" type="button" onclick="removeLiveSocialShoppingProduct('${escapeHtml(item.productId)}')">Remove</button>
+        </div>
+    `).join('');
 }
 
 function renderLiveCheckoutSummary() {
@@ -13850,28 +13923,147 @@ function renderLiveCheckoutSummary() {
         return;
     }
     emptyEl.style.display = 'none';
-    listEl.innerHTML = items.map((item) => `
-        <div class="live-checkout-item">
-            <div class="live-checkout-item-thumb" style="--live-product-color:${escapeHtml(item.color)};"></div>
-            <div class="live-checkout-item-copy">
-                <strong>${escapeHtml(item.title)}</strong>
-                <span>${escapeHtml(item.sellerName)}${item.location ? ` • ${escapeHtml(item.location)}` : ''}</span>
-            </div>
-            <div class="live-checkout-item-controls">
-                <button class="live-shop-qty-btn" type="button" onclick="changeLiveSocialShoppingCartQuantity('${escapeHtml(item.productId)}', -1)">-</button>
-                <span>${escapeHtml(String(item.quantity))}</span>
-                <button class="live-shop-qty-btn" type="button" onclick="changeLiveSocialShoppingCartQuantity('${escapeHtml(item.productId)}', 1)">+</button>
-            </div>
-            <strong>${escapeHtml(formatLiveSocialShoppingMoney(item.subtotal))}</strong>
-            <button class="live-checkout-remove-btn" type="button" onclick="removeLiveSocialShoppingProduct('${escapeHtml(item.productId)}')">Remove</button>
-        </div>
-    `).join('');
+    listEl.innerHTML = getLiveCheckoutItemsMarkup(items);
     scheduleLucideCreateIcons(document.getElementById('liveCheckoutModal'));
+}
+
+function renderCartSection() {
+    const root = document.getElementById('cartSectionRoot');
+    if (!root) return;
+    const snapshot = getCheckoutFieldSnapshot(CART_PAGE_CHECKOUT_FIELD_IDS);
+    const items = getLiveSocialShoppingCartItems();
+    const total = getLiveSocialShoppingCartTotal();
+    const count = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    if (!items.length) {
+        root.innerHTML = `
+            <div class="cart-page-empty-card">
+                <div class="cart-page-empty-icon"><i data-lucide="shopping-bag"></i></div>
+                <div class="cart-page-empty-copy">
+                    <div class="live-checkout-eyebrow">Cart</div>
+                    <h2>Your cart is empty</h2>
+                    <p>Add products from the marketplace or Live Social Shopping, then come back here to review quantities and checkout properly.</p>
+                </div>
+                <div class="cart-page-empty-actions">
+                    <button class="live-shop-btn live-shop-btn-primary" type="button" onclick="navigateToSection('home-section')">Continue shopping</button>
+                    <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="navigateToSection('live-social-shopping-section')">Browse live deals</button>
+                </div>
+            </div>
+        `;
+        scheduleLucideCreateIcons(root);
+        return;
+    }
+    root.innerHTML = `
+        <div class="cart-page-shell">
+            <div class="live-checkout-head cart-page-head">
+                <div>
+                    <div class="live-checkout-eyebrow">Cart</div>
+                    <h2>Review your order</h2>
+                    <p>This cart page keeps the experience separate from Live Social Shopping while still using the same shared cart items and checkout request flow.</p>
+                    <div class="cart-page-head-actions">
+                        <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="navigateToSection('home-section')">Continue shopping</button>
+                        <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="navigateToSection('live-social-shopping-section')">Browse live deals</button>
+                    </div>
+                </div>
+                <span class="live-checkout-pill">${count} item${count === 1 ? '' : 's'}</span>
+            </div>
+            <div class="live-checkout-grid">
+                <div class="live-checkout-summary-pane">
+                    <div class="live-checkout-summary-card">
+                        <div class="live-checkout-section-head">
+                            <h3>Your cart</h3>
+                            <span>${escapeHtml(formatLiveSocialShoppingMoney(total))}</span>
+                        </div>
+                        <div class="live-checkout-summary-list">${getLiveCheckoutItemsMarkup(items)}</div>
+                        <div class="live-checkout-total-box">
+                            <div>
+                                <span>Order total</span>
+                                <strong>${escapeHtml(formatLiveSocialShoppingMoney(total))}</strong>
+                            </div>
+                            <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="navigateToSection('live-social-shopping-section')">Add more from live</button>
+                        </div>
+                    </div>
+                </div>
+                <form id="cartPageCheckoutForm" class="live-checkout-form-pane" onsubmit="submitCartPageCheckout(event)">
+                    <div class="live-checkout-form-card">
+                        <div class="live-checkout-section-head">
+                            <h3>Customer details</h3>
+                            <span>Required to place order</span>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="cartPageFullName">Full name</label>
+                                <input id="cartPageFullName" type="text" placeholder="Your full name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="cartPagePhone">Phone number</label>
+                                <input id="cartPagePhone" type="tel" placeholder="+213 ..." required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="cartPageEmail">Email</label>
+                                <input id="cartPageEmail" type="email" placeholder="name@example.com">
+                            </div>
+                            <div class="form-group">
+                                <label for="cartPageDeliveryMethod">Delivery method</label>
+                                <select id="cartPageDeliveryMethod">
+                                    <option value="delivery">Home delivery</option>
+                                    <option value="meetup">Meet-up / handoff</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="cartPageWilaya">Wilaya</label>
+                                <input id="cartPageWilaya" type="text" placeholder="Wilaya" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="cartPageCity">City</label>
+                                <input id="cartPageCity" type="text" placeholder="City" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="cartPageAddress">Delivery address</label>
+                            <textarea id="cartPageAddress" rows="4" placeholder="Street, building, apartment, landmark..." required></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="cartPagePaymentMethod">Payment</label>
+                                <select id="cartPagePaymentMethod">
+                                    <option value="cash_on_delivery">Cash on delivery</option>
+                                    <option value="bank_transfer">Bank transfer</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="cartPageNotes">Order notes</label>
+                                <input id="cartPageNotes" type="text" placeholder="Color, size, delivery timing..." />
+                            </div>
+                        </div>
+                        <div class="live-checkout-submit-row">
+                            <div class="live-checkout-submit-copy">
+                                <span>Submitting creates a checkout request in your website admin submissions.</span>
+                            </div>
+                            <button class="live-checkout-submit-btn" id="cartPageCheckoutSubmitBtn" type="submit">Place order request</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    applyCheckoutFieldDefaults(CART_PAGE_CHECKOUT_FIELD_IDS, snapshot);
+    scheduleLucideCreateIcons(root);
+}
+
+function openCartPage() {
+    if (getActiveSectionId() === 'cart-section') {
+        renderCartSection();
+        return;
+    }
+    void navigateToSection('cart-section');
 }
 
 function openLiveSocialShoppingCheckout() {
     if (!getLiveSocialShoppingCartItems().length) {
-        navigateToSection('live-social-shopping-section');
         showToast('Add products to the cart first', 'shopping-bag');
         return;
     }
@@ -13881,27 +14073,33 @@ function openLiveSocialShoppingCheckout() {
     scheduleLucideCreateIcons(document.getElementById('liveCheckoutModal'));
 }
 
-async function submitLiveSocialShoppingCheckout(event) {
+function getCheckoutSubmissionValues(fieldIds) {
+    return {
+        fullName: document.getElementById(fieldIds.fullName)?.value?.trim() || '',
+        phone: document.getElementById(fieldIds.phone)?.value?.trim() || '',
+        email: document.getElementById(fieldIds.email)?.value?.trim() || '',
+        wilaya: document.getElementById(fieldIds.wilaya)?.value?.trim() || '',
+        city: document.getElementById(fieldIds.city)?.value?.trim() || '',
+        address: document.getElementById(fieldIds.address)?.value?.trim() || '',
+        deliveryMethod: document.getElementById(fieldIds.deliveryMethod)?.value?.trim() || 'delivery',
+        paymentMethod: document.getElementById(fieldIds.paymentMethod)?.value?.trim() || 'cash_on_delivery',
+        notes: document.getElementById(fieldIds.notes)?.value?.trim() || ''
+    };
+}
+
+async function submitLiveCheckoutRequest(event, { fieldIds, submitButtonId, onSuccess } = {}) {
     event?.preventDefault?.();
     const items = getLiveSocialShoppingCartItems();
     if (!items.length) {
         showToast('Your tray is empty', 'shopping-bag');
         return;
     }
-    const fullName = document.getElementById('liveCheckoutFullName')?.value?.trim() || '';
-    const phone = document.getElementById('liveCheckoutPhone')?.value?.trim() || '';
-    const email = document.getElementById('liveCheckoutEmail')?.value?.trim() || '';
-    const wilaya = document.getElementById('liveCheckoutWilaya')?.value?.trim() || '';
-    const city = document.getElementById('liveCheckoutCity')?.value?.trim() || '';
-    const address = document.getElementById('liveCheckoutAddress')?.value?.trim() || '';
-    const deliveryMethod = document.getElementById('liveCheckoutDeliveryMethod')?.value?.trim() || 'delivery';
-    const paymentMethod = document.getElementById('liveCheckoutPaymentMethod')?.value?.trim() || 'cash_on_delivery';
-    const notes = document.getElementById('liveCheckoutNotes')?.value?.trim() || '';
+    const { fullName, phone, email, wilaya, city, address, deliveryMethod, paymentMethod, notes } = getCheckoutSubmissionValues(fieldIds);
     if (!fullName || !phone || !wilaya || !city || !address) {
         showToast('Please complete the checkout form', 'alert-circle');
         return;
     }
-    const submitBtn = document.getElementById('liveCheckoutSubmitBtn');
+    const submitBtn = document.getElementById(submitButtonId);
     const originalText = submitBtn?.textContent || 'Place order request';
     if (submitBtn) {
         submitBtn.disabled = true;
@@ -13943,8 +14141,8 @@ async function submitLiveSocialShoppingCheckout(event) {
         updateLiveShoppingTrayUI();
         renderLiveSocialShoppingSection();
         renderLiveCheckoutSummary();
-        closeModal('liveCheckoutModal');
         event?.target?.reset?.();
+        if (typeof onSuccess === 'function') onSuccess();
         showToast('Order request sent', 'check-circle');
     } catch (error) {
         showToast(error?.message || 'Checkout failed', 'alert-circle');
@@ -13954,6 +14152,26 @@ async function submitLiveSocialShoppingCheckout(event) {
             submitBtn.textContent = originalText;
         }
     }
+}
+
+async function submitLiveSocialShoppingCheckout(event) {
+    return submitLiveCheckoutRequest(event, {
+        fieldIds: LIVE_CHECKOUT_FIELD_IDS,
+        submitButtonId: 'liveCheckoutSubmitBtn',
+        onSuccess: () => {
+            closeModal('liveCheckoutModal');
+        }
+    });
+}
+
+async function submitCartPageCheckout(event) {
+    return submitLiveCheckoutRequest(event, {
+        fieldIds: CART_PAGE_CHECKOUT_FIELD_IDS,
+        submitButtonId: 'cartPageCheckoutSubmitBtn',
+        onSuccess: () => {
+            if (getActiveSectionId() === 'cart-section') renderCartSection();
+        }
+    });
 }
 
 function renderLiveSocialShoppingSection() {
@@ -17361,6 +17579,9 @@ async function showSection(sectionId) {
     } else if (sectionId === 'favorites-section') {
         clearSellerProfileRouteTag();
         renderFavorites();
+    } else if (sectionId === 'cart-section') {
+        clearSellerProfileRouteTag();
+        renderCartSection();
     } else if (sectionId === 'profile-section') {
         clearSellerProfileRouteTag();
         startSectionLoadingSkeleton('profile-section');
