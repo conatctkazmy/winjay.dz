@@ -6112,6 +6112,8 @@ body.dark-mode .listing-status-badge {
 }
 
 .cart-page-shell {
+    width: min(100%, 1120px);
+    margin: 0 auto;
     border: 1px solid rgba(15, 20, 25, 0.08);
     border-radius: 28px;
     overflow: hidden;
@@ -6132,6 +6134,8 @@ body.dark-mode .listing-status-badge {
 }
 
 .cart-page-empty-card {
+    width: min(100%, 1120px);
+    margin: 0 auto;
     display: grid;
     gap: 18px;
     padding: 32px;
