@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>endinar.com - Marché Moderne</title>
     <meta name="description" content="endinar.com: a modern marketplace to buy and sell listings, chat with sellers, and discover verified and VIP stores.">
-    <link rel="stylesheet" href="style.css?v=20260724_01">
+    <link rel="stylesheet" href="style.css?v=20260724_02">
     <link rel="preconnect" href="https://rxlpesdvskyytbfoufvp.supabase.co" crossorigin>
     <link rel="preload" as="script" href="https://unpkg.com/lucide@0.383.0/dist/umd/lucide.min.js" crossorigin>
     <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" crossorigin>
-    <link rel="preload" as="script" href="script.js?v=20260723_02">
+    <link rel="preload" as="script" href="script.js?v=20260724_02">
     <script>
         document.documentElement.classList.add('app-loading');
         document.documentElement.classList.add('nav-avatar-loading');
@@ -28,6 +28,7 @@
                 'profile-section',
                 'favorites-section',
                 'live-social-shopping-section',
+                'wholesale-section',
                 'course-section',
                 'messages-section',
                 'cart-section',
@@ -243,6 +244,7 @@
                         <li><a href="#" onclick="navigateToSection('favorites-section'); return false;"><i data-lucide="heart"></i> <span data-i18n="sidebar_favorites">Favorites</span></a></li>
                         <li><a href="#" onclick="navigateToSection('messages-section'); return false;"><i data-lucide="message-circle"></i> <span data-i18n="sidebar_messages">Messages</span></a></li>
                         <li id="sidebarLiveSocialShoppingItem" style="display:none;"><a href="#" onclick="navigateToSection('live-social-shopping-section'); return false;"><i data-lucide="radio"></i> <span>Live Social Shopping</span></a></li>
+                        <li id="sidebarWholesaleItem" style="display:none;"><a href="#" onclick="navigateToSection('wholesale-section'); return false;"><i data-lucide="factory"></i> <span>Wholesale</span></a></li>
                         <li id="sidebarCoursesItem" style="display:none;"><a href="#" onclick="navigateToSection('course-section'); return false;"><i data-lucide="graduation-cap"></i> <span data-i18n="sidebar_courses">Courses</span></a></li>
                         <li id="sidebarVerifiedCta" style="display:none;"><a href="#" onclick="openVerifiedUpgradeModal(); return false;"><i data-lucide="badge-check"></i> <span style="color: #28a745;" data-i18n="sidebar_become_verified">Become Verified</span></a></li>
                         <li id="sidebarVipCta" style="display:none;"><a href="#" onclick="openVipModal(); return false;"><i data-lucide="crown"></i> <span style="color: #ffd700;" data-i18n="sidebar_become_vip">Become VIP</span></a></li>
@@ -780,6 +782,13 @@
                 <div id="liveSocialShoppingRoot"></div>
             </section>
 
+            <section id="wholesale-section" class="content-section">
+                <button class="back-btn" onclick="navigateBackInApp('home-section')">
+                    <i data-lucide="arrow-left"></i> Back
+                </button>
+                <div id="wholesaleSectionRoot"></div>
+            </section>
+
             <section id="cart-section" class="content-section">
                 <button class="back-btn" onclick="navigateBackInApp('home-section')">
                     <i data-lucide="arrow-left"></i> Back
@@ -1188,6 +1197,14 @@
                                     <div class="toggle-label">Live Social Shopping (public)</div>
                                 </div>
                                 <div class="muted" id="adminLiveSocialShoppingFeatureHint"></div>
+                                <div class="toggle-row" style="margin-top: 14px;">
+                                    <label class="toggle-modern">
+                                        <input id="adminWholesaleFeatureToggle" class="toggle-input" type="checkbox">
+                                        <span class="toggle-switch"></span>
+                                    </label>
+                                    <div class="toggle-label">Wholesale (public)</div>
+                                </div>
+                                <div class="muted" id="adminWholesaleFeatureHint"></div>
                             </div>
                             <div class="admin-two-col">
                                 <div class="admin-card">
@@ -2695,6 +2712,6 @@
     </button>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" crossorigin></script>
-    <script defer src="script.js?v=20260723_02"></script>
+    <script defer src="script.js?v=20260724_02"></script>
 </body>
 </html>

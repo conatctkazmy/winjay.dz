@@ -80,6 +80,8 @@ const LOGIN_COOLDOWN_UNTIL_STORAGE_KEY = 'winjayLoginCooldownUntilV1';
 const LANGUAGE_STORAGE_KEY = 'winjayLangV1';
 const MY_PROFILE_LAST_TAB_STORAGE_KEY = 'winjayMyProfileLastTabV1';
 const LIVE_SHOPPING_TRAY_STORAGE_KEY = 'winjayLiveShoppingTrayV1';
+const WHOLESALE_CART_STORAGE_KEY = 'winjayWholesaleCartV1';
+const WHOLESALE_RECEIPT_FUNCTION_NAME = 'wholesale-send-receipt';
 const LIVE_CHECKOUT_FIELD_IDS = {
     fullName: 'liveCheckoutFullName',
     phone: 'liveCheckoutPhone',
@@ -92,6 +94,7 @@ const LIVE_CHECKOUT_FIELD_IDS = {
     notes: 'liveCheckoutNotes'
 };
 const CART_PAGE_CHECKOUT_FIELD_IDS = {
+    companyName: 'cartPageCompanyName',
     fullName: 'cartPageFullName',
     phone: 'cartPagePhone',
     email: 'cartPageEmail',
@@ -569,6 +572,8 @@ let coursesFeatureEnabledFlag = true;
 let coursesFeatureFlagsLoaded = false;
 let liveSocialShoppingFeatureEnabledFlag = false;
 let liveSocialShoppingFeatureFlagsLoaded = false;
+let wholesaleFeatureEnabledFlag = false;
+let wholesaleFeatureFlagsLoaded = false;
 let liveSocialShoppingState = {
     activeSessionId: '',
     viewMode: 'browse',
@@ -578,6 +583,45 @@ let liveSocialShoppingState = {
     messages: {},
     studioMicEnabled: true,
     studioCameraEnabled: true
+};
+let wholesaleState = {
+    viewMode: 'browse',
+    stores: [],
+    productsByStore: {},
+    activeStoreId: '',
+    storeSearch: '',
+    filters: {
+        query: '',
+        category: '',
+        color: '',
+        size: '',
+        material: '',
+        minPrice: '',
+        maxPrice: ''
+    },
+    cart: {},
+    myStore: null,
+    editingProductId: '',
+    manageProductDraft: {
+        title: '',
+        description: '',
+        category: '',
+        material: '',
+        brand: '',
+        coverImageUrl: '',
+        minimumOrderQuantity: '1',
+        isPublished: true
+    },
+    manageVariantDrafts: [{
+        sku: '',
+        color: '',
+        size: '',
+        price: '',
+        stockQty: '',
+        minimumQty: '1',
+        imageUrl: ''
+    }],
+    schemaReady: true
 };
 let deletedAccountLogoutActive = false;
 let liveStudioStream = null;
@@ -813,13 +857,26 @@ function isLiveSocialShoppingEnabledForViewer() {
     return !!liveSocialShoppingFeatureEnabledFlag || !!userProfile?.isAdmin;
 }
 
+function isWholesaleEnabledForViewer() {
+    return !!wholesaleFeatureEnabledFlag || !!userProfile?.isAdmin;
+}
+
 function canCurrentUserGoLive() {
     return isLoggedIn() && isLiveSocialShoppingEnabledForViewer();
+}
+
+function canCurrentUserManageWholesale() {
+    return isLoggedIn() && isWholesaleEnabledForViewer() && (!!userProfile?.verified || !!userProfile?.isAdmin);
 }
 
 async function ensureLiveSocialShoppingFeatureFlagReady() {
     if (liveSocialShoppingFeatureFlagsLoaded) return liveSocialShoppingFeatureEnabledFlag;
     return refreshLiveSocialShoppingFeatureFlag({ silent: true });
+}
+
+async function ensureWholesaleFeatureFlagReady() {
+    if (wholesaleFeatureFlagsLoaded) return wholesaleFeatureEnabledFlag;
+    return refreshWholesaleFeatureFlag({ silent: true });
 }
 
 function applyCoursesFeatureVisibility() {
@@ -849,6 +906,12 @@ function applyLiveSocialShoppingFeatureVisibility() {
     const allow = isLiveSocialShoppingEnabledForViewer();
     const sidebarLiveSocialShoppingItem = document.getElementById('sidebarLiveSocialShoppingItem');
     if (sidebarLiveSocialShoppingItem) sidebarLiveSocialShoppingItem.style.display = allow ? '' : 'none';
+}
+
+function applyWholesaleFeatureVisibility() {
+    const allow = isWholesaleEnabledForViewer();
+    const sidebarWholesaleItem = document.getElementById('sidebarWholesaleItem');
+    if (sidebarWholesaleItem) sidebarWholesaleItem.style.display = allow ? '' : 'none';
 }
 
 async function refreshCoursesFeatureFlag({ silent = false } = {}) {
@@ -896,6 +959,30 @@ async function refreshLiveSocialShoppingFeatureFlag({ silent = false } = {}) {
         applyLiveSocialShoppingFeatureVisibility();
         if (!silent) null;
         return liveSocialShoppingFeatureEnabledFlag;
+    }
+}
+
+async function refreshWholesaleFeatureFlag({ silent = false } = {}) {
+    const client = initSupabase();
+    if (!client) {
+        wholesaleFeatureEnabledFlag = false;
+        wholesaleFeatureFlagsLoaded = true;
+        applyWholesaleFeatureVisibility();
+        return wholesaleFeatureEnabledFlag;
+    }
+    try {
+        const { data, error } = await client.from('feature_flags').select('enabled').eq('key', 'wholesale_enabled').maybeSingle();
+        if (error) throw error;
+        wholesaleFeatureEnabledFlag = !!data?.enabled;
+        wholesaleFeatureFlagsLoaded = true;
+        applyWholesaleFeatureVisibility();
+        return wholesaleFeatureEnabledFlag;
+    } catch (e) {
+        wholesaleFeatureEnabledFlag = false;
+        wholesaleFeatureFlagsLoaded = true;
+        applyWholesaleFeatureVisibility();
+        if (!silent) null;
+        return wholesaleFeatureEnabledFlag;
     }
 }
 
@@ -7145,6 +7232,7 @@ function runWhenIdle(fn, timeout = 1500) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     loadLiveSocialShoppingTray();
+    loadWholesaleCart();
     setPendingReferralFromUrl();
     cacheTranslationNodes();
     initLanguage();
@@ -7178,11 +7266,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     runWhenIdle(() => {
         Promise.all([
             refreshCoursesFeatureFlag({ silent: true }),
-            refreshLiveSocialShoppingFeatureFlag({ silent: true })
+            refreshLiveSocialShoppingFeatureFlag({ silent: true }),
+            refreshWholesaleFeatureFlag({ silent: true })
         ])
             .then(() => {
                 applyCoursesFeatureVisibility();
                 applyLiveSocialShoppingFeatureVisibility();
+                applyWholesaleFeatureVisibility();
             })
             .catch(() => null);
     }, 1200);
@@ -12512,6 +12602,7 @@ function updateNavbarAuthUI() {
     if (profileMenu) profileMenu.style.display = loggedIn ? '' : 'none';
     if (sidebarCoursesItem) sidebarCoursesItem.style.display = loggedIn && isCoursesFeatureEnabledForViewer() ? '' : 'none';
     applyLiveSocialShoppingFeatureVisibility();
+    applyWholesaleFeatureVisibility();
     updateLiveShoppingTrayUI();
 
     try {
@@ -12532,6 +12623,7 @@ function updateProfileUI() {
         updateNavbarAuthUI();
         applyCoursesFeatureVisibility();
         applyLiveSocialShoppingFeatureVisibility();
+        applyWholesaleFeatureVisibility();
         return;
     }
     if (skeleton) skeleton.style.display = 'none';
@@ -12598,6 +12690,7 @@ function updateProfileUI() {
     updateNavbarAuthUI();
     applyCoursesFeatureVisibility();
     applyLiveSocialShoppingFeatureVisibility();
+    applyWholesaleFeatureVisibility();
     updateListingVideoGroupVisibility();
     scheduleLucideCreateIcons(document.getElementById('profile-section') || document.body);
     refreshMyProfileFollowCounts();
@@ -13803,9 +13896,8 @@ function updateLiveShoppingTrayUI() {
     const badgeEl = document.getElementById('navTrayBadge');
     const totalEl = document.getElementById('navTrayTotal');
     if (!trayBtn || !badgeEl || !totalEl) return;
-    const items = getLiveSocialShoppingCartItems();
-    const count = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-    const total = getLiveSocialShoppingCartTotal();
+    const count = getSharedCartCount();
+    const total = getSharedCartTotal();
     trayBtn.style.display = 'inline-flex';
     badgeEl.style.display = count > 0 ? '' : 'none';
     badgeEl.textContent = String(count);
@@ -13857,6 +13949,1276 @@ function openLiveSocialShoppingAdmin() {
     navigateToSection('admin-dashboard-section');
 }
 
+function createDefaultWholesaleFilters() {
+    return {
+        query: '',
+        category: '',
+        color: '',
+        size: '',
+        material: '',
+        minPrice: '',
+        maxPrice: ''
+    };
+}
+
+function createEmptyWholesaleVariantDraft() {
+    return {
+        sku: '',
+        color: '',
+        size: '',
+        price: '',
+        stockQty: '',
+        minimumQty: '1',
+        imageUrl: ''
+    };
+}
+
+function createEmptyWholesaleProductDraft() {
+    return {
+        title: '',
+        description: '',
+        category: '',
+        material: '',
+        brand: '',
+        coverImageUrl: '',
+        minimumOrderQuantity: '1',
+        isPublished: true
+    };
+}
+
+function resetWholesaleManageProductDraft({ rerender = false } = {}) {
+    wholesaleState.editingProductId = '';
+    wholesaleState.manageProductDraft = createEmptyWholesaleProductDraft();
+    wholesaleState.manageVariantDrafts = [createEmptyWholesaleVariantDraft()];
+    if (rerender && getActiveSectionId() === 'wholesale-section' && wholesaleState.viewMode === 'manage') {
+        void renderWholesaleSection();
+    }
+}
+
+function persistWholesaleCart() {
+    try {
+        localStorage.setItem(WHOLESALE_CART_STORAGE_KEY, JSON.stringify(wholesaleState.cart || {}));
+    } catch (e) {
+        null;
+    }
+}
+
+function loadWholesaleCart() {
+    try {
+        const raw = localStorage.getItem(WHOLESALE_CART_STORAGE_KEY) || '{}';
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') wholesaleState.cart = parsed;
+    } catch (e) {
+        wholesaleState.cart = {};
+    }
+}
+
+function getWholesaleCartItems() {
+    return Object.values(wholesaleState.cart || {})
+        .map((item) => {
+            const quantity = Number(item?.quantity) || 0;
+            const price = Number(item?.price) || 0;
+            if (!item || quantity <= 0) return null;
+            return {
+                ...item,
+                source: 'wholesale',
+                quantity,
+                subtotal: price * quantity
+            };
+        })
+        .filter(Boolean);
+}
+
+function getWholesaleCartTotal() {
+    return getWholesaleCartItems().reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+}
+
+function getSharedCartItems() {
+    const liveItems = getLiveSocialShoppingCartItems().map((item) => ({
+        ...item,
+        source: 'live',
+        cartKey: `live:${item.productId}`,
+        sourceLabel: 'Live',
+        variantLabel: '',
+        sellerUserId: String(item?.seller?.id || item?.raw?.owner_id || ''),
+        storeId: '',
+        storeName: item.sellerName || 'Live seller'
+    }));
+    const wholesaleItems = getWholesaleCartItems().map((item) => ({
+        ...item,
+        source: 'wholesale',
+        cartKey: String(item.cartKey || ''),
+        sourceLabel: 'Wholesale'
+    }));
+    return liveItems.concat(wholesaleItems);
+}
+
+function getSharedCartTotal() {
+    return getSharedCartItems().reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+}
+
+function getSharedCartCount() {
+    return getSharedCartItems().reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+}
+
+function slugifyWholesaleText(value) {
+    return String(value || '')
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 64);
+}
+
+function getWholesaleStoreOwnerProfile(row) {
+    const rawProfile = Array.isArray(row?.profiles) ? row.profiles[0] : (row?.profiles || row?.profile || {});
+    const p = rawProfile || {};
+    return {
+        id: String(p?.id || row?.owner_id || '').trim(),
+        name: String(p?.display_name || 'Verified business').trim() || 'Verified business',
+        tag: String(p?.tag || '').trim(),
+        avatar: String(p?.avatar_url || DEFAULT_AVATAR_SVG),
+        verified: !!p?.verified,
+        isVip: !!p?.is_vip,
+        businessType: String(p?.business_type || '').trim(),
+        location: String(p?.location || '').trim()
+    };
+}
+
+function sanitizeWholesaleStore(row) {
+    const owner = getWholesaleStoreOwnerProfile(row);
+    return {
+        id: String(row?.id || '').trim(),
+        ownerId: String(row?.owner_id || owner.id || '').trim(),
+        name: String(row?.name || '').trim(),
+        slug: String(row?.slug || '').trim(),
+        tagline: String(row?.tagline || '').trim(),
+        description: String(row?.description || '').trim(),
+        heroImageUrl: String(row?.hero_image_url || '').trim(),
+        accentColor: String(row?.accent_color || '#ff6a00').trim() || '#ff6a00',
+        minimumOrderAmount: Number(row?.minimum_order_amount) || 0,
+        shippingNote: String(row?.shipping_note || '').trim(),
+        paymentNote: String(row?.payment_note || '').trim(),
+        status: String(row?.status || 'active').trim() || 'active',
+        isPublished: !!row?.is_published,
+        createdAt: String(row?.created_at || ''),
+        updatedAt: String(row?.updated_at || ''),
+        owner
+    };
+}
+
+function sanitizeWholesaleProduct(row, variants = []) {
+    return {
+        id: String(row?.id || '').trim(),
+        storeId: String(row?.store_id || '').trim(),
+        ownerId: String(row?.owner_id || '').trim(),
+        title: String(row?.title || '').trim() || 'Wholesale product',
+        description: String(row?.description || '').trim(),
+        category: String(row?.category || '').trim(),
+        material: String(row?.material || '').trim(),
+        brand: String(row?.brand || '').trim(),
+        coverImageUrl: String(row?.cover_image_url || '').trim(),
+        minimumOrderQuantity: Math.max(1, Number(row?.minimum_order_quantity) || 1),
+        status: String(row?.status || 'active').trim() || 'active',
+        isPublished: !!row?.is_published,
+        sortOrder: Number(row?.sort_order) || 0,
+        variants: (Array.isArray(variants) ? variants : [])
+            .map((variant) => ({
+                id: String(variant?.id || '').trim(),
+                productId: String(variant?.product_id || '').trim(),
+                ownerId: String(variant?.owner_id || '').trim(),
+                sku: String(variant?.sku || '').trim(),
+                color: String(variant?.color || '').trim(),
+                size: String(variant?.size || '').trim(),
+                price: Number(variant?.price) || 0,
+                stockQty: Math.max(0, Number(variant?.stock_qty) || 0),
+                minimumQty: Math.max(1, Number(variant?.minimum_qty) || 1),
+                imageUrl: String(variant?.image_url || '').trim(),
+                status: String(variant?.status || 'active').trim() || 'active'
+            }))
+            .filter((variant) => variant.id)
+            .sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0))
+    };
+}
+
+async function refreshMyWholesaleStore({ silent = false } = {}) {
+    const client = initSupabase();
+    if (!client || !isLoggedIn()) {
+        wholesaleState.myStore = null;
+        return null;
+    }
+    const uid = await ensureCurrentSupabaseUserId(client);
+    if (!uid) {
+        wholesaleState.myStore = null;
+        return null;
+    }
+    try {
+        const { data, error } = await client
+            .from('wholesale_stores')
+            .select('id, owner_id, name, slug, tagline, description, hero_image_url, accent_color, minimum_order_amount, shipping_note, payment_note, status, is_published, created_at, updated_at, profiles(id, display_name, tag, avatar_url, verified, is_vip, business_type, location)')
+            .eq('owner_id', uid)
+            .maybeSingle();
+        if (error) throw error;
+        wholesaleState.myStore = data ? sanitizeWholesaleStore(data) : null;
+        return wholesaleState.myStore;
+    } catch (error) {
+        if (relationMissing(error, 'wholesale_stores')) {
+            wholesaleState.schemaReady = false;
+            wholesaleState.myStore = null;
+            return null;
+        }
+        if (!silent) showToast(error?.message || 'Failed to load your wholesale store', 'alert-circle');
+        return wholesaleState.myStore;
+    }
+}
+
+async function refreshWholesaleStores({ silent = false } = {}) {
+    const client = initSupabase();
+    if (!client) {
+        wholesaleState.stores = [];
+        wholesaleState.schemaReady = true;
+        return [];
+    }
+    try {
+        const { data, error } = await client
+            .from('wholesale_stores')
+            .select('id, owner_id, name, slug, tagline, description, hero_image_url, accent_color, minimum_order_amount, shipping_note, payment_note, status, is_published, created_at, updated_at, profiles(id, display_name, tag, avatar_url, verified, is_vip, business_type, location)')
+            .eq('status', 'active')
+            .eq('is_published', true)
+            .order('created_at', { ascending: false })
+            .limit(60);
+        if (error) throw error;
+        wholesaleState.schemaReady = true;
+        wholesaleState.stores = (Array.isArray(data) ? data : []).map(sanitizeWholesaleStore).filter((store) => store.id);
+        const mine = await refreshMyWholesaleStore({ silent: true });
+        if (mine?.id && !wholesaleState.stores.some((store) => store.id === mine.id)) {
+            wholesaleState.stores = [mine].concat(wholesaleState.stores);
+        }
+        return wholesaleState.stores;
+    } catch (error) {
+        if (relationMissing(error, 'wholesale_stores')) {
+            wholesaleState.schemaReady = false;
+            wholesaleState.stores = [];
+            wholesaleState.myStore = null;
+            return [];
+        }
+        if (!silent) showToast(error?.message || 'Failed to load wholesale stores', 'alert-circle');
+        return wholesaleState.stores;
+    }
+}
+
+async function loadWholesaleProductsForStore(storeId, { includeHidden = false, silent = false } = {}) {
+    const id = String(storeId || '').trim();
+    if (!id) return [];
+    const client = initSupabase();
+    if (!client) return [];
+    try {
+        let query = client
+            .from('wholesale_products')
+            .select('id, store_id, owner_id, title, description, category, material, brand, cover_image_url, minimum_order_quantity, status, is_published, sort_order, created_at, updated_at')
+            .eq('store_id', id)
+            .order('sort_order', { ascending: true })
+            .order('created_at', { ascending: false });
+        if (!includeHidden) {
+            query = query.eq('status', 'active').eq('is_published', true);
+        }
+        const { data: productsData, error: productsError } = await query;
+        if (productsError) throw productsError;
+        const products = Array.isArray(productsData) ? productsData : [];
+        const productIds = products.map((product) => String(product?.id || '').trim()).filter(Boolean);
+        let variants = [];
+        if (productIds.length) {
+            let variantsQuery = client
+                .from('wholesale_product_variants')
+                .select('id, product_id, owner_id, sku, color, size, price, stock_qty, minimum_qty, image_url, status, created_at, updated_at')
+                .in('product_id', productIds)
+                .order('created_at', { ascending: true });
+            if (!includeHidden) variantsQuery = variantsQuery.eq('status', 'active');
+            const { data: variantsData, error: variantsError } = await variantsQuery;
+            if (variantsError) throw variantsError;
+            variants = Array.isArray(variantsData) ? variantsData : [];
+        }
+        const variantsByProduct = new Map();
+        variants.forEach((variant) => {
+            const key = String(variant?.product_id || '').trim();
+            if (!key) return;
+            if (!variantsByProduct.has(key)) variantsByProduct.set(key, []);
+            variantsByProduct.get(key).push(variant);
+        });
+        wholesaleState.schemaReady = true;
+        wholesaleState.productsByStore[id] = products
+            .map((product) => sanitizeWholesaleProduct(product, variantsByProduct.get(String(product?.id || '').trim()) || []))
+            .filter((product) => product.id);
+        return wholesaleState.productsByStore[id];
+    } catch (error) {
+        if (relationMissing(error, 'wholesale_products') || relationMissing(error, 'wholesale_product_variants')) {
+            wholesaleState.schemaReady = false;
+            wholesaleState.productsByStore[id] = [];
+            return [];
+        }
+        if (!silent) showToast(error?.message || 'Failed to load wholesale products', 'alert-circle');
+        return wholesaleState.productsByStore[id] || [];
+    }
+}
+
+function getWholesaleProductsForStore(storeId) {
+    return Array.isArray(wholesaleState.productsByStore?.[String(storeId || '')])
+        ? wholesaleState.productsByStore[String(storeId || '')]
+        : [];
+}
+
+function getWholesaleActiveStore() {
+    const id = String(wholesaleState.activeStoreId || '').trim();
+    if (!id) return null;
+    return wholesaleState.stores.find((store) => store.id === id) || (wholesaleState.myStore?.id === id ? wholesaleState.myStore : null);
+}
+
+function getWholesaleStoreFilterOptions(storeId) {
+    const products = getWholesaleProductsForStore(storeId);
+    const categories = new Set();
+    const colors = new Set();
+    const sizes = new Set();
+    const materials = new Set();
+    products.forEach((product) => {
+        if (product.category) categories.add(product.category);
+        if (product.material) materials.add(product.material);
+        product.variants.forEach((variant) => {
+            if (variant.color) colors.add(variant.color);
+            if (variant.size) sizes.add(variant.size);
+        });
+    });
+    const sortAsc = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' });
+    return {
+        categories: Array.from(categories).sort(sortAsc),
+        colors: Array.from(colors).sort(sortAsc),
+        sizes: Array.from(sizes).sort(sortAsc),
+        materials: Array.from(materials).sort(sortAsc)
+    };
+}
+
+function getWholesaleFilteredProducts(storeId) {
+    const filters = wholesaleState.filters || createDefaultWholesaleFilters();
+    return getWholesaleProductsForStore(storeId).filter((product) => {
+        const textHaystack = [
+            product.title,
+            product.description,
+            product.category,
+            product.material,
+            product.brand
+        ].join(' ').toLowerCase();
+        const query = String(filters.query || '').trim().toLowerCase();
+        if (query && !textHaystack.includes(query)) return false;
+        if (filters.category && String(product.category || '') !== String(filters.category)) return false;
+        if (filters.material && String(product.material || '') !== String(filters.material)) return false;
+        const visibleVariants = product.variants.filter((variant) => {
+            if (filters.color && String(variant.color || '') !== String(filters.color)) return false;
+            if (filters.size && String(variant.size || '') !== String(filters.size)) return false;
+            const price = Number(variant.price) || 0;
+            if (filters.minPrice !== '' && price < Number(filters.minPrice)) return false;
+            if (filters.maxPrice !== '' && price > Number(filters.maxPrice)) return false;
+            return true;
+        });
+        return visibleVariants.length > 0;
+    });
+}
+
+function getWholesaleVariantLabel(variant) {
+    return [String(variant?.color || '').trim(), String(variant?.size || '').trim()].filter(Boolean).join(' / ') || 'Standard variant';
+}
+
+function getWholesaleStoreCartStats(storeId) {
+    return getWholesaleCartItems().reduce((acc, item) => {
+        if (String(item?.storeId || '') !== String(storeId || '')) return acc;
+        acc.count += Number(item.quantity) || 0;
+        acc.total += Number(item.subtotal) || 0;
+        return acc;
+    }, { count: 0, total: 0 });
+}
+
+function setWholesaleStoreSearch(value) {
+    wholesaleState.storeSearch = String(value || '');
+    void renderWholesaleSection();
+}
+
+function setWholesaleFilter(field, value) {
+    wholesaleState.filters = {
+        ...(wholesaleState.filters || createDefaultWholesaleFilters()),
+        [String(field || '')]: String(value || '')
+    };
+    void renderWholesaleSection();
+}
+
+function clearWholesaleFilters() {
+    wholesaleState.filters = createDefaultWholesaleFilters();
+    void renderWholesaleSection();
+}
+
+function openWholesaleStore(storeId) {
+    const id = String(storeId || '').trim();
+    if (!id) return;
+    wholesaleState.activeStoreId = id;
+    wholesaleState.viewMode = 'store';
+    void renderWholesaleSection();
+}
+
+function closeWholesaleStoreDetail() {
+    wholesaleState.activeStoreId = '';
+    wholesaleState.viewMode = 'browse';
+    wholesaleState.filters = createDefaultWholesaleFilters();
+    void renderWholesaleSection();
+}
+
+function openWholesaleManage() {
+    wholesaleState.viewMode = 'manage';
+    if (!wholesaleState.myStore && isLoggedIn()) {
+        void refreshMyWholesaleStore({ silent: true }).then(() => renderWholesaleSection());
+        return;
+    }
+    void renderWholesaleSection();
+}
+
+function closeWholesaleManage() {
+    wholesaleState.viewMode = wholesaleState.activeStoreId ? 'store' : 'browse';
+    resetWholesaleManageProductDraft();
+    void renderWholesaleSection();
+}
+
+function addWholesaleVariantToCart(productId, variantId) {
+    const activeStore = getWholesaleActiveStore();
+    const products = getWholesaleProductsForStore(activeStore?.id);
+    const product = products.find((item) => String(item.id || '') === String(productId || ''));
+    const variant = product?.variants?.find((item) => String(item.id || '') === String(variantId || ''));
+    if (!activeStore || !product || !variant) {
+        showToast('Variant unavailable', 'alert-circle');
+        return;
+    }
+    const cartKey = `wholesale:${variant.id}`;
+    const nextQuantity = (Number(wholesaleState.cart?.[cartKey]?.quantity) || 0) + Math.max(1, Number(variant.minimumQty) || 1);
+    wholesaleState.cart[cartKey] = {
+        cartKey,
+        storeId: activeStore.id,
+        storeName: activeStore.name,
+        sellerUserId: activeStore.ownerId,
+        productId: product.id,
+        variantId: variant.id,
+        title: product.title,
+        image: variant.imageUrl || product.coverImageUrl || activeStore.heroImageUrl || '',
+        sellerName: activeStore.owner?.name || activeStore.name,
+        sellerTag: activeStore.owner?.tag || '',
+        location: activeStore.owner?.location || '',
+        category: product.category || '',
+        sourceLabel: 'Wholesale',
+        variantLabel: getWholesaleVariantLabel(variant),
+        color: variant.color || '',
+        size: variant.size || '',
+        minimumQty: Math.max(1, Number(variant.minimumQty) || 1),
+        minimumOrderQuantity: Math.max(1, Number(product.minimumOrderQuantity) || 1),
+        price: Number(variant.price) || 0,
+        quantity: nextQuantity
+    };
+    persistWholesaleCart();
+    updateLiveShoppingTrayUI();
+    if (getActiveSectionId() === 'wholesale-section') void renderWholesaleSection();
+    if (getActiveSectionId() === 'cart-section') renderCartSection();
+    showToast('Added to cart', 'shopping-bag');
+}
+
+function changeWholesaleCartQuantity(cartKey, delta) {
+    const key = String(cartKey || '').trim();
+    if (!key || !wholesaleState.cart?.[key]) return;
+    const next = (Number(wholesaleState.cart[key]?.quantity) || 0) + (Number(delta) || 0);
+    if (next <= 0) delete wholesaleState.cart[key];
+    else wholesaleState.cart[key].quantity = next;
+    persistWholesaleCart();
+    updateLiveShoppingTrayUI();
+    if (getActiveSectionId() === 'wholesale-section') void renderWholesaleSection();
+    if (getActiveSectionId() === 'cart-section') renderCartSection();
+}
+
+function removeWholesaleCartItem(cartKey) {
+    const key = String(cartKey || '').trim();
+    if (!key) return;
+    delete wholesaleState.cart[key];
+    persistWholesaleCart();
+    updateLiveShoppingTrayUI();
+    if (getActiveSectionId() === 'wholesale-section') void renderWholesaleSection();
+    if (getActiveSectionId() === 'cart-section') renderCartSection();
+}
+
+function captureWholesaleManageProductDraftFromDom() {
+    wholesaleState.manageProductDraft = {
+        title: String(document.getElementById('wholesaleProductTitle')?.value || '').trim(),
+        description: String(document.getElementById('wholesaleProductDescription')?.value || '').trim(),
+        category: String(document.getElementById('wholesaleProductCategory')?.value || '').trim(),
+        material: String(document.getElementById('wholesaleProductMaterial')?.value || '').trim(),
+        brand: String(document.getElementById('wholesaleProductBrand')?.value || '').trim(),
+        coverImageUrl: String(document.getElementById('wholesaleProductCoverImage')?.value || '').trim(),
+        minimumOrderQuantity: String(document.getElementById('wholesaleProductMinOrderQty')?.value || '1').trim() || '1',
+        isPublished: !!document.getElementById('wholesaleProductPublished')?.checked
+    };
+    const rows = Array.from(document.querySelectorAll('.wholesale-variant-draft-row'));
+    wholesaleState.manageVariantDrafts = rows.map((row) => ({
+        sku: String(row.querySelector('[data-field="sku"]')?.value || '').trim(),
+        color: String(row.querySelector('[data-field="color"]')?.value || '').trim(),
+        size: String(row.querySelector('[data-field="size"]')?.value || '').trim(),
+        price: String(row.querySelector('[data-field="price"]')?.value || '').trim(),
+        stockQty: String(row.querySelector('[data-field="stockQty"]')?.value || '').trim(),
+        minimumQty: String(row.querySelector('[data-field="minimumQty"]')?.value || '1').trim() || '1',
+        imageUrl: String(row.querySelector('[data-field="imageUrl"]')?.value || '').trim()
+    }));
+    if (!wholesaleState.manageVariantDrafts.length) wholesaleState.manageVariantDrafts = [createEmptyWholesaleVariantDraft()];
+}
+
+function addWholesaleVariantDraftRow() {
+    captureWholesaleManageProductDraftFromDom();
+    wholesaleState.manageVariantDrafts.push(createEmptyWholesaleVariantDraft());
+    void renderWholesaleSection();
+}
+
+function removeWholesaleVariantDraftRow(index) {
+    captureWholesaleManageProductDraftFromDom();
+    wholesaleState.manageVariantDrafts.splice(Number(index) || 0, 1);
+    if (!wholesaleState.manageVariantDrafts.length) wholesaleState.manageVariantDrafts = [createEmptyWholesaleVariantDraft()];
+    void renderWholesaleSection();
+}
+
+function editWholesaleProduct(productId) {
+    const storeId = String(wholesaleState.myStore?.id || '').trim();
+    if (!storeId) return;
+    const product = getWholesaleProductsForStore(storeId).find((item) => String(item.id || '') === String(productId || ''));
+    if (!product) return;
+    wholesaleState.editingProductId = product.id;
+    wholesaleState.manageProductDraft = {
+        title: product.title || '',
+        description: product.description || '',
+        category: product.category || '',
+        material: product.material || '',
+        brand: product.brand || '',
+        coverImageUrl: product.coverImageUrl || '',
+        minimumOrderQuantity: String(product.minimumOrderQuantity || 1),
+        isPublished: !!product.isPublished
+    };
+    wholesaleState.manageVariantDrafts = product.variants.length
+        ? product.variants.map((variant) => ({
+            sku: variant.sku || '',
+            color: variant.color || '',
+            size: variant.size || '',
+            price: String(Number(variant.price) || 0),
+            stockQty: String(Number(variant.stockQty) || 0),
+            minimumQty: String(Number(variant.minimumQty) || 1),
+            imageUrl: variant.imageUrl || ''
+        }))
+        : [createEmptyWholesaleVariantDraft()];
+    wholesaleState.viewMode = 'manage';
+    void renderWholesaleSection();
+}
+
+async function saveWholesaleStore(event) {
+    event?.preventDefault?.();
+    if (!canCurrentUserManageWholesale()) {
+        showToast('Verified business access required', 'alert-circle');
+        return;
+    }
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    const uid = await ensureCurrentSupabaseUserId(client);
+    if (!uid) {
+        showToast('Please log in again', 'log-in');
+        openModal('loginModal');
+        return;
+    }
+    const name = String(document.getElementById('wholesaleStoreName')?.value || '').trim();
+    const tagline = String(document.getElementById('wholesaleStoreTagline')?.value || '').trim();
+    const description = String(document.getElementById('wholesaleStoreDescription')?.value || '').trim();
+    const heroImageUrl = String(document.getElementById('wholesaleStoreHeroImage')?.value || '').trim();
+    const accentColor = String(document.getElementById('wholesaleStoreAccentColor')?.value || '#ff6a00').trim() || '#ff6a00';
+    const minimumOrderAmount = Math.max(0, Number(document.getElementById('wholesaleStoreMinOrderAmount')?.value) || 0);
+    const shippingNote = String(document.getElementById('wholesaleStoreShippingNote')?.value || '').trim();
+    const paymentNote = String(document.getElementById('wholesaleStorePaymentNote')?.value || '').trim();
+    const isPublished = !!document.getElementById('wholesaleStorePublished')?.checked;
+    if (!name || !description) {
+        showToast('Store name and description are required', 'alert-circle');
+        return;
+    }
+    let slug = slugifyWholesaleText(name) || `wholesale-${String(uid).slice(0, 8)}`;
+    const payload = {
+        owner_id: uid,
+        name,
+        slug,
+        tagline,
+        description,
+        hero_image_url: heroImageUrl,
+        accent_color: accentColor,
+        minimum_order_amount: minimumOrderAmount,
+        shipping_note: shippingNote,
+        payment_note: paymentNote,
+        is_published: !!isPublished,
+        status: 'active',
+        updated_at: new Date().toISOString()
+    };
+    let error = null;
+    if (wholesaleState.myStore?.id) {
+        ({ error } = await client.from('wholesale_stores').update(payload).eq('id', wholesaleState.myStore.id));
+    } else {
+        let insert = await client.from('wholesale_stores').insert(payload).select('id').maybeSingle();
+        error = insert.error;
+        if (error && String(error.message || '').toLowerCase().includes('duplicate')) {
+            slug = `${slug}-${String(uid).slice(0, 6)}`;
+            insert = await client.from('wholesale_stores').insert({ ...payload, slug }).select('id').maybeSingle();
+            error = insert.error;
+        }
+    }
+    if (error) {
+        showToast(error.message || 'Failed to save store', 'alert-circle');
+        return;
+    }
+    await refreshWholesaleStores({ silent: true });
+    if (wholesaleState.myStore?.id) {
+        await loadWholesaleProductsForStore(wholesaleState.myStore.id, { includeHidden: true, silent: true });
+    }
+    showToast('Wholesale store saved', 'check-circle');
+    void renderWholesaleSection();
+}
+
+async function saveWholesaleProduct(event) {
+    event?.preventDefault?.();
+    if (!canCurrentUserManageWholesale()) {
+        showToast('Verified business access required', 'alert-circle');
+        return;
+    }
+    const storeId = String(wholesaleState.myStore?.id || '').trim();
+    if (!storeId) {
+        showToast('Save your store first', 'alert-circle');
+        return;
+    }
+    captureWholesaleManageProductDraftFromDom();
+    const draft = wholesaleState.manageProductDraft || createEmptyWholesaleProductDraft();
+    const variants = (wholesaleState.manageVariantDrafts || [])
+        .map((variant) => ({
+            sku: String(variant?.sku || '').trim(),
+            color: String(variant?.color || '').trim(),
+            size: String(variant?.size || '').trim(),
+            price: Number(variant?.price) || 0,
+            stockQty: Math.max(0, Number(variant?.stockQty) || 0),
+            minimumQty: Math.max(1, Number(variant?.minimumQty) || 1),
+            imageUrl: String(variant?.imageUrl || '').trim()
+        }))
+        .filter((variant) => variant.price > 0 && (variant.color || variant.size || variant.sku));
+    if (!draft.title || !draft.category || !draft.description) {
+        showToast('Complete the product title, category, and description', 'alert-circle');
+        return;
+    }
+    if (!variants.length) {
+        showToast('Add at least one priced variant', 'alert-circle');
+        return;
+    }
+    const client = initSupabase();
+    if (!client) {
+        showToast('Supabase is not configured', 'alert-circle');
+        return;
+    }
+    const uid = await ensureCurrentSupabaseUserId(client);
+    if (!uid) {
+        showToast('Please log in again', 'log-in');
+        openModal('loginModal');
+        return;
+    }
+    const wasEditing = !!String(wholesaleState.editingProductId || '').trim();
+    const productPayload = {
+        store_id: storeId,
+        owner_id: uid,
+        title: draft.title,
+        description: draft.description,
+        category: draft.category,
+        material: draft.material || null,
+        brand: draft.brand || null,
+        cover_image_url: draft.coverImageUrl || null,
+        minimum_order_quantity: Math.max(1, Number(draft.minimumOrderQuantity) || 1),
+        is_published: !!draft.isPublished,
+        status: 'active',
+        updated_at: new Date().toISOString()
+    };
+    let productId = String(wholesaleState.editingProductId || '').trim();
+    if (productId) {
+        const { error } = await client.from('wholesale_products').update(productPayload).eq('id', productId).eq('owner_id', uid);
+        if (error) {
+            showToast(error.message || 'Failed to update product', 'alert-circle');
+            return;
+        }
+        const { error: deleteVariantsError } = await client.from('wholesale_product_variants').delete().eq('product_id', productId).eq('owner_id', uid);
+        if (deleteVariantsError) {
+            showToast(deleteVariantsError.message || 'Failed to refresh product variants', 'alert-circle');
+            return;
+        }
+    } else {
+        const { data, error } = await client.from('wholesale_products').insert(productPayload).select('id').maybeSingle();
+        if (error || !data?.id) {
+            showToast(error?.message || 'Failed to create product', 'alert-circle');
+            return;
+        }
+        productId = String(data.id);
+    }
+    const variantPayload = variants.map((variant) => ({
+        product_id: productId,
+        owner_id: uid,
+        sku: variant.sku || null,
+        color: variant.color || null,
+        size: variant.size || null,
+        price: variant.price,
+        stock_qty: variant.stockQty,
+        minimum_qty: variant.minimumQty,
+        image_url: variant.imageUrl || null,
+        status: 'active',
+        updated_at: new Date().toISOString()
+    }));
+    const { error: variantsError } = await client.from('wholesale_product_variants').insert(variantPayload);
+    if (variantsError) {
+        showToast(variantsError.message || 'Failed to save product variants', 'alert-circle');
+        return;
+    }
+    resetWholesaleManageProductDraft();
+    await loadWholesaleProductsForStore(storeId, { includeHidden: true, silent: true });
+    if (wholesaleState.activeStoreId === storeId) {
+        await loadWholesaleProductsForStore(storeId, { includeHidden: false, silent: true });
+    }
+    showToast(wasEditing ? 'Wholesale product saved' : 'Wholesale product created', 'check-circle');
+    void renderWholesaleSection();
+}
+
+async function toggleWholesaleProductPublish(productId, next) {
+    const client = initSupabase();
+    if (!client) return;
+    const uid = await ensureCurrentSupabaseUserId(client);
+    if (!uid) return;
+    const { error } = await client
+        .from('wholesale_products')
+        .update({ is_published: !!next, updated_at: new Date().toISOString() })
+        .eq('id', String(productId || ''))
+        .eq('owner_id', uid);
+    if (error) {
+        showToast(error.message || 'Failed to update product visibility', 'alert-circle');
+        return;
+    }
+    if (wholesaleState.myStore?.id) {
+        await loadWholesaleProductsForStore(wholesaleState.myStore.id, { includeHidden: true, silent: true });
+    }
+    if (wholesaleState.activeStoreId) {
+        await loadWholesaleProductsForStore(wholesaleState.activeStoreId, { includeHidden: false, silent: true });
+    }
+    showToast(next ? 'Product published' : 'Product hidden', 'check-circle');
+    void renderWholesaleSection();
+}
+
+async function archiveWholesaleProduct(productId) {
+    const client = initSupabase();
+    if (!client) return;
+    const uid = await ensureCurrentSupabaseUserId(client);
+    if (!uid) return;
+    const { error } = await client
+        .from('wholesale_products')
+        .update({ status: 'archived', is_published: false, updated_at: new Date().toISOString() })
+        .eq('id', String(productId || ''))
+        .eq('owner_id', uid);
+    if (error) {
+        showToast(error.message || 'Failed to archive product', 'alert-circle');
+        return;
+    }
+    if (wholesaleState.myStore?.id) {
+        await loadWholesaleProductsForStore(wholesaleState.myStore.id, { includeHidden: true, silent: true });
+    }
+    if (wholesaleState.activeStoreId) {
+        await loadWholesaleProductsForStore(wholesaleState.activeStoreId, { includeHidden: false, silent: true });
+    }
+    showToast('Product archived', 'check-circle');
+    void renderWholesaleSection();
+}
+
+function getWholesaleVariantDraftRowsMarkup() {
+    return (wholesaleState.manageVariantDrafts || []).map((variant, index) => `
+        <div class="wholesale-variant-draft-row">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>SKU</label>
+                    <input data-field="sku" type="text" value="${escapeHtml(variant.sku || '')}" placeholder="SKU-001">
+                </div>
+                <div class="form-group">
+                    <label>Color</label>
+                    <input data-field="color" type="text" value="${escapeHtml(variant.color || '')}" placeholder="Black">
+                </div>
+                <div class="form-group">
+                    <label>Size</label>
+                    <input data-field="size" type="text" value="${escapeHtml(variant.size || '')}" placeholder="XL">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Price</label>
+                    <input data-field="price" type="number" min="0" step="1" value="${escapeHtml(variant.price || '')}" placeholder="9000">
+                </div>
+                <div class="form-group">
+                    <label>Stock</label>
+                    <input data-field="stockQty" type="number" min="0" step="1" value="${escapeHtml(variant.stockQty || '')}" placeholder="120">
+                </div>
+                <div class="form-group">
+                    <label>Min qty</label>
+                    <input data-field="minimumQty" type="number" min="1" step="1" value="${escapeHtml(variant.minimumQty || '1')}" placeholder="5">
+                </div>
+                <div class="form-group">
+                    <label>Variant image URL</label>
+                    <input data-field="imageUrl" type="url" value="${escapeHtml(variant.imageUrl || '')}" placeholder="https://...">
+                </div>
+            </div>
+            <button class="live-shop-btn live-shop-btn-ghost wholesale-variant-remove" type="button" onclick="removeWholesaleVariantDraftRow(${index})">Remove variant</button>
+        </div>
+    `).join('');
+}
+
+function getWholesaleBrowseMarkup() {
+    const search = String(wholesaleState.storeSearch || '').trim().toLowerCase();
+    const stores = (Array.isArray(wholesaleState.stores) ? wholesaleState.stores : []).filter((store) => {
+        if (!search) return true;
+        const hay = [store.name, store.tagline, store.description, store.owner?.name, store.owner?.businessType].join(' ').toLowerCase();
+        return hay.includes(search);
+    });
+    const canManage = canCurrentUserManageWholesale();
+    return `
+        <div class="wholesale-shell">
+            <div class="wholesale-hero-card">
+                <div class="wholesale-hero-copy">
+                    <div class="live-checkout-eyebrow">B2B wholesale</div>
+                    <h2>Buy stock from verified businesses with precise variant filters.</h2>
+                    <p>Prepared wholesale storefronts, fast quantity-based ordering, and a shared cart that stays in your website theme.</p>
+                    <div class="wholesale-hero-actions">
+                        ${canManage ? `<button class="live-shop-btn live-shop-btn-primary" type="button" onclick="openWholesaleManage()">Manage my wholesale store</button>` : ''}
+                        <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openCartPage()">Open cart</button>
+                    </div>
+                </div>
+                <div class="wholesale-hero-stats">
+                    <div class="wholesale-stat-pill"><strong>${escapeHtml(String(stores.length))}</strong><span>stores</span></div>
+                    <div class="wholesale-stat-pill"><strong>${escapeHtml(String(getWholesaleCartItems().length))}</strong><span>wholesale lines</span></div>
+                    <div class="wholesale-stat-pill"><strong>${escapeHtml(formatLiveSocialShoppingMoney(getWholesaleCartTotal()))}</strong><span>wholesale total</span></div>
+                </div>
+            </div>
+            <div class="wholesale-toolbar-card">
+                <div class="form-group wholesale-toolbar-search">
+                    <label for="wholesaleStoreSearchInput">Search stores</label>
+                    <input id="wholesaleStoreSearchInput" type="text" value="${escapeHtml(wholesaleState.storeSearch || '')}" placeholder="Search by store, product type, or business..." oninput="setWholesaleStoreSearch(this.value)">
+                </div>
+                <div class="wholesale-toolbar-copy">
+                    <strong>Verified sellers only</strong>
+                    <span>Every wholesale store is owned by a verified business profile.</span>
+                </div>
+            </div>
+            <div class="wholesale-store-grid">
+                ${stores.length ? stores.map((store) => `
+                    <article class="wholesale-store-card">
+                        <div class="wholesale-store-card-media"${store.heroImageUrl ? ` style="background-image:url('${escapeHtml(store.heroImageUrl)}')"` : ''}></div>
+                        <div class="wholesale-store-card-body">
+                            <div class="wholesale-store-card-meta">
+                                <span class="live-shop-mode-pill">${escapeHtml(store.owner?.businessType || 'Verified business')}</span>
+                                <span class="live-shop-mode-pill">${escapeHtml(formatLiveSocialShoppingMoney(store.minimumOrderAmount))} min</span>
+                            </div>
+                            <h3>${escapeHtml(store.name)}</h3>
+                            <p>${escapeHtml(store.tagline || store.description || 'Wholesale storefront')}</p>
+                            <div class="wholesale-store-owner">
+                                <img src="${escapeHtml(store.owner?.avatar || DEFAULT_AVATAR_SVG)}" alt="${escapeHtml(store.owner?.name || store.name)}">
+                                <div>
+                                    <strong>${escapeHtml(store.owner?.name || store.name)}</strong>
+                                    <span>${escapeHtml(store.owner?.tag || store.owner?.location || 'Verified seller')}</span>
+                                </div>
+                            </div>
+                            <div class="wholesale-store-card-actions">
+                                <button class="live-shop-btn live-shop-btn-primary" type="button" onclick="openWholesaleStore('${escapeHtml(store.id)}')">Open store</button>
+                                ${canManage && String(store.ownerId || '') === String(currentSupabaseUserId || '') ? `<button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openWholesaleManage()">Manage</button>` : ''}
+                            </div>
+                        </div>
+                    </article>
+                `).join('') : `
+                    <div class="wholesale-empty-card">
+                        <i data-lucide="factory"></i>
+                        <h3>No wholesale stores yet</h3>
+                        <p>Once verified businesses publish their wholesale storefronts, they will appear here with precise filters and variant ordering.</p>
+                    </div>
+                `}
+            </div>
+        </div>
+    `;
+}
+
+function getWholesaleStoreDetailMarkup(store) {
+    const options = getWholesaleStoreFilterOptions(store.id);
+    const products = getWholesaleFilteredProducts(store.id);
+    const stats = getWholesaleStoreCartStats(store.id);
+    return `
+        <div class="wholesale-shell">
+            <div class="wholesale-store-hero" style="--wholesale-accent:${escapeHtml(store.accentColor || '#ff6a00')};">
+                <div class="wholesale-store-hero-overlay"${store.heroImageUrl ? ` style="background-image:url('${escapeHtml(store.heroImageUrl)}')"` : ''}></div>
+                <div class="wholesale-store-hero-content">
+                    <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="closeWholesaleStoreDetail()">Back to stores</button>
+                    <div class="wholesale-store-hero-copy">
+                        <div class="live-checkout-eyebrow">Wholesale store</div>
+                        <h2>${escapeHtml(store.name)}</h2>
+                        <p>${escapeHtml(store.description || store.tagline || 'Verified business wholesale storefront')}</p>
+                        <div class="wholesale-store-badges">
+                            <span class="live-shop-mode-pill">${escapeHtml(store.owner?.businessType || 'Verified business')}</span>
+                            <span class="live-shop-mode-pill">${escapeHtml(formatLiveSocialShoppingMoney(store.minimumOrderAmount))} minimum order</span>
+                            ${store.shippingNote ? `<span class="live-shop-mode-pill">${escapeHtml(store.shippingNote)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="wholesale-store-summary">
+                        <strong>${escapeHtml(formatLiveSocialShoppingMoney(stats.total))}</strong>
+                        <span>${escapeHtml(String(stats.count))} units selected</span>
+                        <button class="live-shop-btn live-shop-btn-primary" type="button" onclick="openCartPage()">Open cart</button>
+                        ${canCurrentUserManageWholesale() && String(store.ownerId || '') === String(currentSupabaseUserId || '') ? `<button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="openWholesaleManage()">Manage this store</button>` : ''}
+                    </div>
+                </div>
+            </div>
+            <div class="wholesale-store-layout">
+                <aside class="wholesale-filter-card">
+                    <div class="live-checkout-section-head">
+                        <h3>Precise filters</h3>
+                        <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="clearWholesaleFilters()">Clear</button>
+                    </div>
+                    <div class="form-group">
+                        <label>Search product</label>
+                        <input type="text" value="${escapeHtml(wholesaleState.filters.query || '')}" placeholder="Search title, material, brand..." oninput="setWholesaleFilter('query', this.value)">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Category</label>
+                            <select onchange="setWholesaleFilter('category', this.value)">
+                                <option value="">All</option>
+                                ${options.categories.map((value) => `<option value="${escapeHtml(value)}"${String(wholesaleState.filters.category || '') === String(value) ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Material</label>
+                            <select onchange="setWholesaleFilter('material', this.value)">
+                                <option value="">All</option>
+                                ${options.materials.map((value) => `<option value="${escapeHtml(value)}"${String(wholesaleState.filters.material || '') === String(value) ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Color</label>
+                            <select onchange="setWholesaleFilter('color', this.value)">
+                                <option value="">All</option>
+                                ${options.colors.map((value) => `<option value="${escapeHtml(value)}"${String(wholesaleState.filters.color || '') === String(value) ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Size</label>
+                            <select onchange="setWholesaleFilter('size', this.value)">
+                                <option value="">All</option>
+                                ${options.sizes.map((value) => `<option value="${escapeHtml(value)}"${String(wholesaleState.filters.size || '') === String(value) ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Min price</label>
+                            <input type="number" min="0" value="${escapeHtml(wholesaleState.filters.minPrice || '')}" placeholder="0" oninput="setWholesaleFilter('minPrice', this.value)">
+                        </div>
+                        <div class="form-group">
+                            <label>Max price</label>
+                            <input type="number" min="0" value="${escapeHtml(wholesaleState.filters.maxPrice || '')}" placeholder="50000" oninput="setWholesaleFilter('maxPrice', this.value)">
+                        </div>
+                    </div>
+                </aside>
+                <div class="wholesale-products-column">
+                    ${products.length ? products.map((product) => `
+                        <article class="wholesale-product-card">
+                            <div class="wholesale-product-media"${product.coverImageUrl ? ` style="background-image:url('${escapeHtml(product.coverImageUrl)}')"` : ''}></div>
+                            <div class="wholesale-product-copy">
+                                <div class="wholesale-product-topline">
+                                    <span class="live-shop-mode-pill">${escapeHtml(product.category || 'Wholesale')}</span>
+                                    <span class="live-shop-mode-pill">MOQ ${escapeHtml(String(product.minimumOrderQuantity || 1))}</span>
+                                </div>
+                                <h3>${escapeHtml(product.title)}</h3>
+                                <p>${escapeHtml(product.description || 'Wholesale product')}</p>
+                                <div class="wholesale-product-chips">
+                                    ${product.material ? `<span>${escapeHtml(product.material)}</span>` : ''}
+                                    ${product.brand ? `<span>${escapeHtml(product.brand)}</span>` : ''}
+                                </div>
+                                <div class="wholesale-variant-list">
+                                    ${product.variants
+                                        .filter((variant) => {
+                                            if (wholesaleState.filters.color && String(variant.color || '') !== String(wholesaleState.filters.color)) return false;
+                                            if (wholesaleState.filters.size && String(variant.size || '') !== String(wholesaleState.filters.size)) return false;
+                                            const price = Number(variant.price) || 0;
+                                            if (wholesaleState.filters.minPrice !== '' && price < Number(wholesaleState.filters.minPrice)) return false;
+                                            if (wholesaleState.filters.maxPrice !== '' && price > Number(wholesaleState.filters.maxPrice)) return false;
+                                            return true;
+                                        })
+                                        .map((variant) => {
+                                            const cartKey = `wholesale:${variant.id}`;
+                                            const currentQty = Number(wholesaleState.cart?.[cartKey]?.quantity) || 0;
+                                            return `
+                                                <div class="wholesale-variant-row">
+                                                    <div class="wholesale-variant-copy">
+                                                        <strong>${escapeHtml(getWholesaleVariantLabel(variant))}</strong>
+                                                        <span>${escapeHtml(String(variant.stockQty))} in stock • min ${escapeHtml(String(variant.minimumQty))}</span>
+                                                    </div>
+                                                    <div class="wholesale-variant-actions">
+                                                        <strong>${escapeHtml(formatLiveSocialShoppingMoney(variant.price))}</strong>
+                                                        <div class="wholesale-qty-controls">
+                                                            <button type="button" onclick="changeWholesaleCartQuantity('${escapeHtml(cartKey)}', -${Math.max(1, Number(variant.minimumQty) || 1)})">-</button>
+                                                            <span>${escapeHtml(String(currentQty))}</span>
+                                                            <button type="button" onclick="addWholesaleVariantToCart('${escapeHtml(product.id)}', '${escapeHtml(variant.id)}')">+</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                </div>
+                            </div>
+                        </article>
+                    `).join('') : `
+                        <div class="wholesale-empty-card">
+                            <i data-lucide="filter"></i>
+                            <h3>No products match these filters</h3>
+                            <p>Adjust color, size, material, or price to see more wholesale variants.</p>
+                        </div>
+                    `}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function getWholesaleManageMarkup() {
+    const store = wholesaleState.myStore;
+    if (!canCurrentUserManageWholesale()) {
+        return `
+            <div class="wholesale-shell">
+                <div class="wholesale-empty-card">
+                    <i data-lucide="badge-check"></i>
+                    <h3>Verified business access required</h3>
+                    <p>Only verified businesses can publish wholesale stores when this feature is enabled by admin.</p>
+                </div>
+            </div>
+        `;
+    }
+    const storeProducts = store?.id ? getWholesaleProductsForStore(store.id) : [];
+    const draft = wholesaleState.manageProductDraft || createEmptyWholesaleProductDraft();
+    return `
+        <div class="wholesale-shell">
+            <div class="wholesale-manage-head">
+                <div>
+                    <div class="live-checkout-eyebrow">Seller workspace</div>
+                    <h2>Manage your wholesale store</h2>
+                    <p>Create a prepared B2B storefront with product variants, quantity rules, and shared-cart checkout.</p>
+                </div>
+                <div class="wholesale-hero-actions">
+                    <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="closeWholesaleManage()">Back to browse</button>
+                    ${store?.id ? `<button class="live-shop-btn live-shop-btn-primary" type="button" onclick="openWholesaleStore('${escapeHtml(store.id)}')">Preview storefront</button>` : ''}
+                </div>
+            </div>
+            <div class="wholesale-manage-grid">
+                <form class="wholesale-manage-card" onsubmit="saveWholesaleStore(event)">
+                    <div class="live-checkout-section-head">
+                        <h3>Store setup</h3>
+                        <span>${store?.isPublished ? 'Published' : 'Draft'}</span>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="wholesaleStoreName">Store name</label>
+                            <input id="wholesaleStoreName" type="text" value="${escapeHtml(store?.name || '')}" placeholder="ex: Atlas Textile Wholesale" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="wholesaleStoreTagline">Tagline</label>
+                            <input id="wholesaleStoreTagline" type="text" value="${escapeHtml(store?.tagline || '')}" placeholder="Ready stock for retailers">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="wholesaleStoreDescription">Store description</label>
+                        <textarea id="wholesaleStoreDescription" rows="4" placeholder="Explain what retailers can order from this store." required>${escapeHtml(store?.description || '')}</textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="wholesaleStoreHeroImage">Hero image URL</label>
+                            <input id="wholesaleStoreHeroImage" type="url" value="${escapeHtml(store?.heroImageUrl || '')}" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
+                            <label for="wholesaleStoreAccentColor">Accent color</label>
+                            <input id="wholesaleStoreAccentColor" type="text" value="${escapeHtml(store?.accentColor || '#ff6a00')}" placeholder="#ff6a00">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="wholesaleStoreMinOrderAmount">Minimum order amount</label>
+                            <input id="wholesaleStoreMinOrderAmount" type="number" min="0" step="1" value="${escapeHtml(String(Number(store?.minimumOrderAmount) || 0))}" placeholder="30000">
+                        </div>
+                        <div class="form-group">
+                            <label class="wholesale-checkbox">
+                                <input id="wholesaleStorePublished" type="checkbox"${store?.isPublished ? ' checked' : ''}>
+                                <span>Publish store publicly</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="wholesaleStoreShippingNote">Shipping note</label>
+                            <input id="wholesaleStoreShippingNote" type="text" value="${escapeHtml(store?.shippingNote || '')}" placeholder="National delivery in 24-72h">
+                        </div>
+                        <div class="form-group">
+                            <label for="wholesaleStorePaymentNote">Payment note</label>
+                            <input id="wholesaleStorePaymentNote" type="text" value="${escapeHtml(store?.paymentNote || '')}" placeholder="Bank transfer or cash on delivery">
+                        </div>
+                    </div>
+                    <button class="live-shop-btn live-shop-btn-primary" type="submit">${store?.id ? 'Save store' : 'Create store'}</button>
+                </form>
+                <form class="wholesale-manage-card" onsubmit="saveWholesaleProduct(event)">
+                    <div class="live-checkout-section-head">
+                        <h3>${wholesaleState.editingProductId ? 'Edit wholesale product' : 'Add wholesale product'}</h3>
+                        <span>${wholesaleState.manageVariantDrafts.length} variant${wholesaleState.manageVariantDrafts.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="wholesaleProductTitle">Product title</label>
+                            <input id="wholesaleProductTitle" type="text" value="${escapeHtml(draft.title || '')}" placeholder="Premium cotton t-shirt" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="wholesaleProductCategory">Category</label>
+                            <input id="wholesaleProductCategory" type="text" value="${escapeHtml(draft.category || '')}" placeholder="Apparel" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="wholesaleProductMaterial">Material</label>
+                            <input id="wholesaleProductMaterial" type="text" value="${escapeHtml(draft.material || '')}" placeholder="100% cotton">
+                        </div>
+                        <div class="form-group">
+                            <label for="wholesaleProductBrand">Brand</label>
+                            <input id="wholesaleProductBrand" type="text" value="${escapeHtml(draft.brand || '')}" placeholder="Atlas">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="wholesaleProductCoverImage">Cover image URL</label>
+                            <input id="wholesaleProductCoverImage" type="url" value="${escapeHtml(draft.coverImageUrl || '')}" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
+                            <label for="wholesaleProductMinOrderQty">Minimum product order qty</label>
+                            <input id="wholesaleProductMinOrderQty" type="number" min="1" step="1" value="${escapeHtml(draft.minimumOrderQuantity || '1')}" placeholder="1">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="wholesaleProductDescription">Product description</label>
+                        <textarea id="wholesaleProductDescription" rows="4" placeholder="Describe the wholesale product offer." required>${escapeHtml(draft.description || '')}</textarea>
+                    </div>
+                    <label class="wholesale-checkbox">
+                        <input id="wholesaleProductPublished" type="checkbox"${draft.isPublished ? ' checked' : ''}>
+                        <span>Publish this product publicly</span>
+                    </label>
+                    <div class="wholesale-variant-drafts">
+                        <div class="live-checkout-section-head">
+                            <h3>Variants</h3>
+                            <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="addWholesaleVariantDraftRow()">Add variant</button>
+                        </div>
+                        ${getWholesaleVariantDraftRowsMarkup()}
+                    </div>
+                    <div class="wholesale-manage-actions">
+                        <button class="live-shop-btn live-shop-btn-primary" type="submit">${wholesaleState.editingProductId ? 'Save product' : 'Create product'}</button>
+                        <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="resetWholesaleManageProductDraft({ rerender: true })">Reset</button>
+                    </div>
+                </form>
+            </div>
+            <div class="wholesale-manage-card">
+                <div class="live-checkout-section-head">
+                    <h3>Your wholesale catalog</h3>
+                    <span>${storeProducts.length} product${storeProducts.length === 1 ? '' : 's'}</span>
+                </div>
+                <div class="wholesale-manage-product-list">
+                    ${storeProducts.length ? storeProducts.map((product) => `
+                        <div class="wholesale-manage-product-item">
+                            <div>
+                                <strong>${escapeHtml(product.title)}</strong>
+                                <span>${escapeHtml(product.category || 'Wholesale')} • ${product.variants.length} variant${product.variants.length === 1 ? '' : 's'} • ${product.isPublished ? 'Published' : 'Hidden'}</span>
+                            </div>
+                            <div class="wholesale-manage-product-actions">
+                                <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="editWholesaleProduct('${escapeHtml(product.id)}')">Edit</button>
+                                <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="toggleWholesaleProductPublish('${escapeHtml(product.id)}', ${product.isPublished ? 'false' : 'true'})">${product.isPublished ? 'Hide' : 'Publish'}</button>
+                                <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="archiveWholesaleProduct('${escapeHtml(product.id)}')">Archive</button>
+                            </div>
+                        </div>
+                    `).join('') : `
+                        <div class="wholesale-empty-card wholesale-empty-card-inline">
+                            <i data-lucide="package"></i>
+                            <h3>No products yet</h3>
+                            <p>Create your first wholesale product with priced variants to make the storefront ready for retailers.</p>
+                        </div>
+                    `}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function renderWholesaleSection({ force = false } = {}) {
+    const root = document.getElementById('wholesaleSectionRoot');
+    if (!root) return;
+    if (!isWholesaleEnabledForViewer()) {
+        root.innerHTML = `
+            <div class="wholesale-shell">
+                <div class="wholesale-empty-card">
+                    <i data-lucide="factory"></i>
+                    <h3>Wholesale is temporarily unavailable</h3>
+                    <p>The admin can turn this feature on from the dashboard when the B2B catalog is ready for customers.</p>
+                </div>
+            </div>
+        `;
+        scheduleLucideCreateIcons(root);
+        return;
+    }
+    if (force || !wholesaleState.stores.length) {
+        root.innerHTML = `<div class="wholesale-loading-card"><i data-lucide="loader"></i><span>Loading wholesale storefronts...</span></div>`;
+        scheduleLucideCreateIcons(root);
+        await refreshWholesaleStores({ silent: true });
+    }
+    if (!wholesaleState.schemaReady) {
+        root.innerHTML = `
+            <div class="wholesale-shell">
+                <div class="wholesale-empty-card">
+                    <i data-lucide="database"></i>
+                    <h3>Wholesale migration not applied yet</h3>
+                    <p>Run the wholesale database migration first, then reload this section to use stores, products, variants, and real orders.</p>
+                </div>
+            </div>
+        `;
+        scheduleLucideCreateIcons(root);
+        return;
+    }
+    if (wholesaleState.viewMode === 'manage') {
+        await refreshMyWholesaleStore({ silent: true });
+        if (wholesaleState.myStore?.id) {
+            await loadWholesaleProductsForStore(wholesaleState.myStore.id, { includeHidden: true, silent: true });
+        }
+        root.innerHTML = getWholesaleManageMarkup();
+    } else if (wholesaleState.viewMode === 'store' && wholesaleState.activeStoreId) {
+        const store = getWholesaleActiveStore();
+        if (!store) {
+            wholesaleState.viewMode = 'browse';
+            wholesaleState.activeStoreId = '';
+            root.innerHTML = getWholesaleBrowseMarkup();
+        } else {
+            await loadWholesaleProductsForStore(store.id, {
+                includeHidden: !!canCurrentUserManageWholesale() && String(store.ownerId || '') === String(currentSupabaseUserId || ''),
+                silent: true
+            });
+            root.innerHTML = getWholesaleStoreDetailMarkup(store);
+        }
+    } else {
+        wholesaleState.viewMode = 'browse';
+        root.innerHTML = getWholesaleBrowseMarkup();
+    }
+    scheduleLucideCreateIcons(root);
+}
+
 function getCheckoutFieldSnapshot(fieldIds) {
     return Object.entries(fieldIds || {}).reduce((acc, [key, id]) => {
         const input = document.getElementById(id);
@@ -13867,6 +15229,7 @@ function getCheckoutFieldSnapshot(fieldIds) {
 
 function applyCheckoutFieldDefaults(fieldIds, snapshot = null) {
     const defaults = {
+        companyName: '',
         fullName: userProfile?.name && userProfile.name !== 'Guest' ? userProfile.name : '',
         phone: userProfile?.phone || '',
         email: currentSupabaseUserEmail || '',
@@ -13947,9 +15310,10 @@ function renderCartSection() {
     const root = document.getElementById('cartSectionRoot');
     if (!root) return;
     const snapshot = getCheckoutFieldSnapshot(CART_PAGE_CHECKOUT_FIELD_IDS);
-    const items = getLiveSocialShoppingCartItems();
-    const total = getLiveSocialShoppingCartTotal();
+    const items = getSharedCartItems();
+    const total = getSharedCartTotal();
     const count = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    const summary = getCartSourceSummary(items);
     if (!items.length) {
         root.innerHTML = `
             <div class="cart-page-empty-card">
@@ -13957,11 +15321,12 @@ function renderCartSection() {
                 <div class="cart-page-empty-copy">
                     <div class="live-checkout-eyebrow">Cart</div>
                     <h2>Your cart is empty</h2>
-                    <p>Add products from the marketplace or Live Social Shopping, then come back here to review quantities and checkout properly.</p>
+                    <p>Add products from Live Social Shopping or Wholesale, then come back here to review quantities and checkout properly.</p>
                 </div>
                 <div class="cart-page-empty-actions">
                     <button class="live-shop-btn live-shop-btn-primary" type="button" onclick="navigateToSection('home-section')">Continue shopping</button>
                     <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="navigateToSection('live-social-shopping-section')">Browse live deals</button>
+                    <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="navigateToSection('wholesale-section')">Browse wholesale</button>
                 </div>
             </div>
         `;
@@ -13974,10 +15339,11 @@ function renderCartSection() {
                 <div>
                     <div class="live-checkout-eyebrow">Cart</div>
                     <h2>Review your order</h2>
-                    <p>This cart page keeps the experience separate from Live Social Shopping while still using the same shared cart items and checkout request flow.</p>
+                    <p>This cart keeps live products and wholesale stock together while preserving the right order flow for each source.</p>
                     <div class="cart-page-head-actions">
                         <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="navigateToSection('home-section')">Continue shopping</button>
                         <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="navigateToSection('live-social-shopping-section')">Browse live deals</button>
+                        <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="navigateToSection('wholesale-section')">Browse wholesale</button>
                     </div>
                 </div>
                 <span class="live-checkout-pill">${count} item${count === 1 ? '' : 's'}</span>
@@ -13989,13 +15355,16 @@ function renderCartSection() {
                             <h3>Your cart</h3>
                             <span>${escapeHtml(formatLiveSocialShoppingMoney(total))}</span>
                         </div>
-                        <div class="live-checkout-summary-list">${getLiveCheckoutItemsMarkup(items)}</div>
+                        <div class="live-checkout-summary-list">${getSharedCartItemsMarkup(items)}</div>
                         <div class="live-checkout-total-box">
                             <div>
                                 <span>Order total</span>
                                 <strong>${escapeHtml(formatLiveSocialShoppingMoney(total))}</strong>
                             </div>
-                            <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="navigateToSection('live-social-shopping-section')">Add more from live</button>
+                            <div class="cart-page-source-summary">
+                                ${summary.liveCount ? `<span>Live: ${escapeHtml(formatLiveSocialShoppingMoney(summary.liveTotal))}</span>` : ''}
+                                ${summary.wholesaleCount ? `<span>Wholesale: ${escapeHtml(formatLiveSocialShoppingMoney(summary.wholesaleTotal))}</span>` : ''}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -14004,6 +15373,10 @@ function renderCartSection() {
                         <div class="live-checkout-section-head">
                             <h3>Customer details</h3>
                             <span>Required to place order</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="cartPageCompanyName">Company name</label>
+                            <input id="cartPageCompanyName" type="text" placeholder="Your shop or company name">
                         </div>
                         <div class="form-row">
                             <div class="form-group">
@@ -14057,7 +15430,7 @@ function renderCartSection() {
                         </div>
                         <div class="live-checkout-submit-row">
                             <div class="live-checkout-submit-copy">
-                                <span>Submitting creates a checkout request in your website admin submissions.</span>
+                                <span>${summary.wholesaleCount ? 'Wholesale orders create real order rows and send a receipt email after confirmation.' : 'Submitting creates a checkout request in your website admin submissions.'}</span>
                             </div>
                             <button class="live-checkout-submit-btn" id="cartPageCheckoutSubmitBtn" type="submit">Place order request</button>
                         </div>
@@ -14091,6 +15464,7 @@ function openLiveSocialShoppingCheckout() {
 
 function getCheckoutSubmissionValues(fieldIds) {
     return {
+        companyName: document.getElementById(fieldIds.companyName)?.value?.trim() || '',
         fullName: document.getElementById(fieldIds.fullName)?.value?.trim() || '',
         phone: document.getElementById(fieldIds.phone)?.value?.trim() || '',
         email: document.getElementById(fieldIds.email)?.value?.trim() || '',
@@ -14101,6 +15475,66 @@ function getCheckoutSubmissionValues(fieldIds) {
         paymentMethod: document.getElementById(fieldIds.paymentMethod)?.value?.trim() || 'cash_on_delivery',
         notes: document.getElementById(fieldIds.notes)?.value?.trim() || ''
     };
+}
+
+function getCartQuantityControlsMarkup(item) {
+    if (String(item?.source || '') === 'wholesale') {
+        const step = Math.max(1, Number(item.minimumQty) || 1);
+        return `
+            <div class="live-checkout-item-controls">
+                <button class="live-shop-qty-btn" type="button" onclick="changeWholesaleCartQuantity('${escapeHtml(item.cartKey)}', -${step})">-</button>
+                <span>${escapeHtml(String(item.quantity))}</span>
+                <button class="live-shop-qty-btn" type="button" onclick="changeWholesaleCartQuantity('${escapeHtml(item.cartKey)}', ${step})">+</button>
+            </div>
+        `;
+    }
+    return `
+        <div class="live-checkout-item-controls">
+            <button class="live-shop-qty-btn" type="button" onclick="changeLiveSocialShoppingCartQuantity('${escapeHtml(item.productId)}', -1)">-</button>
+            <span>${escapeHtml(String(item.quantity))}</span>
+            <button class="live-shop-qty-btn" type="button" onclick="changeLiveSocialShoppingCartQuantity('${escapeHtml(item.productId)}', 1)">+</button>
+        </div>
+    `;
+}
+
+function getCartRemoveButtonMarkup(item) {
+    if (String(item?.source || '') === 'wholesale') {
+        return `<button class="live-checkout-remove-btn" type="button" onclick="removeWholesaleCartItem('${escapeHtml(item.cartKey)}')">Remove</button>`;
+    }
+    return `<button class="live-checkout-remove-btn" type="button" onclick="removeLiveSocialShoppingProduct('${escapeHtml(item.productId)}')">Remove</button>`;
+}
+
+function getSharedCartItemsMarkup(items) {
+    return (Array.isArray(items) ? items : []).map((item) => `
+        <div class="live-checkout-item">
+            <div class="live-checkout-item-thumb" style="${getLiveCheckoutItemThumbStyle(item)}"></div>
+            <div class="live-checkout-item-copy">
+                <strong>${escapeHtml(item.title)}</strong>
+                <span>${escapeHtml(item.sellerName || item.storeName || 'Seller')}${item.location ? ` • ${escapeHtml(item.location)}` : ''}</span>
+                <div class="wholesale-cart-meta-row">
+                    <span class="live-shop-mode-pill">${escapeHtml(item.sourceLabel || (item.source === 'wholesale' ? 'Wholesale' : 'Live'))}</span>
+                    ${item.storeName && item.source === 'wholesale' ? `<span class="live-shop-mode-pill">${escapeHtml(item.storeName)}</span>` : ''}
+                    ${item.variantLabel ? `<span class="live-shop-mode-pill">${escapeHtml(item.variantLabel)}</span>` : ''}
+                </div>
+            </div>
+            ${getCartQuantityControlsMarkup(item)}
+            <strong>${escapeHtml(formatLiveSocialShoppingMoney(item.subtotal))}</strong>
+            ${getCartRemoveButtonMarkup(item)}
+        </div>
+    `).join('');
+}
+
+function getCartSourceSummary(items) {
+    return (Array.isArray(items) ? items : []).reduce((acc, item) => {
+        if (String(item?.source || '') === 'wholesale') {
+            acc.wholesaleCount += Number(item.quantity) || 0;
+            acc.wholesaleTotal += Number(item.subtotal) || 0;
+        } else {
+            acc.liveCount += Number(item.quantity) || 0;
+            acc.liveTotal += Number(item.subtotal) || 0;
+        }
+        return acc;
+    }, { liveCount: 0, liveTotal: 0, wholesaleCount: 0, wholesaleTotal: 0 });
 }
 
 async function submitLiveCheckoutRequest(event, { fieldIds, submitButtonId, onSuccess } = {}) {
@@ -14181,13 +15615,165 @@ async function submitLiveSocialShoppingCheckout(event) {
 }
 
 async function submitCartPageCheckout(event) {
-    return submitLiveCheckoutRequest(event, {
-        fieldIds: CART_PAGE_CHECKOUT_FIELD_IDS,
-        submitButtonId: 'cartPageCheckoutSubmitBtn',
-        onSuccess: () => {
-            if (getActiveSectionId() === 'cart-section') renderCartSection();
+    event?.preventDefault?.();
+    const items = getSharedCartItems();
+    if (!items.length) {
+        showToast('Your cart is empty', 'shopping-bag');
+        return;
+    }
+    const liveItems = items.filter((item) => String(item.source || '') === 'live');
+    const wholesaleItems = items.filter((item) => String(item.source || '') === 'wholesale');
+    if (wholesaleItems.length && !requireAuthOrPrompt()) return;
+    const { companyName, fullName, phone, email, wilaya, city, address, deliveryMethod, paymentMethod, notes } = getCheckoutSubmissionValues(CART_PAGE_CHECKOUT_FIELD_IDS);
+    if (!fullName || !phone || !wilaya || !city || !address || (wholesaleItems.length && !email)) {
+        showToast(wholesaleItems.length ? 'Please complete all wholesale checkout details including email' : 'Please complete the checkout form', 'alert-circle');
+        return;
+    }
+    const submitBtn = document.getElementById('cartPageCheckoutSubmitBtn');
+    const originalText = submitBtn?.textContent || 'Place order request';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+    }
+    const client = initSupabase();
+    let liveSuccess = false;
+    let wholesaleSuccess = false;
+    const warnings = [];
+    try {
+        if (!client) throw new Error('Supabase is not configured');
+        if (liveItems.length) {
+            const payload = {
+                company_name: companyName,
+                full_name: fullName,
+                phone,
+                email,
+                wilaya,
+                city,
+                address,
+                delivery_method: deliveryMethod,
+                payment_method: paymentMethod,
+                notes,
+                total_amount: liveItems.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0),
+                source: wholesaleItems.length ? 'mixed_cart' : 'cart_page',
+                items: liveItems.map((item) => ({
+                    listing_id: item.listingId,
+                    title: item.title,
+                    seller_name: item.sellerName,
+                    seller_tag: item.sellerTag,
+                    quantity: item.quantity,
+                    unit_price: item.price,
+                    subtotal: item.subtotal
+                }))
+            };
+            const { error } = await client.from('submissions').insert({
+                user_id: currentSupabaseUserId || null,
+                type: 'live_checkout',
+                payload,
+                status: 'pending'
+            });
+            if (error) throw error;
+            liveSuccess = true;
         }
-    });
+        if (wholesaleItems.length) {
+            const uid = await ensureCurrentSupabaseUserId(client);
+            if (!uid) throw new Error('Session expired. Log in again.');
+            const groups = wholesaleItems.reduce((map, item) => {
+                const key = String(item.storeId || '').trim();
+                if (!key) return map;
+                if (!map.has(key)) {
+                    map.set(key, {
+                        storeId: key,
+                        storeName: item.storeName || 'Wholesale store',
+                        sellerUserId: String(item.sellerUserId || '').trim(),
+                        items: []
+                    });
+                }
+                map.get(key).items.push(item);
+                return map;
+            }, new Map());
+            for (const group of groups.values()) {
+                const subtotal = group.items.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+                const { data: orderRow, error: orderError } = await client
+                    .from('wholesale_orders')
+                    .insert({
+                        store_id: group.storeId,
+                        seller_user_id: group.sellerUserId,
+                        customer_user_id: uid,
+                        company_name: companyName || null,
+                        full_name: fullName,
+                        email,
+                        phone,
+                        wilaya,
+                        city,
+                        address,
+                        payment_method: paymentMethod,
+                        delivery_method: deliveryMethod,
+                        notes,
+                        subtotal,
+                        total_amount: subtotal
+                    })
+                    .select('*')
+                    .maybeSingle();
+                if (orderError || !orderRow?.id) throw orderError || new Error('Failed to create wholesale order');
+                const orderItemsPayload = group.items.map((item) => ({
+                    order_id: orderRow.id,
+                    product_id: item.productId,
+                    variant_id: item.variantId,
+                    title: item.title,
+                    variant_label: item.variantLabel || null,
+                    color: item.color || null,
+                    size: item.size || null,
+                    unit_price: Number(item.price) || 0,
+                    quantity: Number(item.quantity) || 0,
+                    line_total: Number(item.subtotal) || 0,
+                    image_url: item.image || null
+                }));
+                const { error: itemsError } = await client.from('wholesale_order_items').insert(orderItemsPayload);
+                if (itemsError) throw itemsError;
+                const receiptResult = await courseAuthedFetch(WHOLESALE_RECEIPT_FUNCTION_NAME, {
+                    orderId: orderRow.id,
+                    storeName: group.storeName,
+                    companyName,
+                    fullName,
+                    email,
+                    phone,
+                    totalAmount: subtotal,
+                    items: group.items.map((item) => ({
+                        title: item.title,
+                        variantLabel: item.variantLabel || '',
+                        quantity: Number(item.quantity) || 0,
+                        unitPrice: Number(item.price) || 0,
+                        lineTotal: Number(item.subtotal) || 0
+                    }))
+                });
+                if (receiptResult?.error) warnings.push(`Receipt email for ${group.storeName} is pending.`);
+            }
+            wholesaleSuccess = true;
+        }
+        if (liveSuccess) {
+            liveSocialShoppingState.cart = {};
+            persistLiveSocialShoppingTray();
+            renderLiveSocialShoppingSection();
+        }
+        if (wholesaleSuccess) {
+            wholesaleState.cart = {};
+            persistWholesaleCart();
+            if (getActiveSectionId() === 'wholesale-section') {
+                await renderWholesaleSection();
+            }
+        }
+        updateLiveShoppingTrayUI();
+        event?.target?.reset?.();
+        if (getActiveSectionId() === 'cart-section') renderCartSection();
+        showToast(warnings.length ? warnings[0] : 'Order request sent', warnings.length ? 'mail' : 'check-circle');
+    } catch (error) {
+        showToast(error?.message || 'Checkout failed', 'alert-circle');
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+        }
+    }
 }
 
 function renderLiveSocialShoppingSection() {
@@ -16884,10 +18470,13 @@ async function renderAdminFeatureFlags() {
     const coursesHint = document.getElementById('adminCoursesFeatureHint');
     const liveToggle = document.getElementById('adminLiveSocialShoppingFeatureToggle');
     const liveHint = document.getElementById('adminLiveSocialShoppingFeatureHint');
-    if (!coursesToggle && !liveToggle) return;
+    const wholesaleToggle = document.getElementById('adminWholesaleFeatureToggle');
+    const wholesaleHint = document.getElementById('adminWholesaleFeatureHint');
+    if (!coursesToggle && !liveToggle && !wholesaleToggle) return;
     await Promise.all([
         refreshCoursesFeatureFlag({ silent: true }),
-        refreshLiveSocialShoppingFeatureFlag({ silent: true })
+        refreshLiveSocialShoppingFeatureFlag({ silent: true }),
+        refreshWholesaleFeatureFlag({ silent: true })
     ]);
     if (coursesToggle) coursesToggle.checked = !!coursesFeatureEnabledFlag;
     if (coursesHint) {
@@ -16900,6 +18489,12 @@ async function renderAdminFeatureFlags() {
         liveHint.textContent = liveSocialShoppingFeatureEnabledFlag
             ? 'Live Social Shopping is visible to everyone.'
             : 'Live Social Shopping is hidden for normal users (admins can still access it).';
+    }
+    if (wholesaleToggle) wholesaleToggle.checked = !!wholesaleFeatureEnabledFlag;
+    if (wholesaleHint) {
+        wholesaleHint.textContent = wholesaleFeatureEnabledFlag
+            ? 'Wholesale storefronts are visible to everyone.'
+            : 'Wholesale stays hidden for normal users until you publish it.';
     }
     if (coursesToggle && !coursesToggle.dataset.bound) {
         coursesToggle.dataset.bound = '1';
@@ -16932,6 +18527,25 @@ async function renderAdminFeatureFlags() {
             await refreshLiveSocialShoppingFeatureFlag({ silent: true });
             renderLiveSocialShoppingSection();
             showToast(next ? 'Live Social Shopping enabled' : 'Live Social Shopping hidden', 'check-circle');
+        });
+    }
+    if (wholesaleToggle && !wholesaleToggle.dataset.bound) {
+        wholesaleToggle.dataset.bound = '1';
+        wholesaleToggle.addEventListener('change', async () => {
+            const next = !!wholesaleToggle.checked;
+            try {
+                await saveFeatureFlagState('wholesale_enabled', next);
+            } catch (error) {
+                showToast(error?.message || 'Failed to update feature flag', 'alert-circle');
+                await refreshWholesaleFeatureFlag({ silent: true });
+                wholesaleToggle.checked = !!wholesaleFeatureEnabledFlag;
+                return;
+            }
+            await refreshWholesaleFeatureFlag({ silent: true });
+            if (getActiveSectionId() === 'wholesale-section') {
+                await renderWholesaleSection({ force: true });
+            }
+            showToast(next ? 'Wholesale enabled' : 'Wholesale hidden', 'check-circle');
         });
     }
 }
@@ -17480,6 +19094,9 @@ async function showSection(sectionId) {
     if (sectionId === 'live-social-shopping-section') {
         await ensureLiveSocialShoppingFeatureFlagReady();
     }
+    if (sectionId === 'wholesale-section') {
+        await ensureWholesaleFeatureFlagReady();
+    }
     if (sectionId === 'course-section' && !isCoursesFeatureEnabledForViewer()) {
         try {
             setCourseRouteParam('', { replace: true });
@@ -17491,6 +19108,10 @@ async function showSection(sectionId) {
     }
     if (sectionId === 'live-social-shopping-section' && !isLiveSocialShoppingEnabledForViewer()) {
         showToast('Live Social Shopping is temporarily unavailable', 'alert-circle');
+        sectionId = 'home-section';
+    }
+    if (sectionId === 'wholesale-section' && !isWholesaleEnabledForViewer()) {
+        showToast('Wholesale is temporarily unavailable', 'alert-circle');
         sectionId = 'home-section';
     }
     if (sectionId !== 'live-social-shopping-section') {
@@ -17598,6 +19219,9 @@ async function showSection(sectionId) {
     } else if (sectionId === 'cart-section') {
         clearSellerProfileRouteTag();
         renderCartSection();
+    } else if (sectionId === 'wholesale-section') {
+        clearSellerProfileRouteTag();
+        await renderWholesaleSection({ force: !wholesaleState.stores.length });
     } else if (sectionId === 'profile-section') {
         clearSellerProfileRouteTag();
         startSectionLoadingSkeleton('profile-section');
