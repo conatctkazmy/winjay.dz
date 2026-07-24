@@ -13623,7 +13623,13 @@ async function startLiveSocialShoppingSession(event) {
         showToast('Supabase is not configured', 'alert-circle');
         return;
     }
-    const existingLive = getLiveSocialShoppingSessions().find((session) => String(session.ownerId || '') === String(currentSupabaseUserId || ''));
+    const resolvedUserId = await ensureCurrentSupabaseUserId(client);
+    if (!resolvedUserId) {
+        showToast('Please log in again', 'log-in');
+        openModal('loginModal');
+        return;
+    }
+    const existingLive = getLiveSocialShoppingSessions().find((session) => String(session.ownerId || '') === String(resolvedUserId || ''));
     if (existingLive?.id) {
         await client
             .from('submissions')
@@ -13643,7 +13649,7 @@ async function startLiveSocialShoppingSession(event) {
     const { data, error } = await client
         .from('submissions')
         .insert({
-            user_id: currentSupabaseUserId || null,
+            user_id: resolvedUserId,
             type: 'live_session',
             payload,
             status: 'live'
@@ -13756,6 +13762,12 @@ async function endLiveSocialShoppingSession() {
     sendLiveShoppingSignal('stream-ended');
     const client = initSupabase();
     if (client) {
+        const resolvedUserId = await ensureCurrentSupabaseUserId(client);
+        if (!resolvedUserId) {
+            showToast('Please log in again', 'log-in');
+            openModal('loginModal');
+            return;
+        }
         const { error } = await client
             .from('submissions')
             .update({ status: 'ended' })
@@ -13764,6 +13776,10 @@ async function endLiveSocialShoppingSession() {
             .select('id')
             .maybeSingle();
         if (error) {
+            if (String(error.message || '').toLowerCase().includes('row-level security') && !String(active.ownerId || '').trim()) {
+                showToast('This live was created without an owner id. Run the repair SQL once, then end it again.', 'alert-circle');
+                return;
+            }
             showToast(error.message || 'Failed to end live', 'alert-circle');
             return;
         }
