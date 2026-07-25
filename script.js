@@ -13969,7 +13969,8 @@ function createEmptyWholesaleVariantDraft() {
         price: '',
         stockQty: '',
         minimumQty: '1',
-        imageUrl: ''
+        imageUrl: '',
+        imageName: ''
     };
 }
 
@@ -14459,14 +14460,15 @@ function captureWholesaleManageProductDraftFromDom() {
         isPublished: !!document.getElementById('wholesaleProductPublished')?.checked
     };
     const rows = Array.from(document.querySelectorAll('.wholesale-variant-draft-row'));
-    wholesaleState.manageVariantDrafts = rows.map((row) => ({
+    wholesaleState.manageVariantDrafts = rows.map((row, index) => ({
         sku: String(row.querySelector('[data-field="sku"]')?.value || '').trim(),
         color: String(row.querySelector('[data-field="color"]')?.value || '').trim(),
         size: String(row.querySelector('[data-field="size"]')?.value || '').trim(),
         price: String(row.querySelector('[data-field="price"]')?.value || '').trim(),
         stockQty: String(row.querySelector('[data-field="stockQty"]')?.value || '').trim(),
         minimumQty: String(row.querySelector('[data-field="minimumQty"]')?.value || '1').trim() || '1',
-        imageUrl: String(row.querySelector('[data-field="imageUrl"]')?.value || '').trim()
+        imageUrl: String(wholesaleState.manageVariantDrafts?.[index]?.imageUrl || '').trim(),
+        imageName: String(wholesaleState.manageVariantDrafts?.[index]?.imageName || '').trim()
     }));
     if (!wholesaleState.manageVariantDrafts.length) wholesaleState.manageVariantDrafts = [createEmptyWholesaleVariantDraft()];
 }
@@ -14509,7 +14511,8 @@ function editWholesaleProduct(productId) {
             price: String(Number(variant.price) || 0),
             stockQty: String(Number(variant.stockQty) || 0),
             minimumQty: String(Number(variant.minimumQty) || 1),
-            imageUrl: variant.imageUrl || ''
+            imageUrl: variant.imageUrl || '',
+            imageName: ''
         }))
         : [createEmptyWholesaleVariantDraft()];
     wholesaleState.viewMode = 'manage';
@@ -14649,11 +14652,46 @@ async function handleWholesaleCoverPhotoSelected(event) {
     showToast(previousText ? 'Product photo updated' : 'Product photo uploaded', 'check-circle');
 }
 
+async function handleWholesaleVariantPhotoSelected(index, event) {
+    const input = event?.target;
+    const file = input?.files?.[0] || null;
+    if (!file) return;
+    captureWholesaleManageProductDraftFromDom();
+    input.disabled = true;
+    const result = await uploadWholesaleProductImage(file);
+    input.disabled = false;
+    if (result?.error) {
+        showToast(String(result.error || 'Upload failed'), 'alert-circle');
+        input.value = '';
+        return;
+    }
+    const i = Number(index) || 0;
+    if (!wholesaleState.manageVariantDrafts[i]) wholesaleState.manageVariantDrafts[i] = createEmptyWholesaleVariantDraft();
+    wholesaleState.manageVariantDrafts[i] = {
+        ...wholesaleState.manageVariantDrafts[i],
+        imageUrl: String(result.url || '').trim(),
+        imageName: String(file.name || '').trim()
+    };
+    if (input) input.value = '';
+    void renderWholesaleSection();
+}
+
 function clearWholesaleCoverPhoto() {
     wholesaleState.manageProductDraft = {
         ...(wholesaleState.manageProductDraft || createEmptyWholesaleProductDraft()),
         coverImageUrl: '',
         coverImageName: ''
+    };
+    void renderWholesaleSection();
+}
+
+function clearWholesaleVariantPhoto(index) {
+    const i = Number(index) || 0;
+    if (!wholesaleState.manageVariantDrafts[i]) return;
+    wholesaleState.manageVariantDrafts[i] = {
+        ...wholesaleState.manageVariantDrafts[i],
+        imageUrl: '',
+        imageName: ''
     };
     void renderWholesaleSection();
 }
@@ -14866,8 +14904,15 @@ function getWholesaleVariantDraftRowsMarkup() {
                     <input data-field="minimumQty" type="number" min="1" step="1" value="${escapeHtml(variant.minimumQty || '1')}" placeholder="5">
                 </div>
                 <div class="form-group">
-                    <label>Variant image URL</label>
-                    <input data-field="imageUrl" type="url" value="${escapeHtml(variant.imageUrl || '')}" placeholder="https://...">
+                    <label>Variant photo</label>
+                    <div class="wholesale-upload-row">
+                        <label class="wholesale-upload-btn" for="wholesaleVariantPhoto_${index}">
+                            <input id="wholesaleVariantPhoto_${index}" type="file" accept="image/*" onchange="handleWholesaleVariantPhotoSelected(${index}, event)">
+                            <span>Upload photo</span>
+                        </label>
+                        ${variant.imageUrl ? `<button class="live-shop-btn live-shop-btn-ghost wholesale-upload-clear" type="button" onclick="clearWholesaleVariantPhoto(${index})">Remove</button>` : ''}
+                    </div>
+                    ${variant.imageUrl ? `<div class="wholesale-inline-photo-preview"><div class="wholesale-inline-photo-thumb" style="background-image:url('${escapeHtml(variant.imageUrl)}')"></div><span>${escapeHtml(variant.imageName || 'Photo uploaded')}</span></div>` : ''}
                 </div>
             </div>
             <button class="live-shop-btn live-shop-btn-ghost wholesale-variant-remove" type="button" onclick="removeWholesaleVariantDraftRow(${index})">Remove variant</button>
@@ -14882,19 +14927,19 @@ function getWholesaleCoverPhotoFieldMarkup() {
     return `
         <div class="form-group">
             <label for="wholesaleProductCoverFile">Product photo</label>
-            <label class="wholesale-file-picker" for="wholesaleProductCoverFile">
+            <div class="wholesale-upload-row">
+                <label class="wholesale-upload-btn" for="wholesaleProductCoverFile">
                 <input id="wholesaleProductCoverFile" type="file" accept="image/*" onchange="handleWholesaleCoverPhotoSelected(event)">
-                <span>${coverImageUrl ? 'Replace product photo' : 'Choose a local photo'}</span>
-                <small>${escapeHtml(coverImageName || 'Upload from your device instead of pasting a link.')}</small>
-            </label>
+                    <span>Upload photo</span>
+                </label>
+                ${coverImageUrl ? `<button class="live-shop-btn live-shop-btn-ghost wholesale-upload-clear" type="button" onclick="clearWholesaleCoverPhoto()">Remove</button>` : ''}
+            </div>
             ${coverImageUrl ? `
                 <div class="wholesale-cover-preview-card">
                     <div class="wholesale-cover-preview-media" style="background-image:url('${escapeHtml(coverImageUrl)}')"></div>
                     <div class="wholesale-cover-preview-copy">
-                        <strong>${escapeHtml(coverImageName || 'Product photo ready')}</strong>
-                        <span>This uploaded image will be used as the wholesale product cover.</span>
+                        <strong>${escapeHtml(coverImageName || 'Photo uploaded')}</strong>
                     </div>
-                    <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="clearWholesaleCoverPhoto()">Remove photo</button>
                 </div>
             ` : ''}
         </div>
