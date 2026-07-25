@@ -7308,6 +7308,22 @@ body.dark-mode .listing-status-badge {
     background-color: var(--light-gray);
 }
 
+#live-social-shopping-section > .back-btn,
+#wholesale-section > .back-btn,
+#cart-section > .back-btn {
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+#wholesale-section > .back-btn {
+    width: min(100%, 1180px);
+    justify-content: flex-start;
+    margin-top: -4px;
+    margin-bottom: 8px;
+    padding-left: 2px;
+}
+
 .lightbox-modal {
     background-color: rgba(0,0,0,0.95);
     display: none;
@@ -11847,7 +11863,7 @@ footer {
     width: min(100%, 1180px);
     margin: 0 auto;
     display: grid;
-    gap: 22px;
+    gap: 18px;
 }
 
 .wholesale-loading-card,
@@ -12080,7 +12096,7 @@ footer {
     position: relative;
     overflow: hidden;
     border-radius: 32px;
-    min-height: 320px;
+    min-height: 290px;
     border: 1px solid rgba(15, 20, 25, 0.08);
     background: linear-gradient(135deg, var(--wholesale-accent, #ff6a00), rgba(255, 106, 0, 0.35));
 }
@@ -12098,10 +12114,10 @@ footer {
 .wholesale-store-hero-content {
     position: relative;
     z-index: 1;
-    min-height: 320px;
-    padding: 26px;
+    min-height: 290px;
+    padding: 18px 18px 16px;
     display: grid;
-    gap: 18px;
+    gap: 14px;
     color: #fff;
 }
 
