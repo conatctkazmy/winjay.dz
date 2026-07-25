@@ -13981,6 +13981,7 @@ function createEmptyWholesaleProductDraft() {
         material: '',
         brand: '',
         coverImageUrl: '',
+        coverImageName: '',
         minimumOrderQuantity: '1',
         isPublished: true
     };
@@ -14452,7 +14453,8 @@ function captureWholesaleManageProductDraftFromDom() {
         category: String(document.getElementById('wholesaleProductCategory')?.value || '').trim(),
         material: String(document.getElementById('wholesaleProductMaterial')?.value || '').trim(),
         brand: String(document.getElementById('wholesaleProductBrand')?.value || '').trim(),
-        coverImageUrl: String(document.getElementById('wholesaleProductCoverImage')?.value || '').trim(),
+        coverImageUrl: String(wholesaleState.manageProductDraft?.coverImageUrl || '').trim(),
+        coverImageName: String(wholesaleState.manageProductDraft?.coverImageName || '').trim(),
         minimumOrderQuantity: String(document.getElementById('wholesaleProductMinOrderQty')?.value || '1').trim() || '1',
         isPublished: !!document.getElementById('wholesaleProductPublished')?.checked
     };
@@ -14495,6 +14497,7 @@ function editWholesaleProduct(productId) {
         material: product.material || '',
         brand: product.brand || '',
         coverImageUrl: product.coverImageUrl || '',
+        coverImageName: '',
         minimumOrderQuantity: String(product.minimumOrderQuantity || 1),
         isPublished: !!product.isPublished
     };
@@ -14586,6 +14589,72 @@ async function saveWholesaleStore(event) {
         await loadWholesaleProductsForStore(wholesaleState.myStore.id, { includeHidden: true, silent: true });
     }
     showToast('Wholesale store saved', 'check-circle');
+    void renderWholesaleSection();
+}
+
+async function uploadWholesaleProductImage(file) {
+    const client = initSupabase();
+    if (!client) return { error: 'Supabase is not configured' };
+    const uid = await ensureCurrentSupabaseUserId(client);
+    if (!uid) return { error: 'Please log in again' };
+    if (!(file instanceof File)) return { error: 'Choose an image file first' };
+    if (!String(file.type || '').toLowerCase().startsWith('image/')) return { error: 'Please choose an image file' };
+    const safeName = safeStorageFilename(file.name || 'wholesale-cover.png');
+    const objectPath = `wholesale/${uid}/products/${Date.now()}_${safeName}`;
+    try {
+        let timeoutId;
+        const timeout = new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error('Image upload timed out')), 20000);
+        });
+        const uploadPromise = client.storage
+            .from(LISTING_IMAGES_BUCKET)
+            .upload(objectPath, file, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: file.type || undefined
+            });
+        const { error } = await Promise.race([uploadPromise, timeout]).finally(() => clearTimeout(timeoutId));
+        if (error) return { error: error?.message || 'Image upload failed' };
+        const { data: publicData } = client.storage.from(LISTING_IMAGES_BUCKET).getPublicUrl(objectPath);
+        const publicUrl = String(publicData?.publicUrl || '').trim();
+        if (!publicUrl) return { error: 'Failed to generate image URL' };
+        return { url: publicUrl, path: objectPath };
+    } catch (error) {
+        return { error: error?.message || 'Image upload failed' };
+    }
+}
+
+async function handleWholesaleCoverPhotoSelected(event) {
+    const input = event?.target;
+    const file = input?.files?.[0] || null;
+    if (!file) return;
+    captureWholesaleManageProductDraftFromDom();
+    const previousText = input.dataset.defaultLabel || '';
+    input.disabled = true;
+    showToast('Uploading product photo...', 'image');
+    const result = await uploadWholesaleProductImage(file);
+    input.disabled = false;
+    if (result?.error) {
+        showToast(String(result.error || 'Upload failed'), 'alert-circle');
+        input.value = '';
+        return;
+    }
+    wholesaleState.manageProductDraft = {
+        ...(wholesaleState.manageProductDraft || createEmptyWholesaleProductDraft()),
+        coverImageUrl: String(result.url || '').trim(),
+        coverImageName: String(file.name || '').trim()
+    };
+    if (input) input.value = '';
+    void renderWholesaleSection();
+    showToast(previousText ? 'Product photo updated' : 'Product photo uploaded', 'check-circle');
+}
+
+function clearWholesaleCoverPhoto() {
+    wholesaleState.manageProductDraft = {
+        ...(wholesaleState.manageProductDraft || createEmptyWholesaleProductDraft()),
+        coverImageUrl: '',
+        coverImageName: ''
+    };
     void renderWholesaleSection();
 }
 
@@ -14804,6 +14873,32 @@ function getWholesaleVariantDraftRowsMarkup() {
             <button class="live-shop-btn live-shop-btn-ghost wholesale-variant-remove" type="button" onclick="removeWholesaleVariantDraftRow(${index})">Remove variant</button>
         </div>
     `).join('');
+}
+
+function getWholesaleCoverPhotoFieldMarkup() {
+    const draft = wholesaleState.manageProductDraft || createEmptyWholesaleProductDraft();
+    const coverImageUrl = String(draft.coverImageUrl || '').trim();
+    const coverImageName = String(draft.coverImageName || '').trim();
+    return `
+        <div class="form-group">
+            <label for="wholesaleProductCoverFile">Product photo</label>
+            <label class="wholesale-file-picker" for="wholesaleProductCoverFile">
+                <input id="wholesaleProductCoverFile" type="file" accept="image/*" onchange="handleWholesaleCoverPhotoSelected(event)">
+                <span>${coverImageUrl ? 'Replace product photo' : 'Choose a local photo'}</span>
+                <small>${escapeHtml(coverImageName || 'Upload from your device instead of pasting a link.')}</small>
+            </label>
+            ${coverImageUrl ? `
+                <div class="wholesale-cover-preview-card">
+                    <div class="wholesale-cover-preview-media" style="background-image:url('${escapeHtml(coverImageUrl)}')"></div>
+                    <div class="wholesale-cover-preview-copy">
+                        <strong>${escapeHtml(coverImageName || 'Product photo ready')}</strong>
+                        <span>This uploaded image will be used as the wholesale product cover.</span>
+                    </div>
+                    <button class="live-shop-btn live-shop-btn-ghost" type="button" onclick="clearWholesaleCoverPhoto()">Remove photo</button>
+                </div>
+            ` : ''}
+        </div>
+    `;
 }
 
 function getWholesaleBrowseMarkup() {
@@ -15129,14 +15224,11 @@ function getWholesaleManageMarkup() {
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="wholesaleProductCoverImage">Cover image URL</label>
-                            <input id="wholesaleProductCoverImage" type="url" value="${escapeHtml(draft.coverImageUrl || '')}" placeholder="https://...">
-                        </div>
-                        <div class="form-group">
                             <label for="wholesaleProductMinOrderQty">Minimum product order qty</label>
                             <input id="wholesaleProductMinOrderQty" type="number" min="1" step="1" value="${escapeHtml(draft.minimumOrderQuantity || '1')}" placeholder="1">
                         </div>
                     </div>
+                    ${getWholesaleCoverPhotoFieldMarkup()}
                     <div class="form-group">
                         <label for="wholesaleProductDescription">Product description</label>
                         <textarea id="wholesaleProductDescription" rows="4" placeholder="Describe the wholesale product offer." required>${escapeHtml(draft.description || '')}</textarea>
