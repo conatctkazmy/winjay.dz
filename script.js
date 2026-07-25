@@ -14572,6 +14572,12 @@ async function saveWholesaleStore(event) {
         }
     }
     if (error) {
+        if (relationMissing(error, 'wholesale_stores')) {
+            wholesaleState.schemaReady = false;
+            showToast('Wholesale database tables are not installed yet', 'database');
+            void renderWholesaleSection({ force: true });
+            return;
+        }
         showToast(error.message || 'Failed to save store', 'alert-circle');
         return;
     }
@@ -14645,17 +14651,35 @@ async function saveWholesaleProduct(event) {
     if (productId) {
         const { error } = await client.from('wholesale_products').update(productPayload).eq('id', productId).eq('owner_id', uid);
         if (error) {
+            if (relationMissing(error, 'wholesale_products')) {
+                wholesaleState.schemaReady = false;
+                showToast('Wholesale database tables are not installed yet', 'database');
+                void renderWholesaleSection({ force: true });
+                return;
+            }
             showToast(error.message || 'Failed to update product', 'alert-circle');
             return;
         }
         const { error: deleteVariantsError } = await client.from('wholesale_product_variants').delete().eq('product_id', productId).eq('owner_id', uid);
         if (deleteVariantsError) {
+            if (relationMissing(deleteVariantsError, 'wholesale_product_variants')) {
+                wholesaleState.schemaReady = false;
+                showToast('Wholesale database tables are not installed yet', 'database');
+                void renderWholesaleSection({ force: true });
+                return;
+            }
             showToast(deleteVariantsError.message || 'Failed to refresh product variants', 'alert-circle');
             return;
         }
     } else {
         const { data, error } = await client.from('wholesale_products').insert(productPayload).select('id').maybeSingle();
         if (error || !data?.id) {
+            if (relationMissing(error, 'wholesale_products')) {
+                wholesaleState.schemaReady = false;
+                showToast('Wholesale database tables are not installed yet', 'database');
+                void renderWholesaleSection({ force: true });
+                return;
+            }
             showToast(error?.message || 'Failed to create product', 'alert-circle');
             return;
         }
@@ -14676,6 +14700,12 @@ async function saveWholesaleProduct(event) {
     }));
     const { error: variantsError } = await client.from('wholesale_product_variants').insert(variantPayload);
     if (variantsError) {
+        if (relationMissing(variantsError, 'wholesale_product_variants')) {
+            wholesaleState.schemaReady = false;
+            showToast('Wholesale database tables are not installed yet', 'database');
+            void renderWholesaleSection({ force: true });
+            return;
+        }
         showToast(variantsError.message || 'Failed to save product variants', 'alert-circle');
         return;
     }
@@ -17092,7 +17122,10 @@ function switchAdminTab(tab) {
 function relationMissing(err, name) {
     const msg = String(err?.message || '').toLowerCase();
     const n = String(name || '').toLowerCase();
-    return msg.includes('relation') && msg.includes(n) && msg.includes('does not exist');
+    if (msg.includes('relation') && msg.includes(n) && msg.includes('does not exist')) return true;
+    if (msg.includes('schema cache') && msg.includes(n) && msg.includes('could not find')) return true;
+    if (msg.includes('schema cache') && msg.includes(`public.${n}`) && msg.includes('table')) return true;
+    return false;
 }
 
 async function adminCount(table, build) {
